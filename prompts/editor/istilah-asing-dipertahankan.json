@@ -1,0 +1,118 @@
+{
+  "version": 3,
+  "updated": "2026-09-02",
+  "keterangan": "Basis pengetahuan istilah asing/konsep yang SEBAIKNYA DIPERTAHANKAN dalam bentuk aslinya, bukan diterjemahkan paksa ke Bahasa Indonesia. Ini kebalikan dari lexicon-hindari.json: di sana kita ganti kata X ke Y, di sini kita justru menahan penerjemahan X kembali ke Y karena X sudah jadi istilah/nama konsep yang dikenal luas dan penerjemahannya terdengar janggal atau menggeser makna. lint_article.py membaca file ini dan menandai bila artikel memakai salah satu varian terjemahan yang terdaftar, menyarankan istilah asli sebagai gantinya.",
+  "entries": [
+    {
+      "istilah_asli": "Deep Work",
+      "varian_terjemahan_dihindari": [
+        "kerja mendalam",
+        "kerja dalam",
+        "kerja intensif",
+        "kerja mendalam yang",
+        "kerja yang mendalam"
+      ],
+      "alasan": "Deep Work adalah nama konsep/judul buku karya Cal Newport yang sudah dikenal luas dalam bentuk aslinya di kalangan pembaca produktivitas Indonesia. Menerjemahkannya jadi 'kerja mendalam' terdengar janggal, kehilangan pengenalan istilah, dan tidak menambah kejelasan bagi pembaca yang sudah familiar dengan istilah aslinya.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-08-26, saat migrasi pipeline artikel buku ke 4-paragraf (contoh artikel Deep Work)",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "Amygdala Hijack",
+      "varian_terjemahan_dihindari": [
+        "bajakan emosi",
+        "pembajakan emosi",
+        "pembajakan amigdala",
+        "amigdala dibajak"
+      ],
+      "alasan": "Amygdala Hijack adalah nama konsep spesifik yang dipopulerkan Daniel Goleman dalam buku Emotional Intelligence, sudah dikenal luas dalam bentuk aslinya di kalangan pembaca psikologi/self-development Indonesia. Diterjemahkan jadi 'bajakan emosi' terasa janggal dan menggeser makna — kata 'bajakan' berkonotasi pembajakan/pelanggaran hak cipta, bukan makna 'hijack' (pengambilalihan kendali) yang dimaksud.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, run ncpost-buku Emotional Intelligence bab Anatomi Bajakan Emosi",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "any-benefit approach",
+      "varian_terjemahan_dihindari": [
+        "pendekatan manfaat-apa-saja",
+        "pendekatan manfaat apa saja",
+        "pendekatan segala manfaat",
+        "pendekatan apa pun manfaatnya"
+      ],
+      "alasan": "any-benefit approach adalah nama konsep spesifik yang dipopulerkan Cal Newport dalam buku Deep Work untuk menggambarkan kebiasaan mempertahankan alat digital selama ada manfaat sekecil apa pun tanpa menghitung biayanya. Istilah ini sudah dikenal luas dalam bentuk aslinya di kalangan pembaca produktivitas Indonesia; menerjemahkannya terasa kaku dan kehilangan pengenalan istilah.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "run skill-ncpost-buku-generate-artikel Deep Work bab Berhentilah Bermedia Sosial, 2026-09-03",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "craftsman approach",
+      "varian_terjemahan_dihindari": [
+        "pendekatan tukang",
+        "pendekatan pengrajin",
+        "pendekatan tukang kayu"
+      ],
+      "alasan": "craftsman approach adalah nama konsep spesifik yang dipopulerkan Cal Newport dalam buku Deep Work sebagai lawan dari any-benefit approach: alat dinilai dari dampak positif dominan terhadap tujuan penting, ditimbang setara dengan dampak negatifnya. Menerjemahkan jadi 'pendekatan tukang' terasa janggal dan kehilangan pengenalan istilah bagi pembaca yang familiar dengan istilah aslinya.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "run skill-ncpost-buku-generate-artikel Deep Work bab Berhentilah Bermedia Sosial, 2026-09-03",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "Flow",
+      "varian_terjemahan_dihindari": [
+        "kondisi arus",
+        "keadaan arus",
+        "arus optimal"
+      ],
+      "alasan": "Flow adalah istilah psikologi yang dipopulerkan Mihaly Csikszentmihalyi (kondisi tenggelam penuh pada satu tugas hingga waktu terasa menghilang), sudah sangat dikenal luas dalam bentuk aslinya di kalangan pembaca psikologi/produktivitas Indonesia — bahkan artikel lain di stok yang sama (Deep Work) memakainya tanpa diterjemahkan. Diterjemahkan jadi 'kondisi arus' terasa janggal dan tidak dikenali sebagai rujukan ke konsep yang sama, serta menimbulkan inkonsistensi lintas artikel.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, audit menyeluruh 124 artikel stok, run Emotional Intelligence bab Memotivasi Diri Sendiri",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "MVP",
+      "varian_terjemahan_dihindari": [
+        "produk minimum yang layak",
+        "produk layak minimum",
+        "produk minimal yang layak"
+      ],
+      "alasan": "MVP (Minimum Viable Product) adalah singkatan yang sangat umum dipakai tanpa diterjemahkan di kalangan startup/bisnis Indonesia, termasuk oleh pembaca buku The Lean Startup sendiri. Menerjemahkannya jadi 'produk minimum yang layak' terdengar kaku dan tidak dikenali sebagai istilah MVP, serta menimbulkan inkonsistensi dengan artikel lain buku yang sama yang memakai 'MVP' di tag.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, audit menyeluruh 124 artikel stok, run The Lean Startup bab Eksperimen",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "Build-Measure-Learn",
+      "varian_terjemahan_dihindari": [
+        "Bangun-Ukur-Belajar",
+        "bangun ukur belajar"
+      ],
+      "alasan": "Build-Measure-Learn adalah nama siklus inti dari metodologi Lean Startup karya Eric Ries, sudah dikenal luas dalam bentuk aslinya. Diterjemahkan jadi 'Bangun-Ukur-Belajar' menimbulkan inkonsistensi dengan artikel lain buku yang sama yang tetap memakai istilah aslinya.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, audit menyeluruh 124 artikel stok, run The Lean Startup bab Mulailah",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "Fixed Mindset",
+      "varian_terjemahan_dihindari": [
+        "pola pikir tetap",
+        "mindset tetap",
+        "pola pikir statis"
+      ],
+      "alasan": "Fixed Mindset adalah istilah inti dari buku Mindset karya Carol Dweck, sudah dikenal luas dalam bentuk aslinya di kalangan pembaca psikologi/pengembangan diri Indonesia. Diterjemahkan jadi 'pola pikir tetap' kehilangan pengenalan istilah dan menimbulkan inkonsistensi dengan tag artikel yang tetap memakai istilah Inggrisnya.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, audit menyeluruh 124 artikel stok, seluruh bab buku Mindset",
+      "severity": "warn"
+    },
+    {
+      "istilah_asli": "Growth Mindset",
+      "varian_terjemahan_dihindari": [
+        "pola pikir berkembang",
+        "mindset berkembang",
+        "pola pikir tumbuh"
+      ],
+      "alasan": "Growth Mindset adalah istilah inti dari buku Mindset karya Carol Dweck, sudah dikenal luas dalam bentuk aslinya di kalangan pembaca psikologi/pengembangan diri Indonesia. Diterjemahkan jadi 'pola pikir berkembang' kehilangan pengenalan istilah dan menimbulkan inkonsistensi dengan tag artikel yang tetap memakai istilah Inggrisnya.",
+      "kategori": "istilah-konsep-buku-jangan-diterjemahkan",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-09-02, audit menyeluruh 124 artikel stok, seluruh bab buku Mindset",
+      "severity": "warn"
+    }
+  ]
+}

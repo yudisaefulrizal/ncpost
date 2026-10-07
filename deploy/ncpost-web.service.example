@@ -1,0 +1,23 @@
+[Unit]
+Description=NC Post Web
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nuscode
+Group=nuscode
+WorkingDirectory=/home/nuscode/projek/- nuscode/ncpost/ncpost-web
+Environment=NODE_ENV=production
+Environment=PUBLIC_HTTPS=true
+Environment=PATH=/home/nuscode/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/nuscode/.local/bin/node --import tsx src/server/http.ts
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

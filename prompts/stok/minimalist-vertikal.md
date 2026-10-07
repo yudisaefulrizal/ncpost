@@ -1,0 +1,1 @@
+buat gambar Minimalist Black-and-White Line Art with Selective Color Accent {{teks}}, portrait orientation, no text, no letters, no words, no typography, no readable text, no logos, no watermark, no human faces. Jika ada perempuan, kenakan hijab dan pakaian sopan yang menutup aurat.

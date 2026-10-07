@@ -1,0 +1,106 @@
+{
+  "version": 5,
+  "updated": "2026-08-30",
+  "keterangan": "Basis pengetahuan yang TUMBUH. Tiap kali ditemukan kata/istilah yang kurang familiar, menggeser makna, atau boros, tambahkan entri baru di sini beserta alasan dan sumber koreksinya. lint_article.py membaca file ini dan menandai kemunculannya secara otomatis.",
+  "entries": [
+    {
+      "term": "kulakan",
+      "pattern": "\\bkulakan\\b",
+      "ganti": "belanja stok banyak",
+      "alasan": "Istilah asal bahasa Jawa yang kurang familiar bagi sebagian pembaca nasional.",
+      "kategori": "istilah-daerah-kurang-familiar",
+      "sumber_koreksi": "run buku-mini The Lean Startup, 2026-08-26, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "tersulut emosi",
+      "pattern": "tersulut emosi",
+      "ganti": "emosional",
+      "alasan": "Terasa sastrawi/tertulis, bukan kata yang lazim diucapkan sehari-hari.",
+      "kategori": "register-terlalu-sastrawi",
+      "sumber_koreksi": "skill-artikel-buku-mini contoh koreksi keempat",
+      "severity": "warn"
+    },
+    {
+      "term": "curah pendapat",
+      "pattern": "curah pendapat",
+      "ganti": "diskusi",
+      "alasan": "Istilah serapan/jargon (brainstorming) yang kurang lazim; ada padanan sehari-hari.",
+      "kategori": "jargon-ada-padanan",
+      "sumber_koreksi": "skill-artikel-buku-mini contoh koreksi kelima",
+      "severity": "warn"
+    },
+    {
+      "term": "statistik (sebagai pengganti 'objektif')",
+      "pattern": "\\bstatistik\\b",
+      "ganti": "objektif",
+      "alasan": "Istilah teknis yang mempersempit makna 'objektif'; sering tidak perlu.",
+      "kategori": "jargon-teknis-mempersempit",
+      "sumber_koreksi": "skill-artikel-buku-mini contoh koreksi kesepuluh",
+      "severity": "info"
+    },
+    {
+      "term": "nasihat soal uang dari orang tua",
+      "pattern": "\\bnasihat soal uang dari orang tua\\b",
+      "ganti": "nasihat finansial tiap orang tua",
+      "alasan": "Untuk judul atau pembahasan tentang arahan keuangan keluarga, 'nasihat finansial tiap orang tua' lebih ringkas, alami, dan tepat karena menegaskan bahwa nasihat dapat berbeda antar-orang tua. Hindari bentuk 'nasihat soal uang dari orang tua' maupun penggantian mekanis menjadi 'soal finansial'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "dikonfirmasi pengguna, 2026-08-27",
+      "severity": "warn"
+    },
+    {
+      "term": "keputusan uang",
+      "pattern": "\\bkeputusan uang\\b",
+      "ganti": "keputusan finansial",
+      "alasan": "'Keputusan finansial' lebih presisi dan lazim untuk membahas pilihan menabung, berinvestasi, atau mengelola pengeluaran secara konseptual; 'keputusan uang' terasa kaku dan kurang jadi istilah yang benar-benar dipakai sehari-hari.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku The Psychology of Money bab Tidak Ada yang Gila, 2026-08-29, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "sejarah uangnya sendiri",
+      "pattern": "\\bsejarah uangnya sendiri\\b",
+      "ganti": "sejarah finansialnya sendiri",
+      "alasan": "Saat membahas rekam jejak pengalaman finansial seseorang secara konseptual (bukan jumlah uang literal), 'finansial' lebih presisi dan terdengar profesional dibanding 'uangnya'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku The Psychology of Money bab Tidak Ada yang Gila, 2026-08-29, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "cara pandang uang",
+      "pattern": "\\bcara pandang uang\\b",
+      "ganti": "cara pandang finansial",
+      "alasan": "Saat membahas sudut pandang/filosofi seseorang terhadap uang secara konseptual (bukan uang secara literal), 'cara pandang finansial' lebih presisi dan lazim dibanding 'cara pandang uang'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku Rich Dad Poor Dad bab Ayah Kaya Ayah Miskin, 2026-08-30, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "kebiasaan uang",
+      "pattern": "\\bkebiasaan uang\\b",
+      "ganti": "kebiasaan finansial",
+      "alasan": "Saat membahas pola perilaku pengelolaan uang secara konseptual (bukan tindakan spesifik memegang/menghitung uang), 'kebiasaan finansial' lebih presisi dan lazim dibanding 'kebiasaan uang'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku Rich Dad Poor Dad bab Ayah Kaya Ayah Miskin, 2026-08-30, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "pola pikir uang",
+      "pattern": "\\bpola pikir uang\\b",
+      "ganti": "pola pikir finansial",
+      "alasan": "Saat membahas mindset/paradigma seseorang tentang uang secara konseptual, 'pola pikir finansial' lebih presisi dan lazim dibanding 'pola pikir uang'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku Rich Dad Poor Dad bab Ayah Kaya Ayah Miskin, 2026-08-30, dikonfirmasi pengguna",
+      "severity": "warn"
+    },
+    {
+      "term": "nasihat uang",
+      "pattern": "\\bnasihat uang\\b",
+      "ganti": "nasihat finansial",
+      "alasan": "Konsisten dengan entri 'nasihat soal uang dari orang tua' -> 'nasihat finansial tiap orang tua': saat membahas arahan/petuah tentang uang secara konseptual, 'nasihat finansial' lebih presisi dan lazim dibanding 'nasihat uang'.",
+      "kategori": "diksi-kurang-presisi",
+      "sumber_koreksi": "run ncpost-buku Rich Dad Poor Dad bab Ayah Kaya Ayah Miskin, 2026-08-30, dikonfirmasi pengguna",
+      "severity": "warn"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+node_modules/
+.next/
+data/
+output/
+.env
+.env.local
+playwright-report/
+test-results/
+
+.npm-cache/
+dist/
+old/

@@ -1,0 +1,997 @@
+{
+  "skill_root": "/home/nuscode/projek/- nuscode/ncpost/ncpost-hermes/skill",
+  "template_root": "/home/nuscode/projek/- nuscode/ncpost/ncpost-hermes/asset/templates",
+  "skills": [
+    {
+      "path": "skill/skill-ncpost-buku-generate-artikel/SKILL.md",
+      "sha256": "f06e17bb49b70a967f16809de735916603b56d1c7a506e19e4f93a614ee94f9b"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-generate-tts/SKILL.md",
+      "sha256": "461e5e1ece03d010a49cb7bf4de70a3793ad6f501fcfc0dffafe92761d279108"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-generate-tts/scripts/generate_tts.py",
+      "sha256": "ce2d24758db508f76afea4b8e47d1082657dd8cb7bf7f2a9825aae9da991c37f"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-post/SKILL.md",
+      "sha256": "c50f4e2682daa0d14c0572a15edf96743e268a1407bdab1c9a1894c698bf4904"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-post-youtube/SKILL.md",
+      "sha256": "23812134b103994d3d3912a856df812f778ee13208f2d5411303336a97516867"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-produksi/SKILL.md",
+      "sha256": "61ae8d4badf9d516fd6ce8e5638175d96aad702b8fd18c3d17d92980508ea98b"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-minimalist-vertikal/SKILL.md",
+      "sha256": "988c1053ede731cf8ae7a2f9356161c1ca18dd03c52ad1ef1c4e91fbb14bcd50"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-minimalist-vertikal/scripts/build_asset_selection_from_stok_minimalist_vertikal.py",
+      "sha256": "c9ef38efb8252d8230d49401b7c124979078abfbe2340849dcc6254a8d7ed219"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-minimalist-vertikal/scripts/register_minimalist_vertikal_asset.py",
+      "sha256": "0fe22fa4c0fc73455a10f223a7e9f334a1ce2456747b1a1f20bd90f62a08ac41"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-minimalist-vertikal/scripts/select_stok_minimalist_vertikal.py",
+      "sha256": "0caad026cf504e9d402e07b88c322886b0bb378e305ed4efd76c40e074d9536a"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-horizontal/SKILL.md",
+      "sha256": "e59b0b6507390e6856a805e258ae89e44b1ff182ef992e10ebc0d3c7fc35d00b"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-horizontal/scripts/build_asset_selection_from_stok_realistic_horizontal.py",
+      "sha256": "fb325039636f1bc9864bd28d08e96552c23a6c69fac520949d645b866a3ebcc6"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-horizontal/scripts/register_realistic_horizontal_asset.py",
+      "sha256": "b23776a9fa4e1f9a72a3a11be9e924d4eef42d59dec607bc3651006429e54385"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-horizontal/scripts/select_stok_realistic_horizontal.py",
+      "sha256": "0310d322d0e714dc21928e3f3de822957fb6dca4a2d52344286fe216f2190fbe"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-vertikal/SKILL.md",
+      "sha256": "1a3c9b2e1d3602a03e52dd3a5fb37e0413cad363e2f60213a888d324ecff3a50"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-vertikal/scripts/build_asset_selection_from_stok_realistic_vertikal.py",
+      "sha256": "00943617c56806d23acaf1a6af96811ad54c1ed4e47b71b500486431eec8b864"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-vertikal/scripts/register_realistic_vertikal_asset.py",
+      "sha256": "c36a5b457db3c271d14b9ae9f2ff36ce9ed874b3d167377dfa167e3fe6d89e62"
+    },
+    {
+      "path": "skill/skill-ncpost-buku-stok-realistic-vertikal/scripts/select_stok_realistic_vertikal.py",
+      "sha256": "566227cd1177cf0dad729c4e5693da8dbb7fa63f31d76b1e5fb5a5048c7bb2b4"
+    }
+  ],
+  "templates": [
+    {
+      "path": "panel-1080x1350-overlay-minimalist-flat-pastel-illustration.png",
+      "sha256": "4a831aeec93b0714472f3438fbdd2b36a5ab2eb161a96ec97505b8de99f8713d",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "panel-1080x1350-overlay.png",
+      "sha256": "d86d4212cf674b7df9e16e9146105f9902605bd753dae80b39b269b337de78c8",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-01-of-04.png",
+      "sha256": "4a831aeec93b0714472f3438fbdd2b36a5ab2eb161a96ec97505b8de99f8713d",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-01-of-05.png",
+      "sha256": "ba68294c15d43d89703141540f1e8b4d3d3324eb73373d9a7f7d185d27a530f5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-01-of-06.png",
+      "sha256": "ca5d7303708962b87a7ecd5ad19da931962a587166117c68f89f5e69a54d4a3d",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-02-of-04.png",
+      "sha256": "05390e0ceb94044536ddc0848cac73f74e06b9a2d2adbd8cec1160c309d9e0fb",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-02-of-05.png",
+      "sha256": "c2ac2a62c076b2f3e5b442af5719cb1211987dcfbd70f315c0f06fe8782804dc",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-02-of-06.png",
+      "sha256": "8fca60055b35c8d0c448f90e64610b8e195a187eb7abb2c1a4153ea780c4301a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-03-of-04.png",
+      "sha256": "5a9bb65d1e5e0d89226a19b8d888791700bbb1a8533b26ab95ada593477ded6a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-03-of-05.png",
+      "sha256": "fb3d7f04824468335f0643cbe22d4e711dfe75bd33697e1914056b6d92d60ab1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-03-of-06.png",
+      "sha256": "05390e0ceb94044536ddc0848cac73f74e06b9a2d2adbd8cec1160c309d9e0fb",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-04-of-04.png",
+      "sha256": "9ff4e81da8399d59580f820d76eca43236c55ff5f86d6416db2bf7332fa8d371",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-04-of-05.png",
+      "sha256": "8de24ea896ebbfa117f67b21a7f828c432a18686d15efd33cf875c3c68733a59",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-04-of-06.png",
+      "sha256": "7bf4448e297ec46f096b6b963133cd42ecd2f2c2a087c1f7ef90c1da1388a1d5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-05-of-05.png",
+      "sha256": "9ff4e81da8399d59580f820d76eca43236c55ff5f86d6416db2bf7332fa8d371",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-05-of-06.png",
+      "sha256": "d7b4588d1bc505ca4a5531ee5dcc5ebfa92ef003add9b85f547ae986aa4d709f",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/minimalist-flat-pastel-illustration/panel-overlay-06-of-06.png",
+      "sha256": "9ff4e81da8399d59580f820d76eca43236c55ff5f86d6416db2bf7332fa8d371",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-01-of-04.png",
+      "sha256": "812371dfa1e593bd1da88c2e172af7427f2369a6f262e162e9190c1b81b2c6b3",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-01-of-05.png",
+      "sha256": "5f64d5286c4b01f39ad67ab61cf8f18062f545d5702b6be9e91a24c299f5717a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-01-of-06.png",
+      "sha256": "8881aaa81ab9b840d03c70f6c7057bf6af13c363e4bff83ef1a500e008c154a1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-02-of-04.png",
+      "sha256": "e7d2d4f458eaeb690697196594c03d3fc9219789c7b35a91b724cfb18182c028",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-02-of-05.png",
+      "sha256": "e8ecf336c8440e5cec27a20d903997f5bf3b3d08df04e00104e00a93f4def949",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-02-of-06.png",
+      "sha256": "7c00b2cbc02ad2f5a2ee9101166cc5859c05292a265ed52f17145461c54cec93",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-03-of-04.png",
+      "sha256": "2382d4ba40accfbf1c03e3606cab5d24c558ffc4de2058a1a7fb5687f4614fca",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-03-of-05.png",
+      "sha256": "860a6c114cc2e6e1ebe7d2ce3db97df53fdb7f979ecd0e1adc8d010f684e634e",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-03-of-06.png",
+      "sha256": "e7d2d4f458eaeb690697196594c03d3fc9219789c7b35a91b724cfb18182c028",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-04-of-04.png",
+      "sha256": "030dfc13abbe41ff3ed320c569703aafd738f949df5a2416cb44afcba1591ca0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-04-of-05.png",
+      "sha256": "3989e31bd338d60248dc9115aaec657d92096bec2e3a8729acdb4954e64a2dac",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-04-of-06.png",
+      "sha256": "f65e5ee13e5896d9de70d11bf4159d5c1ebdf7b71c7a2ba0c5e38788cf6d7dbc",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-05-of-05.png",
+      "sha256": "030dfc13abbe41ff3ed320c569703aafd738f949df5a2416cb44afcba1591ca0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-05-of-06.png",
+      "sha256": "92a644fac6377bbe514b648ed3d7f216923cc4e1fa9d587f23c3b35870c0f9fd",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "progress-accent/panel-overlay-06-of-06.png",
+      "sha256": "030dfc13abbe41ff3ed320c569703aafd738f949df5a2416cb44afcba1591ca0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/panel-1080x1350-overlay-equalarea-vertical-left.png",
+      "sha256": "22d696f0f3a5cc575389d9ac7527335a9ef829ca77a0f4d46c75567bf7e386d9",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/panel-1080x1350-overlay-equalarea-vertical-right.png",
+      "sha256": "b4bbeb0dcb6aff3a08e26b1f4c96fcc0a89cdc3702415d50dcc574cdb80c91a0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/panel-1080x1350-overlay-image-bottom.png",
+      "sha256": "36c83cdb69e4004f6ca034ccbc9c406a6621e52b8dc0d20398e930d151b6c963",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/panel-1080x1350-overlay-split-image-left-text-right.png",
+      "sha256": "8cbc90a82af0b8e5402a562ca19e743aa3dc10d1b1e3d8b28e72a738dc0f723d",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/panel-1080x1350-overlay-split-text-left-image-right.png",
+      "sha256": "914932bf2da2ed9d445258a017087437c3f9d5e239615b136cee0184a6559d82",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-01-of-04.png",
+      "sha256": "d98fa201690505b9fdb6eacfbbcd66de7d7c440a9d41f5c56efa976a049f0d37",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-01-of-05.png",
+      "sha256": "dd693264d58d20f3cc42e1cee86b15a11690b274d6e3ca29d0064766d16e21dc",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-01-of-06.png",
+      "sha256": "a041ca436d504bbd1369acbb61cba502c660dd31cb36a8183ef83fa5e02d60db",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-02-of-04.png",
+      "sha256": "c6995de03a540fd6326b88fbc77024a3bbc3ff1aa2527c3d79d81543784c214c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-02-of-05.png",
+      "sha256": "475d55e3697e7452ae5418b763b958908f317dbe908a3473211a7a136d83d01a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-02-of-06.png",
+      "sha256": "5799a97cfbbea124530cf5a1206e3cdacebcec775a78c137a629645deda826ac",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-03-of-04.png",
+      "sha256": "4de010a8fad4ea953e6c52dfd108031fd87491e937b60a46d49dc45598345a87",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-03-of-05.png",
+      "sha256": "cba005875bbaecd2a21791520f64000962ccdef00b8d51f771928276553b3fb3",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-03-of-06.png",
+      "sha256": "c6995de03a540fd6326b88fbc77024a3bbc3ff1aa2527c3d79d81543784c214c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-04-of-04.png",
+      "sha256": "f2cfe685250552bcc1931049275da6baacbbf7cbad7f64c6189ad105741dd11a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-04-of-05.png",
+      "sha256": "75545c2bcbc0ede11795f193353f9d665a2014c685f38adf213846307b4a9961",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-04-of-06.png",
+      "sha256": "254f4cebccff9d71e81194b486b35813f570da47865550704ba4cd4c5f9cbcd5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-05-of-05.png",
+      "sha256": "f2cfe685250552bcc1931049275da6baacbbf7cbad7f64c6189ad105741dd11a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-05-of-06.png",
+      "sha256": "2095cdba4b51befc971704c3e4b6322765a2a71a8bfcc3d89713cbf4537ac694",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-2-image-bottom/panel-overlay-06-of-06.png",
+      "sha256": "f2cfe685250552bcc1931049275da6baacbbf7cbad7f64c6189ad105741dd11a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-01-of-04.png",
+      "sha256": "6d4663acdc2dde0d8e78fbb3e5c9beda5fe6dfe521aee2a73bbb0c575d65e7c0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-01-of-05.png",
+      "sha256": "ead519f641e14a9836e7abb221674e904b2a12f299c709f6dcaa497f2c91107f",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-01-of-06.png",
+      "sha256": "9b2a1153fd55309622d1fb4c924cff8d31e4f315497369c331c5981e401473b2",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-02-of-04.png",
+      "sha256": "e33d468fb8031c14650336b59892df9cd3392336b881ea103cd2c66d4ac4dc5a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-02-of-05.png",
+      "sha256": "6a3927ae70a42a61189a327ac61b19603db9d9a149387adb357f02121a29c9ff",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-02-of-06.png",
+      "sha256": "7aab8116196f4998fb085ffeff8bd8fa2054dffac28b26d8888a344613e81cb0",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-03-of-04.png",
+      "sha256": "d7a3ed10f767f4a4b0a0197a6a5dee420fd416480ea3fa39b57ffb6bcf98b452",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-03-of-05.png",
+      "sha256": "48a3c2eef7329a82f9cd10c98c7dc932301fb0c706280310d77d6774c8b1e53c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-03-of-06.png",
+      "sha256": "e33d468fb8031c14650336b59892df9cd3392336b881ea103cd2c66d4ac4dc5a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-04-of-04.png",
+      "sha256": "fa172161ea646be71a47dfc4e4134ba6391c8606ca0285aca9fa0920510e396a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-04-of-05.png",
+      "sha256": "ef077afd5752049472335933e5f89010b2d56f0cd4d847af5b6689a2f18ca83c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-04-of-06.png",
+      "sha256": "8079146735a633eaed57f56ada36017690241e81fbb19d7d0424a19a3d016655",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-05-of-05.png",
+      "sha256": "fa172161ea646be71a47dfc4e4134ba6391c8606ca0285aca9fa0920510e396a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-05-of-06.png",
+      "sha256": "9392648948ded29df7498a28a70e29872cc337505bce58ebb90bf2cce1b2f604",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-3-split-text-left-image-right/panel-overlay-06-of-06.png",
+      "sha256": "fa172161ea646be71a47dfc4e4134ba6391c8606ca0285aca9fa0920510e396a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-01-of-04.png",
+      "sha256": "37c084a081032d0e4d48474a3b4bf0c4de8b1cddc2a3fc794d513021548ae1d3",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-01-of-05.png",
+      "sha256": "f2512281a99d4a6cb7989acee2b6bb5d3b086e1daf2da45e6215543ef75034d4",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-01-of-06.png",
+      "sha256": "a585f2fdd8fa04cba32fe0f9ac00bcc2e68e576cce6154f4cb806fee28e7dee1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-02-of-04.png",
+      "sha256": "5e175de88e9026348ba1acefa555883bd7811f6bdf7f6556bf2c6a0613bfe7b1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-02-of-05.png",
+      "sha256": "235ef59df58a50b7776347384f5e8a08fbf5c7e17155f97d57f568290706b8e2",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-02-of-06.png",
+      "sha256": "6309857f193aed4755bffa374273bf36c96d16c67e080892d196ae3024ed99ce",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-03-of-04.png",
+      "sha256": "447403437e32016fe7ca2c68a2e17ba8add0b4b53a12dbfb68d6e89f8be195cf",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-03-of-05.png",
+      "sha256": "1734e7148ce790f45f7279cf0094efcf313e47cc67020ed6c518d7d21ff59146",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-03-of-06.png",
+      "sha256": "5e175de88e9026348ba1acefa555883bd7811f6bdf7f6556bf2c6a0613bfe7b1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-04-of-04.png",
+      "sha256": "16e09fc05e13badbb21ecc0bed609b357e00edb3db9762618a25bb001b4765c4",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-04-of-05.png",
+      "sha256": "c02323867d53a05fdd70f9943327227d057eb0acfdde5382f32f89a5d725b477",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-04-of-06.png",
+      "sha256": "5e17767e7738312f64b51ffaada45c04a22cd7f0414ade301a42fec8a6d93b3e",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-05-of-05.png",
+      "sha256": "16e09fc05e13badbb21ecc0bed609b357e00edb3db9762618a25bb001b4765c4",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-05-of-06.png",
+      "sha256": "4f3e5dd3f71e9426b344cb350b6c237f3962688a2616a000498f97de1aa9fea1",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4-equalarea-vertical-left/panel-overlay-06-of-06.png",
+      "sha256": "16e09fc05e13badbb21ecc0bed609b357e00edb3db9762618a25bb001b4765c4",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-01-of-04.png",
+      "sha256": "fd006b94ea06e09851db14738d07f6b9b3e13a156da228fde4ef69131371b8c7",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-01-of-05.png",
+      "sha256": "6f9f73cd8941d00e41de09913681f05f773dc5f8b6cbee2d1713945bf6795287",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-01-of-06.png",
+      "sha256": "e33127995de2144238e13d932bfbd4d2e871674e201d6e29444ec2838195713a",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-02-of-04.png",
+      "sha256": "89edaad365b625d798f497035d2d95c473c9a3b590454f0ef9c68b54347b948b",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-02-of-05.png",
+      "sha256": "9d6ac3f55ff1fd3858354fe1797fed9e7f078b0c360032ebce9bae190b15bdcc",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-02-of-06.png",
+      "sha256": "feff7635a4dcdff715103050260a0db2665a740386d083d61135893525d327c2",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-03-of-04.png",
+      "sha256": "c4989e97fe3c04c59a2bde9b3e667f3565acc10c59b407d1b077a0e650a3ac07",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-03-of-05.png",
+      "sha256": "b96dbff81b5287efc70dc502759e905d5b92561b61cf98d3417802e81f8ca96b",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-03-of-06.png",
+      "sha256": "89edaad365b625d798f497035d2d95c473c9a3b590454f0ef9c68b54347b948b",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-04-of-04.png",
+      "sha256": "285e9675b8c5328ac9f34d07805ed3b60529e016342324408bece367b24e4199",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-04-of-05.png",
+      "sha256": "125653ff859639f449f725ac0cd7c341200a450276f331fbd5cd83d417e67a1c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-04-of-06.png",
+      "sha256": "19cdce2f5785e25f1261e33234b7177c526e1d8b28533f6d10b7761b05990e17",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-05-of-05.png",
+      "sha256": "285e9675b8c5328ac9f34d07805ed3b60529e016342324408bece367b24e4199",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-05-of-06.png",
+      "sha256": "3cab0faee5fd15e83a421930b742e5752a7d79d09d6fc1077bdb27838778cd04",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-4B-equalarea-vertical-right/panel-overlay-06-of-06.png",
+      "sha256": "285e9675b8c5328ac9f34d07805ed3b60529e016342324408bece367b24e4199",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-01-of-04.png",
+      "sha256": "323eab7136e87e65cc5f795d6edb7a3cf6b88cb57bf7ae8dd034b8a69a4a40d5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-01-of-05.png",
+      "sha256": "825123defcafb110a984981a9af280a4c519f3e00a5f314a1f399dd46f0bfcd6",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-01-of-06.png",
+      "sha256": "cf0fe39385b0fe2dbf4d5536999b801a6c0289b36bed986b8753c13081177fad",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-02-of-04.png",
+      "sha256": "22396bea31026782420a0d550bc9415875e39635111034566ae7ba8942ba3dd5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-02-of-05.png",
+      "sha256": "338e31446861df17081abba34b53c9f63d70e82670eaee0d25c12cf59c460da2",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-02-of-06.png",
+      "sha256": "865a009b69f50cc383461cbe9cfe37793924c314f5fa0ec2dff4f859f27bb3cb",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-03-of-04.png",
+      "sha256": "ba3214294ea89c203566fa03256b89a8fd9e11c88de2ba3409b2deaf6768de01",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-03-of-05.png",
+      "sha256": "ab8aba017cb6c9e8e27bfc9cea801a0eddefe30e8ca8029e1ec5d1203ce8bfbf",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-03-of-06.png",
+      "sha256": "22396bea31026782420a0d550bc9415875e39635111034566ae7ba8942ba3dd5",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-04-of-04.png",
+      "sha256": "a4dfe655aa7735b64b9cc44011c5d63d5cfdf0d89a7872e6dc1d3116388a1947",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-04-of-05.png",
+      "sha256": "0b5db6f3b55906e96ab703d31acf798c18172fe23e937722e38f1af4b0abcf6c",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-04-of-06.png",
+      "sha256": "0853c9ab3f06c25f16d53a98454900a13c0895b6d5bbaedf3278106a660f138d",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-05-of-05.png",
+      "sha256": "a4dfe655aa7735b64b9cc44011c5d63d5cfdf0d89a7872e6dc1d3116388a1947",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-05-of-06.png",
+      "sha256": "e4c4175f5837321ba73d4a3a934bb64b4c96af520a834f931e9dc85ddc1ed6da",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    },
+    {
+      "path": "variants/progress-accent/template-5-split-image-left-text-right/panel-overlay-06-of-06.png",
+      "sha256": "a4dfe655aa7735b64b9cc44011c5d63d5cfdf0d89a7872e6dc1d3116388a1947",
+      "dimensions": [
+        1080,
+        1350
+      ]
+    }
+  ],
+  "designs": [
+    {
+      "file": "01-dashboard.png",
+      "dimensions": [
+        1486,
+        1058
+      ],
+      "sha256": "d6152e7ad70bc1415252bfa6659c36d001a555b199e8665c66cc7f3fdd090366"
+    },
+    {
+      "file": "02-detail-produksi.png",
+      "dimensions": [
+        1586,
+        992
+      ],
+      "sha256": "6e4cbf6d82ef158eb71ab4f0f524caa9dc4786941e3d112b388d48248f0849c2"
+    }
+  ],
+  "active_scope": "Instagram via NC-WA only",
+  "public_domain": "ncpost.nuscode.id",
+  "local_port": 8072
+}

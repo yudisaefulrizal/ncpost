@@ -1,0 +1,1 @@
+Ilustrasi bergaya layered paper cut, potongan kertas berlapis dengan tekstur halus dan bayangan lembut, karakter tanpa wajah, serta komposisi rapi; jika ada perempuan, gunakan hijab dan pakaian sopan yang menutup aurat. portrait orientation, {{teks}}

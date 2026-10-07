@@ -1,0 +1,1 @@
+Editorial photorealistic stock photo, landscape 16:9, a relevant real-world visual metaphor for: {{teks}} clean modern composition, no readable text, no logos, no watermark, no human faces. Jika ada perempuan, kenakan hijab.
