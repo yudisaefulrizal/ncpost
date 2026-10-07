@@ -64,7 +64,7 @@ const importJsonExample =
   ) + "\n";
 const navGroups: [string, [string, IconName][]][] = [
   [
-    "Kerja",
+    "Konten Buku",
     [
       ["Produksi", "video"],
       ["Pengaturan Konten", "sliders"],
