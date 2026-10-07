@@ -1,3 +1,7 @@
+import { NewsCronStore } from "./news-cron";
+import { newsKinds, NEWS_MEDIA_STAGES } from "./news-production-domain";
+import { NewsMediaStore } from "./news-media-store";
+import { NewsStore } from "./news-store";
 import { selectInstagramAccount } from "./instagram-account";
 import express from "express";
 import path from "node:path";
@@ -93,6 +97,145 @@ app.post("/api/logout", (_, res) => {
     "Set-Cookie",
     "ncpost_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
   );
+  res.json({ ok: true });
+});
+app.get("/api/news", async (_, res) => {
+  const media = new NewsMediaStore(store.db);
+  const news = await new NewsStore(store.db).list();
+  res.json(
+    await Promise.all(
+      news.map(async (n) => ({
+        ...n,
+        production: await media.detail(n.id, n.attempts),
+        settings: await media.settings(n.category),
+      })),
+    ),
+  );
+});
+app.get("/api/news-crons", async (_, res) =>
+  res.json(await new NewsCronStore(store.db).list()),
+);
+app.put("/api/news-crons", async (req, res) => {
+  if (
+    req.body?.enabled === true &&
+    ["POST_IG", "REELS_IG"].includes(req.body.kind)
+  )
+    selectInstagramAccount(
+      (await new NewsMediaStore(store.db).settings()).instagramAccountId,
+      await accounts(),
+    );
+  res.json(await new NewsCronStore(store.db).save(req.body));
+});
+app.post("/api/news/:id/publications/:kind/refresh", async (req, res) => {
+  const id = Number(req.params.id),
+    kind = String(req.params.kind);
+  if (
+    !Number.isSafeInteger(id) ||
+    id < 1 ||
+    !["POST_IG", "REELS_IG"].includes(kind)
+  )
+    throw Error("Publikasi berita tidak valid");
+  const [news]: any = await store.db.query(
+    "SELECT attempts FROM news_articles WHERE id=?",
+    [id],
+  );
+  if (!news[0]) throw Error("Berita tidak ditemukan");
+  const media = new NewsMediaStore(store.db),
+    p = await media.detail(id, news[0].attempts),
+    old = p.outputs[kind];
+  if (!old?.requestId) throw Error("Belum ada request publikasi");
+  const r = await postStatus(old.requestId);
+  const result = {
+    ...old,
+    status: String(r.status),
+    mediaId: r.mediaId ?? null,
+  };
+  await media.updatePublication(id, kind, old.requestId, result);
+  res.json(result);
+});
+app.get("/api/news-settings", async (_, res) =>
+  res.json([
+    {
+      category: "teknologi",
+      book: "Teknologi",
+      settings: await new NewsMediaStore(store.db).settings(),
+    },
+  ]),
+);
+app.put("/api/news-settings", async (req, res) => {
+  const category = req.body?.category;
+  const normalized = normalizeBookSettings(req.body?.settings);
+  const media = new NewsMediaStore(store.db);
+  const current = await media.settings(category);
+  if (
+    normalized.instagramAccountId &&
+    normalized.instagramAccountId !== current.instagramAccountId
+  )
+    selectInstagramAccount(normalized.instagramAccountId, await accounts());
+  res.json({
+    category,
+    settings: await media.saveSettings(category, normalized),
+  });
+});
+app.post("/api/news/:id/jobs", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw Error("ID berita tidak valid");
+  const media = new NewsMediaStore(store.db);
+  const stage = req.body?.kind;
+  const kinds = NEWS_MEDIA_STAGES.some(([key]) => key === stage)
+    ? newsKinds(stage, await media.settings())
+    : [stage];
+  res.status(202).json({
+    ids: await media.enqueueMany(id, kinds, req.body?.replace === true),
+  });
+});
+app.get("/api/news/:id/media/:kind/:index", async (req, res) => {
+  const id = Number(req.params.id),
+    index = Number(req.params.index),
+    kind = String(req.params.kind);
+  if (
+    !Number.isSafeInteger(id) ||
+    id < 1 ||
+    !Number.isSafeInteger(index) ||
+    index < 0 ||
+    !["PANEL", "TTS_KALIMAT", "VIDEO_KALIMAT", "VIDEO_KALIMAT_H"].includes(kind)
+  )
+    return void res.sendStatus(404);
+  const [news]: any = await store.db.query(
+    "SELECT attempts FROM news_articles WHERE id=?",
+    [id],
+  );
+  if (!news[0]) return void res.sendStatus(404);
+  const p = await new NewsMediaStore(store.db).detail(id, news[0].attempts);
+  const m = p.outputs[kind];
+  const file =
+    kind === "PANEL"
+      ? index === 4
+        ? m?.closing
+        : m?.panels?.[index]?.file
+      : kind === "TTS_KALIMAT"
+        ? m?.sentences?.[index]?.file
+        : index === 0
+          ? m?.file
+          : null;
+  if (typeof file !== "string") return void res.sendStatus(404);
+  res.sendFile(
+    safeFile(path.join(outputRoot(), "berita/media"), path.join(ROOT, file)),
+  );
+});
+app.post("/api/news", async (_, res) =>
+  res.status(201).json({ id: await new NewsStore(store.db).create() }),
+);
+app.post("/api/news/:id/retry", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw Error("ID berita tidak valid");
+  await new NewsStore(store.db).retry(id);
+  res.json({ ok: true });
+});
+app.post("/api/news/:id/regenerate", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw Error("ID berita tidak valid");
+  await new NewsStore(store.db).regenerate(id);
   res.json({ ok: true });
 });
 app.get("/api/chapters", async (_, res) => res.json(await store.list()));

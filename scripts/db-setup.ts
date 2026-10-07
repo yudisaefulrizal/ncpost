@@ -49,6 +49,15 @@ try {
     );
     await root.query(`USE \`${db}\``);
     await root.query(schema);
+    const [newsOutputIndexes] = (await root.query(
+      "SHOW INDEX FROM news_media_outputs WHERE Key_name='PRIMARY'",
+    )) as any;
+    if (
+      !newsOutputIndexes.some((index: any) => index.Column_name === "revision")
+    )
+      await root.query(
+        "ALTER TABLE news_media_outputs DROP PRIMARY KEY, ADD PRIMARY KEY(news_id,revision,kind)",
+      );
     const [cronColumns] = (await root.query(
       "SHOW COLUMNS FROM book_cron",
     )) as any;

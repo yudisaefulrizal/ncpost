@@ -1,0 +1,140 @@
+{
+  "type": "object",
+  "properties": {
+    "article": {
+      "type": "string",
+      "description": "Artikel final: judul teks biasa, empat paragraf tanpa header/subjudul, blok Sumber dengan satu tautan Markdown, lalu Tag paling akhir. Gaya bahasa dan riset mengikuti prompt Hermes; format mengikuti instruksi runtime ncpost."
+    },
+    "candidate_topics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "original_title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "selected": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "url",
+          "original_title",
+          "summary",
+          "selected",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "article_plan": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "heading": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "heading",
+              "summary"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "title",
+        "sections"
+      ],
+      "additionalProperties": false
+    },
+    "claim_source_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "source_url",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "article_validation": {
+      "type": "object",
+      "properties": {
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "passed": {
+                "type": "boolean"
+              },
+              "notes": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "passed",
+              "notes"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "checks"
+      ],
+      "additionalProperties": false,
+      "description": "Sebelas pemeriksaan dari Gate artikel wajib pada prompt sumber, masing-masing dengan keputusan dan catatan."
+    }
+  },
+  "required": [
+    "article",
+    "candidate_topics",
+    "article_plan",
+    "claim_source_map",
+    "article_validation"
+  ],
+  "additionalProperties": false
+}

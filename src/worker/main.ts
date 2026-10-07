@@ -1,3 +1,9 @@
+import { NewsCronStore } from "../server/news-cron";
+import { NewsMediaStore } from "../server/news-media-store";
+import { runNewsMediaJob, pollNewsPublications } from "./news-media";
+import { generateStock } from "./stock-generator";
+import { NewsStore } from "../server/news-store";
+import { runNewsJob } from "./news";
 import { selectInstagramAccount } from "../server/instagram-account";
 import {
   mkdirSync,
@@ -5,7 +11,6 @@ import {
   readFileSync,
   copyFileSync,
   rmSync,
-  constants as fsConstants,
 } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
@@ -50,13 +55,8 @@ import {
   quotePrompt,
   hookPrompt,
   quoteImagePrompt,
-  stockPrompt,
 } from "../server/prompts";
-import {
-  HORIZONTAL_KINDS,
-  baseKind,
-  sentenceJob,
-} from "../server/book-settings";
+import { baseKind, sentenceJob } from "../server/book-settings";
 import { SOURCE } from "../server/templates";
 import {
   audioDir,
@@ -66,14 +66,11 @@ import {
   videoPath,
 } from "../server/output-paths";
 import { panelHeading, stripMarkdownEmphasis } from "../server/stock-prompts";
-import {
-  bestAsset,
-  panelTokens,
-  slugify,
-  tokenize,
-} from "../server/stock-match";
+import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
 initConfig();
 const store = new Store();
+const newsStore = new NewsStore(store.db);
+const newsMediaStore = new NewsMediaStore(store.db);
 let stop = false;
 process.on("SIGTERM", () => (stop = true));
 process.on("SIGINT", () => (stop = true));
@@ -148,67 +145,17 @@ async function fixFormat(
   return codex(articleFormatPrompt(c, article, errors), work);
 }
 // Gambar baru masuk kolam output/stock/<jenis>/<deskripsi>.jpg, tanpa id bab.
-async function generateStock(
-  kind: string,
-  heading: string,
-  paragraph: string,
-  work: string,
-  panel: number,
-) {
-  const prompt = stockPrompt(kind, heading, paragraph);
-  const tmp = path.join(work, `stock-panel-${panel}.jpg`);
-  let failure = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      await generateCodexImage(
-        prompt,
-        work,
-        tmp,
-        HORIZONTAL_KINDS.includes(kind) ? "horizontal" : "vertikal",
-      );
-      failure = "";
-      break;
-    } catch (e) {
-      failure = (e as Error).message;
-    }
-  }
-  if (failure)
-    throw Error(`Panel ${panel} gagal setelah 3 percobaan: ${failure}`);
-  // Nama dan deskripsi gambar = teks heading panel.
-  const description = stripMarkdownEmphasis(heading);
-  const pool = path.join(ROOT, "output/stock", kind);
-  mkdirSync(pool, { recursive: true, mode: 0o700 });
-  const slug = slugify(description);
-  // Job paralel bisa memakai slug yang sama: salin dengan COPYFILE_EXCL dan
-  // daftarkan; bila nama sudah terpakai, coba akhiran berikutnya.
-  for (let n = 1; ; n++) {
-    const file = path.join(pool, n === 1 ? `${slug}.jpg` : `${slug}-${n}.jpg`);
-    try {
-      copyFileSync(tmp, file, fsConstants.COPYFILE_EXCL);
-    } catch (e) {
-      if ((e as { code?: string }).code === "EEXIST") continue;
-      throw e;
-    }
-    try {
-      const id = await store.addAsset(
-        kind,
-        path.relative(ROOT, file),
-        description,
-        prompt,
-      );
-      rmSync(tmp, { force: true });
-      return id;
-    } catch (e) {
-      rmSync(file, { force: true });
-      if ((e as { code?: string }).code !== "ER_DUP_ENTRY") throw e;
-    }
-  }
-}
 // Status posting dipantau terus sampai NC-WA menyatakan published/failed/unknown.
 let lastPostPoll = 0;
 async function pollPosts() {
   if (Date.now() - lastPostPoll < 15000) return;
   lastPostPoll = Date.now();
+  try {
+    await pollNewsPublications(newsMediaStore);
+  } catch (e) {
+    if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+      console.error("Status Instagram berita:", (e as Error).message);
+  }
   for (const c of await store.pendingReels()) {
     try {
       const r = await postStatus(c.reels_request_id!);
@@ -594,7 +541,7 @@ async function runJob(job: Job) {
             );
         const assetId =
           match?.asset.id ??
-          (await generateStock(kind, sentence, "", work, i + 1));
+          (await generateStock(store, kind, sentence, "", work, i + 1));
         bound = await store.bind(job.id, i + 1, assetId);
       }
       await store.complete(job.id, {});
@@ -617,7 +564,14 @@ async function runJob(job: Job) {
             );
         const assetId =
           match?.asset.id ??
-          (await generateStock(job.kind, heading, paragraph, work, i + 1));
+          (await generateStock(
+            store,
+            job.kind,
+            heading,
+            paragraph,
+            work,
+            i + 1,
+          ));
         bound = await store.bind(job.id, i + 1, assetId);
       }
       // Bila revisi berubah, complete() membatalkan job; aset tetap di kolam.
@@ -682,6 +636,7 @@ async function runJob(job: Job) {
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
 const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
+let newsRunning = false;
 while (!stop) {
   await store.recover();
   await pollPosts();
@@ -689,11 +644,49 @@ while (!stop) {
   if (minute !== lastCronMinute) {
     try {
       await store.scheduleCrons();
+      await new NewsCronStore(store.db).schedule();
       lastCronMinute = minute;
     } catch (e) {
       console.error("Cron gagal:", (e as Error).message);
       // Retry next minute; queue processing remains available.
       lastCronMinute = minute;
+    }
+  }
+  // At most one news research job per worker; book jobs share the remaining slots.
+  if (running.size < CONCURRENCY && !newsRunning) {
+    try {
+      const news = await newsStore.claim();
+      if (news) {
+        newsRunning = true;
+        const task: Promise<void> = runNewsJob(newsStore, news)
+          .catch((e) =>
+            console.error("Artikel berita gagal:", (e as Error).message),
+          )
+          .finally(() => {
+            running.delete(task);
+            newsRunning = false;
+          });
+        running.add(task);
+      }
+    } catch (e) {
+      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+        console.error("Antrean berita gagal:", (e as Error).message);
+    }
+  }
+  while (running.size < CONCURRENCY) {
+    try {
+      const job = await newsMediaStore.claim();
+      if (!job) break;
+      const task: Promise<void> = runNewsMediaJob(
+        newsMediaStore,
+        store,
+        job,
+      ).finally(() => running.delete(task));
+      running.add(task);
+    } catch (e) {
+      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+        console.error("Produksi berita gagal:", (e as Error).message);
+      break;
     }
   }
   while (running.size < CONCURRENCY) {

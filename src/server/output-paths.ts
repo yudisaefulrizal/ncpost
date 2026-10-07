@@ -21,6 +21,7 @@ import { ROOT } from "./config";
 export const outputRoot = () =>
   path.join(ROOT, "output", process.env.NCPOST_TEST === "true" ? ".test" : "");
 const RESERVED = new Set([
+  "berita",
   "stock",
   "public",
   "cache",

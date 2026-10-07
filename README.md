@@ -129,3 +129,66 @@ Jalankan ulang `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk menambahkan kolo
 Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada masing-masing buku, lalu Simpan. Pilihan tersimpan dalam pengaturan buku dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Tombol **Muat ulang akun Instagram** mengambil daftar terkini dari NC-WA. Konfirmasi publikasi manual menampilkan akun tujuan.
 
 Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa akun tersedia, pilih tujuan per buku. Akun pilihan yang hilang tidak dialihkan ke akun lain. Perubahan tujuan berlaku pada job yang diproses berikutnya; hasil yang sudah terbit tetap tercatat dan tidak dikirim ulang. Pengaturan ini menggunakan kolom JSON yang sudah ada sehingga tidak membutuhkan migrasi database.
+
+## Konten Berita
+
+**Konten Berita → Produksi → Buat artikel** mengantrekan pencarian dan penulisan
+artikel teknologi. Prompt `prompts/berita/skill-artikel-teknologi.md` disalin
+utuh dari Hermes dan dikirim tanpa perubahan. Codex memakai live web search,
+memilih tiga kandidat dari media yang diizinkan, memilih satu sumber, lalu
+menulis artikel serta laporan sesuai instruksi sumber. Tahap produksi berikutnya
+memakai komponen gambar, audio, render, dan Instagram yang sama dengan buku.
+
+Artikel, tiga kandidat, alasan pemilihan, sumber, dan laporan validasi bisa
+dibuka dari daftar produksi. Hasil dapat diunduh sebagai Markdown. Aplikasi
+memeriksa judul teks biasa dan empat paragraf tanpa header, 20–25 kata per paragraf, total 80–100 kata,
+maksimal 1.400 karakter isi, satu sumber terpilih, dan maksimal lima tag.
+Laporan fakta mengikuti riset model; selesai membuat artikel bukan status
+lolos editor produksi buku. URL sumber yang sudah digunakan ditolak untuk
+mencegah artikel duplikat. Kegagalan/lease kedaluwarsa perlu dicoba ulang
+secara eksplisit, tanpa membuat ulang hasil yang telah selesai.
+
+Jalankan `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk tabel artikel, antrean
+media, ikatan stok, hasil per revisi, pengaturan, dan cron berita. Artefak
+berita tersimpan di `output/berita/<id>/<percobaan>/`.
+Worker berita mengaktifkan `code_mode_host` agar live web search dapat
+dieksekusi, dengan shell dan browser interaktif tetap dinonaktifkan.
+Log provider `events.jsonl` juga disimpan untuk diagnosis hasil yang ditolak.
+Penyesuaian format pada `prompts/berita/format.md` diberikan sebagai instruksi
+runtime terpisah. Gaya bahasa, urutan gagasan, dan riset dari Hermes tetap berlaku.
+
+Tabel produksi berita memakai kontrol tahap yang sama dengan buku: centang
+artikel selesai, generate ulang, dan lihat melalui modal. Kolom pertama
+menampilkan Jenis Berita (saat ini Teknologi). Quote dan Gambar Quote tidak
+ditampilkan. Gambar Panel, Gambar Video, Audio, Video V/H, Panel, Post IG,
+dan Reels IG tersedia setelah prasyarat masing-masing terpenuhi.
+
+**Pengaturan Konten** berita menyediakan lajur gambar panel/per kalimat, sumber
+panel/video menurut orientasi, dan akun Instagram tujuan untuk Teknologi.
+Gambar diikat ke artikel berita tetapi file/asetnya masuk ke kolam bersama
+`assets` / `output/stock`; stok yang cocok dapat dipakai ulang. Menambah jenis
+gambar hanya membuat lajur yang belum lengkap. Regenerate gambar membuat
+aset baru tanpa menghapus kolam stok atau render yang tidak bergantung padanya.
+
+Panel berita berisi empat paragraf tanpa header dan satu slide penutup.
+Audio memakai ElevenLabs `eleven_v3` per kalimat; aktifkan kredensial dan
+`LIVE_TTS` sebelum membuat audio. Video V/H memakai gambar per kalimat,
+audio yang sama, subtitle, visualizer, dan CTA produksi buku. Hasil tersimpan
+secara terpisah di `output/berita/media/<id>/<revisi>/<job>-<percobaan>/`.
+
+Antrean media memakai snapshot artikel/pengaturan, satu proses per berita,
+heartbeat, serta penguncian MySQL. Regenerate artikel diblokir selama produksi
+aktif atau status publikasi belum pasti. Hasil dan riwayat publikasi disimpan
+per revisi; hasil lama tidak dianggap sebagai hasil artikel yang baru.
+
+Publikasi manual meminta konfirmasi akun tujuan. Request ID disimpan sebelum
+memanggil NC-WA. Status processing dipantau, dan kegagalan komunikasi menjadi
+unknown yang tidak dikirim ulang. Tombol **Periksa status Instagram** dalam
+modal hanya mengambil status request tersebut. Caption memakai artikel dan
+sumber berita, dengan tag `#berita`.
+
+**Cronjob** berita menyediakan sembilan jadwal interval (1–8760 jam), tanpa
+Quote/Gambar Quote, nonaktif secara default. Artikel mencari berita baru;
+tahap lain memilih satu berita belum selesai yang memenuhi prasyarat. Jadwal
+terlewat berjalan sekali, tanpa mengejar seluruh interval. Post/Reels otomatis
+hanya berjalan setelah jadwalnya diaktifkan dan akun tujuan tersedia.

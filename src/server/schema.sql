@@ -105,3 +105,69 @@ CREATE TABLE IF NOT EXISTS book_cron (
   last_result TEXT NULL,
   PRIMARY KEY (book_key, kind)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tahap artikel berita terpisah dari data dan antrean produksi buku.
+CREATE TABLE IF NOT EXISTS news_articles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  category VARCHAR(32) NOT NULL DEFAULT 'teknologi',
+  state VARCHAR(16) NOT NULL DEFAULT 'queued',
+  attempts INT NOT NULL DEFAULT 0,
+  lease BIGINT NOT NULL DEFAULT 0,
+  title VARCHAR(500) NOT NULL,
+  article MEDIUMTEXT NOT NULL,
+  source_url TEXT NULL,
+  source_hash CHAR(64) NULL,
+  candidates MEDIUMTEXT NULL,
+  artifacts MEDIUMTEXT NULL,
+  error TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY news_source (source_hash),
+  KEY news_state (state)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS news_content_settings (
+ category VARCHAR(32) PRIMARY KEY,
+ settings TEXT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS news_media_jobs (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ news_id INT NOT NULL,
+ revision INT NOT NULL,
+ kind VARCHAR(32) NOT NULL,
+ state VARCHAR(16) NOT NULL DEFAULT 'queued',
+ attempts INT NOT NULL DEFAULT 0,
+ lease BIGINT NOT NULL DEFAULT 0,
+ force_new TINYINT NOT NULL DEFAULT 0,
+ settings TEXT NOT NULL,
+ error TEXT NULL,
+ active_key VARCHAR(80) AS (IF(state IN ('queued','running'),CONCAT(news_id,':',kind),NULL)) STORED,
+ UNIQUE KEY news_media_active(active_key),
+ KEY news_media_state(state), KEY news_media_owner(news_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS news_media_outputs (
+ news_id INT NOT NULL,
+ revision INT NOT NULL,
+ kind VARCHAR(32) NOT NULL,
+ data MEDIUMTEXT NOT NULL,
+ PRIMARY KEY(news_id,revision,kind)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS news_stock (
+ news_id INT NOT NULL,
+ revision INT NOT NULL,
+ kind VARCHAR(32) NOT NULL,
+ panel INT NOT NULL,
+ asset_id INT NOT NULL,
+ PRIMARY KEY(news_id,revision,kind,panel),
+ KEY news_stock_asset(asset_id),
+ CONSTRAINT news_stock_asset_fk FOREIGN KEY(asset_id) REFERENCES assets(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS news_cron (
+ category VARCHAR(32) NOT NULL,
+ kind VARCHAR(32) NOT NULL,
+ enabled TINYINT NOT NULL DEFAULT 0,
+ interval_hours INT NOT NULL DEFAULT 24,
+ next_run BIGINT NULL,
+ last_tick BIGINT NULL,
+ last_result TEXT NULL,
+ PRIMARY KEY(category,kind)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

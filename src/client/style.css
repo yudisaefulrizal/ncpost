@@ -1494,3 +1494,18 @@ tr.grp .grp-action {
   width: 240px;
   max-width: 100%;
 }
+
+.news-article {
+  line-height: 1.8;
+  max-width: 800px;
+}
+.news-article p {
+  white-space: pre-wrap;
+  margin-bottom: 1em;
+}
+.news-audit {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 500px;
+  overflow: auto;
+}

@@ -809,7 +809,7 @@ export class Store {
   assets(kind: string) {
     return rows<Asset>(
       this.db,
-      "SELECT a.*,(SELECT COUNT(*) FROM chapter_stock s WHERE s.asset_id=a.id) AS `usage` FROM assets a WHERE a.kind=? ORDER BY a.id",
+      "SELECT a.*,((SELECT COUNT(*) FROM chapter_stock s WHERE s.asset_id=a.id)+(SELECT COUNT(*) FROM news_stock ns JOIN news_articles n ON n.id=ns.news_id AND n.attempts=ns.revision WHERE ns.asset_id=a.id)) AS `usage` FROM assets a WHERE a.kind=? ORDER BY a.id",
       [kind],
     );
   }

@@ -1,4 +1,13 @@
 import {
+  NEWS_MEDIA_STAGES,
+  NEWS_CRON_TYPES,
+  emptyNewsProduction,
+  newsKinds,
+  newsPrerequisite,
+  newsStageDone,
+} from "../server/news-production-domain";
+import type { NewsArticle } from "../server/news-store";
+import {
   selectInstagramAccount,
   type InstagramConnection,
 } from "../server/instagram-account";
@@ -69,6 +78,14 @@ const navGroups: [string, [string, IconName][]][] = [
       ["Produksi", "video"],
       ["Pengaturan Konten", "sliders"],
       ["Cronjob", "gear"],
+    ],
+  ],
+  [
+    "Konten Berita",
+    [
+      ["Produksi Berita", "doc"],
+      ["Pengaturan Berita", "sliders"],
+      ["Cronjob Berita", "gear"],
     ],
   ],
   [
@@ -1170,6 +1187,22 @@ function App() {
         }
       />
     );
+  } else if (page === "Produksi Berita") {
+    sub =
+      "Produksi berita teknologi: artikel, gambar, audio, panel, video, dan Instagram.";
+    content = <NewsProduction instagram={instagram} ttsLive={ttsLive} />;
+  } else if (page === "Pengaturan Berita") {
+    sub = "Sumber gambar, video, dan akun Instagram per jenis berita.";
+    content = (
+      <NewsContentSettings
+        instagram={instagram}
+        onRefreshInstagram={refreshInstagram}
+      />
+    );
+  } else if (page === "Cronjob Berita") {
+    sub =
+      "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
+    content = <NewsCronSettings />;
   } else if (page === "Kredensial") {
     sub = "Key khusus aplikasi untuk penyedia eksternal.";
     content = (
@@ -1298,6 +1331,12 @@ function App() {
         onOpen={(c: any) => action(() => open(c))}
       />
     );
+    content = (
+      <div className="stack-lg">
+        {content}
+        <NewsFinishedContent kind="PANEL" />
+      </div>
+    );
   } else if (page === "Stok Konten Video") {
     sub =
       "Video final per bagian: 9:16 untuk Reels dan 16:9 untuk platform lain.";
@@ -1338,10 +1377,16 @@ function App() {
     ) : (
       <section className="card pad">
         <div className="empty">
-          Belum ada video. Jalankan ▶ Video di halaman Produksi setelah gambar
-          dan audio per kalimat siap.
+          Belum ada video buku. Jalankan ▶ Video di halaman Produksi setelah
+          gambar dan audio per kalimat siap.
         </div>
       </section>
+    );
+    content = (
+      <div className="stack-lg">
+        {content}
+        <NewsFinishedContent kind="VIDEO" />
+      </div>
     );
   } else if (page === "Stok Gambar") {
     sub = "Kolam stok gambar per lajur.";
@@ -1367,11 +1412,26 @@ function App() {
                 <button
                   key={n}
                   className={"nav-btn" + (page === n && !detail ? " on" : "")}
+                  aria-label={
+                    [
+                      "Produksi Berita",
+                      "Pengaturan Berita",
+                      "Cronjob Berita",
+                    ].includes(n)
+                      ? n
+                      : undefined
+                  }
                   aria-current={page === n && !detail ? "page" : undefined}
                   onClick={() => go(n)}
                 >
                   <Icon name={icon} />
-                  {n}
+                  {n === "Produksi Berita"
+                    ? "Produksi"
+                    : n === "Pengaturan Berita"
+                      ? "Pengaturan Konten"
+                      : n === "Cronjob Berita"
+                        ? "Cronjob"
+                        : n}
                   {n === "Produksi" && (
                     <span className="mono nav-count">{rows.length}</span>
                   )}
@@ -2355,6 +2415,683 @@ function CronCell({
 }
 
 // Pengaturan Konten: satu kartu per judul buku dengan draf lokal sampai disimpan.
+function NewsProduction({
+  instagram,
+  ttsLive,
+}: {
+  instagram: InstagramConnection;
+  ttsLive: boolean;
+}) {
+  const [mediaView, setMediaView] = useState<{
+    id: number;
+    stage: string;
+  } | null>(null);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("");
+  const [items, setItems] = useState<NewsArticle[]>([]);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const load = async () => {
+    setItems(await api("/news"));
+    setError("");
+  };
+  useEffect(() => {
+    let mounted = true;
+    const poll = () =>
+      api("/news")
+        .then((r) => {
+          if (mounted) {
+            setItems(r);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (mounted) setError(e.message);
+        })
+        .finally(() => {
+          if (mounted) setLoading(false);
+        });
+    poll();
+    const timer = setInterval(poll, 3000);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const current = items.find((n) => n.id === selected);
+  const candidates = current ? parse(current.candidates) : null;
+  const artifacts = current ? parse(current.artifacts) : null;
+  const stages = NEWS_MEDIA_STAGES;
+  const mediaUrl = (id: number, stage: string, index = 0) =>
+    `/api/news/${id}/media/${stage}/${index}`;
+  const mediaCurrent = items.find((n) => n.id === mediaView?.id);
+  const runMedia = (n: NewsArticle, stage: string, replace = false) =>
+    run(async () => {
+      if (["POST_IG", "REELS_IG"].includes(stage)) {
+        const account = selectInstagramAccount(
+          n.settings?.instagramAccountId ?? null,
+          instagram,
+        );
+        if (
+          !confirm(
+            `Kirim ${stage === "POST_IG" ? "carousel panel" : "Reels video"} berita "${n.title}" ke @${account.username}?`,
+          )
+        )
+          return;
+      } else if (
+        replace &&
+        !confirm(
+          `Buat ulang ${stages.find(([k]) => k === stage)?.[1]} untuk berita "${n.title}"?`,
+        )
+      )
+        return;
+      await api(`/news/${n.id}/jobs`, "POST", { kind: stage, replace });
+    });
+  const mediaPlay = (n: NewsArticle, stage: string): PlayProps => {
+    const p = n.production ?? emptyNewsProduction();
+    const settings = n.settings ?? DEFAULT_BOOK_SETTINGS;
+    const kinds = newsKinds(stage, settings);
+    const active = p.jobs.some(
+      (j) => kinds.includes(j.kind) && ["queued", "running"].includes(j.state),
+    );
+    const publication = ["POST_IG", "REELS_IG"].includes(stage);
+    const output = p.outputs[stage];
+    const sent = publication && output && output.status !== "failed";
+    const done = newsStageDone(stage, p, settings, n.article);
+    const reason =
+      n.state !== "completed"
+        ? "Butuh artikel selesai"
+        : !kinds.length
+          ? "Pilih jenis gambar di Pengaturan Konten"
+          : stage === "TTS_KALIMAT" && !ttsLive
+            ? "Aktifkan ElevenLabs di Kredensial"
+            : kinds
+                .map((k) => newsPrerequisite(k, p, settings, n.article))
+                .find(Boolean);
+    const hasView =
+      stage === "IMAGES_PANEL" || stage === "IMAGES_VIDEO"
+        ? p.stock.some((b) => kinds.includes(b.kind))
+        : !!output;
+    return {
+      title: active
+        ? "Sedang diproses"
+        : sent && !done
+          ? `Status Instagram: ${output.status}`
+          : reason ||
+            `${done ? "Selesai" : "Buat"} ${stages.find(([k]) => k === stage)?.[1]}`,
+      busy:
+        active ||
+        (sent &&
+          ["processing", "preparing", "publishing"].includes(output.status)),
+      done,
+      run:
+        !busy && !active && !sent && !reason
+          ? () => runMedia(n, stage)
+          : undefined,
+      redo:
+        done &&
+        !publication &&
+        !busy &&
+        !p.jobs.some((j) => ["queued", "running"].includes(j.state))
+          ? () => runMedia(n, stage, true)
+          : undefined,
+      view: hasView ? () => setMediaView({ id: n.id, stage }) : undefined,
+      viewTitle: `Lihat ${stages.find(([k]) => k === stage)?.[1]} berita #${n.id}`,
+    };
+  };
+  const visible = items.filter(
+    (n) =>
+      (!category || n.category === category) &&
+      `${n.title} ${n.category} ${n.id}`
+        .toLocaleLowerCase("id")
+        .includes(search.toLocaleLowerCase("id")),
+  );
+  const articlePlay = (n: NewsArticle): PlayProps => ({
+    title:
+      n.state === "completed"
+        ? "Artikel selesai"
+        : n.state === "failed"
+          ? "Coba ulang artikel"
+          : "Artikel sedang diproses",
+    done: n.state === "completed",
+    busy: n.state === "queued" || n.state === "running",
+    run:
+      n.state === "failed" && !busy
+        ? () => run(() => api(`/news/${n.id}/retry`, "POST"))
+        : undefined,
+    redo:
+      n.state === "completed" && !busy
+        ? () => {
+            if (
+              confirm(
+                `Buat ulang artikel "${n.title}"? Hasil lama diganti setelah artikel baru selesai.`,
+              )
+            )
+              run(() => api(`/news/${n.id}/regenerate`, "POST"));
+          }
+        : undefined,
+    view: n.article ? () => setSelected(n.id) : undefined,
+    viewTitle: `Lihat artikel berita #${n.id}`,
+  });
+  return (
+    <div className="stack-lg">
+      <section className="card queue">
+        <div className="card-head">
+          <h2>Antrean berita</h2>
+          <div className="toolbar">
+            <div className="search">
+              <Icon name="search" />
+              <input
+                aria-label="Cari artikel berita"
+                placeholder="Cari artikel berita"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <select
+              className="book-filter"
+              aria-label="Filter jenis berita"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">Semua jenis berita</option>
+              <option value="teknologi">Teknologi</option>
+            </select>
+          </div>
+        </div>
+        <div className="add-chapter">
+          <label className="field">
+            Jenis berita
+            <select aria-label="Jenis berita baru" value="teknologi" disabled>
+              <option value="teknologi">Teknologi</option>
+            </select>
+          </label>
+          <button
+            className="btn btn-pri"
+            disabled={busy || loading}
+            onClick={() => run(() => api("/news", "POST"))}
+          >
+            <Icon name="plus" />
+            {busy ? "Memproses…" : "Buat artikel"}
+          </button>
+        </div>
+        {error && (
+          <p role="alert" className="warn">
+            {error}
+          </p>
+        )}
+        <div className="table">
+          <table>
+            <thead>
+              <tr>
+                <th>Jenis Berita</th>
+                <th>Artikel</th>
+                {stages.map(([key, stage]) => (
+                  <th key={key}>{stage}</th>
+                ))}
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((n) => (
+                <tr key={n.id} className="row">
+                  <td className="title-cell">
+                    <span className="mono num">
+                      {String(n.id).padStart(2, "0")}
+                    </span>
+                    <div>
+                      <b>Teknologi</b>
+                      <small className="block muted">
+                        {n.title || `Artikel berita #${n.id}`}
+                      </small>
+                      {n.error && (
+                        <small className="block warn">{n.error}</small>
+                      )}
+                      {n.production?.jobs.find((j) => j.state === "failed")
+                        ?.error && (
+                        <small className="block warn">
+                          {
+                            n.production.jobs.find((j) => j.state === "failed")
+                              ?.error
+                          }
+                        </small>
+                      )}
+                    </div>
+                  </td>
+                  <td>
+                    <StageCell play={articlePlay(n)} />
+                  </td>
+                  {stages.map(([stage]) => (
+                    <td key={stage}>
+                      <StageCell play={mediaPlay(n, stage)} />
+                      {["POST_IG", "REELS_IG"].includes(stage) &&
+                        n.production?.outputs[stage] && (
+                          <small className="block muted">
+                            {n.production.outputs[stage].status}
+                          </small>
+                        )}
+                    </td>
+                  ))}
+                  <td>
+                    <Chip s={status(n.state)} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!visible.length && (
+            <div className="empty">
+              {loading
+                ? "Memuat…"
+                : items.length
+                  ? "Tidak ada berita yang cocok dengan filter."
+                  : "Belum ada artikel berita. Klik Buat artikel untuk memulai."}
+            </div>
+          )}
+        </div>
+      </section>
+      {mediaCurrent && mediaView && (
+        <Modal
+          c={mediaCurrent}
+          title={`${stages.find(([k]) => k === mediaView.stage)?.[1]} · ${mediaCurrent.title}`}
+          subtitle="Teknologi"
+          wide
+          onClose={() => setMediaView(null)}
+        >
+          {["POST_IG", "REELS_IG"].includes(mediaView.stage) ? (
+            <div className="stack">
+              <p>
+                Akun: @
+                {mediaCurrent.production?.outputs[mediaView.stage]?.username}
+              </p>
+              <p>
+                Status:{" "}
+                {mediaCurrent.production?.outputs[mediaView.stage]?.status}
+              </p>
+              <p className="mono">
+                Request:{" "}
+                {mediaCurrent.production?.outputs[mediaView.stage]?.requestId}
+              </p>
+              <button
+                className="btn btn-sec"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    api(
+                      `/news/${mediaCurrent.id}/publications/${mediaView.stage}/refresh`,
+                      "POST",
+                    ),
+                  )
+                }
+              >
+                Periksa status Instagram
+              </button>
+            </div>
+          ) : mediaView.stage === "IMAGES_PANEL" ||
+            mediaView.stage === "IMAGES_VIDEO" ? (
+            <div className="gallery stock">
+              {(mediaCurrent.production?.stock ?? [])
+                .filter((b) =>
+                  newsKinds(
+                    mediaView.stage,
+                    mediaCurrent.settings ?? DEFAULT_BOOK_SETTINGS,
+                  ).includes(b.kind),
+                )
+                .map((b) => (
+                  <figure key={`${b.kind}-${b.panel}`}>
+                    <img
+                      src={`/api/stock/${b.asset_id}/image`}
+                      alt={b.description}
+                    />
+                    <figcaption>
+                      {laneName(b.kind.replace(/^S_/, ""))} · {b.panel}
+                      <small className="block muted">{b.description}</small>
+                    </figcaption>
+                  </figure>
+                ))}
+            </div>
+          ) : mediaView.stage === "PANEL" ? (
+            <div className="gallery">
+              {Array.from({ length: 5 }, (_, i) => (
+                <a
+                  key={i}
+                  href={mediaUrl(mediaCurrent.id, "PANEL", i)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    src={mediaUrl(mediaCurrent.id, "PANEL", i)}
+                    alt={i === 4 ? "Slide penutup" : `Panel berita ${i + 1}`}
+                  />
+                </a>
+              ))}
+            </div>
+          ) : mediaView.stage === "TTS_KALIMAT" ? (
+            <div className="stack">
+              {(
+                mediaCurrent.production?.outputs.TTS_KALIMAT?.sentences ?? []
+              ).map((x: any, i: number) => (
+                <div key={i}>
+                  <p>{x.narration_text}</p>
+                  <audio
+                    controls
+                    preload="none"
+                    src={mediaUrl(mediaCurrent.id, "TTS_KALIMAT", i)}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <video
+              controls
+              preload="metadata"
+              style={{ maxWidth: "100%", maxHeight: "75vh" }}
+              src={mediaUrl(mediaCurrent.id, mediaView.stage)}
+            />
+          )}
+        </Modal>
+      )}
+      {current && (
+        <Modal
+          c={current}
+          title={current.title || `Artikel berita #${current.id}`}
+          subtitle="Teknologi"
+          onClose={() => setSelected(null)}
+        >
+          <div className="card-title">
+            <div className="row-gap">
+              <a
+                className="btn btn-sec btn-sm"
+                download={`berita-${current.id}.md`}
+                href={`data:text/markdown;charset=utf-8,${encodeURIComponent(current.article)}`}
+              >
+                Download artikel
+              </a>
+            </div>
+          </div>
+          <article className="news-article">
+            {current.article.split(/\n\s*\n/).map((block, i) => {
+              if (
+                block.startsWith("# ") ||
+                block.trim() === current.title ||
+                block.startsWith("Sumber:") ||
+                /^1\. \[/.test(block)
+              )
+                return null;
+              const section = /^## ([^\n]+)(?:\n+([\s\S]*))?$/.exec(block);
+              return section ? (
+                <React.Fragment key={i}>
+                  <h3>{section[1]}</h3>
+                  {section[2] && <p>{section[2]}</p>}
+                </React.Fragment>
+              ) : (
+                <p key={i}>{block}</p>
+              );
+            })}
+          </article>
+          {current.source_url && (
+            <p>
+              Sumber:{" "}
+              <a
+                href={current.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Buka artikel sumber
+              </a>
+            </p>
+          )}
+          {Array.isArray(candidates) && (
+            <details>
+              <summary>Tiga kandidat berita dan alasan pemilihan</summary>
+              <div className="stack">
+                {candidates.map((c: any) => (
+                  <div key={c.url}>
+                    <b>{c.original_title}</b> · {c.source}
+                    {c.selected && <span className="chip t-ok">Dipilih</span>}
+                    <p>{c.summary}</p>
+                    {c.selected && <p>{c.reason}</p>}
+                    <a href={c.url} target="_blank" rel="noopener noreferrer">
+                      Buka sumber
+                    </a>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+          {artifacts && (
+            <details>
+              <summary>Hasil validasi artikel dan peta klaim</summary>
+              <p className="muted">
+                Struktur diperiksa aplikasi. Penilaian isi dan bukti sumber
+                mengikuti laporan pembuatan artikel.
+              </p>
+              <pre className="news-audit">
+                {JSON.stringify(
+                  {
+                    struktur: artifacts.validation,
+                    pemeriksaan: artifacts.article_validation,
+                    klaim: artifacts.claim_source_map,
+                  },
+                  null,
+                  2,
+                )}
+              </pre>
+            </details>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
+  const [rows, setRows] = useState<NewsArticle[]>([]),
+    [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      api("/news")
+        .then((r) => {
+          if (active) {
+            setRows(r);
+            setError("");
+          }
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        });
+    load();
+    const timer = setInterval(load, 3000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+  const items = rows.filter((n) =>
+    kind === "PANEL"
+      ? n.production?.outputs.PANEL
+      : n.production?.outputs.VIDEO_KALIMAT ||
+        n.production?.outputs.VIDEO_KALIMAT_H,
+  );
+  if (error) return <p className="warn">{error}</p>;
+  if (!items.length) return null;
+  return (
+    <div className="stack-lg">
+      {items.map((n) => (
+        <section key={n.id} className="card pad stack">
+          <div>
+            <small className="muted">Berita · Teknologi</small>
+            <h2 className="h3">{n.title}</h2>
+          </div>
+          {kind === "PANEL" ? (
+            <div className="gallery">
+              {Array.from({ length: 5 }, (_, i) => (
+                <a
+                  key={i}
+                  href={`/api/news/${n.id}/media/PANEL/${i}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <img
+                    loading="lazy"
+                    src={`/api/news/${n.id}/media/PANEL/${i}`}
+                    alt={
+                      i === 4 ? "Slide penutup berita" : `Panel berita ${i + 1}`
+                    }
+                  />
+                </a>
+              ))}
+            </div>
+          ) : (
+            <div className="row-gap">
+              {["VIDEO_KALIMAT", "VIDEO_KALIMAT_H"]
+                .filter((k) => n.production?.outputs[k])
+                .map((k) => (
+                  <video
+                    key={k}
+                    className={`reels-player ${k.endsWith("_H") ? "wide" : "tall"}`}
+                    controls
+                    preload="metadata"
+                    src={`/api/news/${n.id}/media/${k}/0`}
+                  />
+                ))}
+            </div>
+          )}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function NewsCronSettings() {
+  const [items, setItems] = useState<BookCron[]>([]),
+    [error, setError] = useState("");
+  useEffect(() => {
+    api("/news-crons")
+      .then(setItems)
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <div className="stack-lg">
+      <section className="card pad stack">
+        <h2 className="h3">Cronjob berita Teknologi</h2>
+        <p>
+          Setiap jadwal memproses satu berita berikutnya yang belum selesai dan
+          memenuhi prasyarat. Jadwal Artikel mencari berita baru. Gambar
+          mengikuti Pengaturan Konten.
+        </p>
+        <p className="muted">
+          Interval dihitung sejak disimpan. Jadwal terlewat berjalan sekali saat
+          worker kembali aktif. Aktifkan Post IG atau Reels IG untuk publikasi
+          otomatis ke akun yang dipilih; status terbit atau belum pasti tidak
+          dikirim ulang.
+        </p>
+      </section>
+      {error && (
+        <p className="warn" role="alert">
+          {error}
+        </p>
+      )}
+      <section className="card queue">
+        <div className="table">
+          <table className="cron-table">
+            <thead>
+              <tr>
+                {NEWS_CRON_TYPES.map(([k, label]) => (
+                  <th key={k}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                {NEWS_CRON_TYPES.map(([k, label]) => (
+                  <td key={k}>
+                    {items.find((c) => c.kind === k) && (
+                      <CronCell
+                        label={label}
+                        cron={items.find((c) => c.kind === k)!}
+                        onSave={async (c) => {
+                          setItems(await api("/news-crons", "PUT", c));
+                        }}
+                      />
+                    )}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NewsContentSettings({
+  instagram,
+  onRefreshInstagram,
+}: {
+  instagram: InstagramConnection;
+  onRefreshInstagram: () => void;
+}) {
+  const [settings, setSettings] = useState<BookSettings | null>(null),
+    [error, setError] = useState(""),
+    [message, setMessage] = useState("");
+  useEffect(() => {
+    api("/news-settings")
+      .then((r) => setSettings(r[0].settings))
+      .catch((e) => setError(e.message));
+  }, []);
+  return (
+    <div className="stack">
+      {error && (
+        <p className="warn" role="alert">
+          {error}
+        </p>
+      )}
+      {message && <p role="status">{message}</p>}
+      {settings ? (
+        <BookSettingsCard
+          news
+          book="Teknologi"
+          settings={settings}
+          instagram={instagram}
+          onRefreshInstagram={onRefreshInstagram}
+          onSave={async (_, draft) => {
+            try {
+              const r = await api("/news-settings", "PUT", {
+                category: "teknologi",
+                settings: draft,
+              });
+              setSettings(r.settings);
+              setError("");
+              setMessage("Pengaturan berita tersimpan");
+            } catch (e) {
+              setError((e as Error).message);
+            }
+          }}
+        />
+      ) : (
+        <p>Memuat pengaturan berita…</p>
+      )}
+    </div>
+  );
+}
+
 function ContentSettings({
   items,
   instagram,
@@ -2389,12 +3126,14 @@ function ContentSettings({
   );
 }
 function BookSettingsCard({
+  news = false,
   book,
   settings,
   instagram,
   onRefreshInstagram,
   onSave,
 }: {
+  news?: boolean;
   book: string;
   settings: BookSettings;
   instagram: InstagramConnection;
@@ -2490,7 +3229,7 @@ function BookSettingsCard({
           </button>
           <small className="muted">
             Tujuan Post IG dan Reels IG, termasuk cronjob. Jika ada beberapa
-            akun, pilih satu untuk buku ini.
+            akun, pilih satu untuk {news ? "jenis berita" : "buku"} ini.
           </small>
         </div>
         {instagram.state !== "connected" && (
@@ -2602,22 +3341,24 @@ function BookSettingsCard({
             <small className="warn">Pilih minimal satu sumber panel.</small>
           )}
         </div>
-        <div className="stack-sm">
-          <b>Gaya gambar quote</b>
-          <label className="field">
-            Gambar quote
-            <select
-              value={draft.quoteImageStyle}
-              onChange={(e) => set({ quoteImageStyle: e.target.value })}
-            >
-              {Object.entries(QUOTE_IMAGE_STYLES).map(([id, s]) => (
-                <option key={id} value={id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        {!news && (
+          <div className="stack-sm">
+            <b>Gaya gambar quote</b>
+            <label className="field">
+              Gambar quote
+              <select
+                value={draft.quoteImageStyle}
+                onChange={(e) => set({ quoteImageStyle: e.target.value })}
+              >
+                {Object.entries(QUOTE_IMAGE_STYLES).map(([id, s]) => (
+                  <option key={id} value={id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
       </div>
       <small className="muted">
         Perubahan berlaku untuk pembuatan berikutnya atau saat ↻; gambar dan
@@ -3169,7 +3910,7 @@ function StockGallery() {
               <figcaption>
                 <b>{a.description}</b>
                 <small className="muted">
-                  {a.usage ? `Dipakai ${a.usage} bagian` : "Belum dipakai"}
+                  {a.usage ? `Dipakai ${a.usage} konten` : "Belum dipakai"}
                 </small>
               </figcaption>
             </figure>
