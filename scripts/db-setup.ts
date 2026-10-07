@@ -49,6 +49,22 @@ try {
     );
     await root.query(`USE \`${db}\``);
     await root.query(schema);
+    const [cronColumns] = (await root.query(
+      "SHOW COLUMNS FROM book_cron",
+    )) as any;
+    const hasCronColumn = (name: string) =>
+      cronColumns.some((c: any) => c.Field === name);
+    if (!hasCronColumn("interval_hours"))
+      await root.query(
+        "ALTER TABLE book_cron ADD COLUMN interval_hours INT NOT NULL DEFAULT 24",
+      );
+    if (!hasCronColumn("next_run")) {
+      await root.query("ALTER TABLE book_cron ADD COLUMN next_run BIGINT NULL");
+      await root.query(
+        "UPDATE book_cron SET next_run=? + interval_hours*3600000 WHERE enabled=1",
+        [Date.now()],
+      );
+    }
     for (const h of ["localhost", "127.0.0.1"])
       await root.query(
         `GRANT SELECT, INSERT, UPDATE, DELETE ON \`${db}\`.* TO ?@?`,

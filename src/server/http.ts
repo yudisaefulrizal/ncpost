@@ -1,3 +1,4 @@
+import { selectInstagramAccount } from "./instagram-account";
 import express from "express";
 import path from "node:path";
 import { initConfig, ROOT } from "./config";
@@ -11,7 +12,7 @@ import {
   verifyPassword,
 } from "./auth";
 import { validateArticle, instagramCaption, bookKey } from "./domain";
-import { STOCK_KINDS } from "./book-settings";
+import { STOCK_KINDS, normalizeBookSettings } from "./book-settings";
 import {
   audioDir,
   chapterDir,
@@ -147,6 +148,12 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
   res.status(202).json({ id });
 });
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
+app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
+app.put("/api/book-crons", async (req, res) => {
+  if (typeof req.body?.book !== "string") throw Error("Judul buku wajib diisi");
+  res.json(await store.saveBookCron(req.body.book, req.body));
+});
+
 // Pengaturan Konten: satu baris per judul buku yang ada di daftar bagian.
 app.get("/api/book-settings", async (_, res) => {
   const books = new Map<string, string>();
@@ -164,7 +171,14 @@ app.get("/api/book-settings", async (_, res) => {
 app.put("/api/book-settings", async (req, res) => {
   const { book, settings } = req.body ?? {};
   if (typeof book !== "string") throw Error("Judul buku wajib diisi");
-  res.json({ book, settings: await store.saveBookSettings(book, settings) });
+  const normalized = normalizeBookSettings(settings);
+  const current = await store.bookSettings(book);
+  if (
+    normalized.instagramAccountId &&
+    normalized.instagramAccountId !== current.instagramAccountId
+  )
+    selectInstagramAccount(normalized.instagramAccountId, await accounts());
+  res.json({ book, settings: await store.saveBookSettings(book, normalized) });
 });
 app.get("/api/templates", (_, res) =>
   res.json(
@@ -297,6 +311,9 @@ app.get("/api/settings", async (_, res) => {
     reels: "Reels aktif melalui NC-WA (videoUrl publik)",
   });
 });
+app.get("/api/instagram/accounts", async (_, res) =>
+  res.json(await accounts()),
+);
 app.get("/api/credentials", (_, res) => res.json(credentialStatus()));
 app.put("/api/credentials", (req, res) => {
   const values = req.body?.values;

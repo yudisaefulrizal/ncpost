@@ -7,7 +7,7 @@ dotenv.config({ quiet: true } as dotenv.DotenvConfigOptions);
 let s: Store;
 beforeEach(async () => {
   s = new Store();
-  for (const t of ["chapter_stock", "jobs", "assets", "chapters"])
+  for (const t of ["book_cron", "chapter_stock", "jobs", "assets", "chapters"])
     await s.db.query(`DELETE FROM ${t}`);
 });
 afterEach(() => s.close());
@@ -626,4 +626,91 @@ it("folder hasil mengikuti nomor bagian: ganti nomor, urutkan ulang, dan hapus",
   } finally {
     rmSync(outputRoot(), { recursive: true, force: true });
   }
+});
+
+it("interval jam per buku tersimpan dan scheduler paralel tidak menggandakan job", async () => {
+  const a = await s.create("Interval A", "Satu");
+  const b = await s.create("Interval B", "Satu");
+  const start = Date.parse("2026-10-07T16:45:00Z");
+  await s.saveBookCron(
+    "Interval A",
+    { kind: "ARTICLE", enabled: true, intervalHours: 2 },
+    start,
+  );
+  await s.saveBookCron(
+    "Interval B",
+    { kind: "ARTICLE", enabled: true, intervalHours: 3 },
+    start,
+  );
+  const schedules = await s.bookCrons();
+  expect(
+    schedules.find((c) => c.book === "Interval A" && c.kind === "ARTICLE"),
+  ).toMatchObject({ intervalHours: 2, next_run: start + 2 * 3600000 });
+  await s.scheduleCrons(start + 2 * 3600000 - 1);
+  expect(await s.jobs()).toHaveLength(0);
+  await Promise.all([
+    s.scheduleCrons(start + 2 * 3600000),
+    s.scheduleCrons(start + 2 * 3600000),
+  ]);
+  expect(await s.jobs()).toMatchObject([{ chapter_id: a, kind: "ARTICLE" }]);
+  await s.scheduleCrons(start + 3 * 3600000);
+  expect((await s.jobs()).map((j) => j.chapter_id).sort()).toEqual(
+    [a, b].sort(),
+  );
+});
+it("menyimpan interval baru mengatur ulang waktu berikutnya dan nonaktif menghentikan jadwal", async () => {
+  await s.create("Interval C", "Satu");
+  const start = Date.parse("2026-10-07T16:45:00Z");
+  await s.saveBookCron(
+    "Interval C",
+    { kind: "ARTICLE", enabled: true, intervalHours: 2 },
+    start,
+  );
+  await s.saveBookCron(
+    "Interval C",
+    { kind: "ARTICLE", enabled: true, intervalHours: 5 },
+    start + 3600000,
+  );
+  expect(
+    (await s.bookCrons()).find((c) => c.kind === "ARTICLE")?.next_run,
+  ).toBe(start + 6 * 3600000);
+  await s.scheduleCrons(start + 2 * 3600000);
+  expect(await s.jobs()).toHaveLength(0);
+  await s.saveBookCron(
+    "Interval C",
+    { kind: "ARTICLE", enabled: false, intervalHours: 5 },
+    start + 2 * 3600000,
+  );
+  await s.scheduleCrons(start + 10 * 3600000);
+  expect(await s.jobs()).toHaveLength(0);
+  expect((await s.bookCrons()).find((c) => c.kind === "ARTICLE")).toMatchObject(
+    { enabled: false, next_run: null },
+  );
+});
+it("akun Instagram tujuan tersimpan terpisah per judul buku tanpa mengubah hasil", async () => {
+  const a = await s.create("Akun Buku A", "Satu");
+  await s.create("Akun Buku B", "Satu");
+  await s.db.query(
+    "UPDATE chapters SET article='artikel lama',post_status='published' WHERE id=?",
+    [a],
+  );
+  const { DEFAULT_BOOK_SETTINGS } = await import("../src/server/book-settings");
+  await s.saveBookSettings("Akun Buku A", {
+    ...DEFAULT_BOOK_SETTINGS,
+    instagramAccountId: "178414111",
+  });
+  await s.saveBookSettings("Akun Buku B", {
+    ...DEFAULT_BOOK_SETTINGS,
+    instagramAccountId: "178414222",
+  });
+  expect((await s.bookSettings("AKUN BUKU A")).instagramAccountId).toBe(
+    "178414111",
+  );
+  expect((await s.bookSettings("Akun Buku B")).instagramAccountId).toBe(
+    "178414222",
+  );
+  expect(await s.chapter(a)).toMatchObject({
+    article: "artikel lama",
+    post_status: "published",
+  });
 });

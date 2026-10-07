@@ -26,6 +26,7 @@ export const VERTICAL_KINDS = [
   "IMAGE_PAPERCUT",
 ];
 export interface BookSettings {
+  instagramAccountId: string | null;
   stockKinds: string[];
   sentenceKinds: string[];
   // Lajur vertikal untuk Video Kalimat 1080×1920 (selalu ikut dibuat).
@@ -38,6 +39,7 @@ export interface BookSettings {
 }
 // Sama dengan perilaku sebelum ada pengaturan per buku.
 export const DEFAULT_BOOK_SETTINGS: BookSettings = {
+  instagramAccountId: null,
   stockKinds: [...STOCK_KINDS],
   sentenceKinds: [],
   sentenceVideoKind: null,
@@ -47,6 +49,16 @@ export const DEFAULT_BOOK_SETTINGS: BookSettings = {
   panelVertical: "IMAGE_VERTICAL",
 };
 export function normalizeBookSettings(input: any): BookSettings {
+  const instagramAccountId =
+    input?.instagramAccountId === ""
+      ? null
+      : (input?.instagramAccountId ?? null);
+  if (
+    instagramAccountId !== null &&
+    (typeof instagramAccountId !== "string" ||
+      !/^\d{1,64}$/.test(instagramAccountId))
+  )
+    throw Error("ID akun Instagram tidak valid");
   const pick = (value: unknown, allowed: string[], label: string) => {
     if (value === null || value === undefined || value === "") return null;
     if (typeof value !== "string" || !allowed.includes(value))
@@ -94,6 +106,7 @@ export function normalizeBookSettings(input: any): BookSettings {
   if (!(quoteImageStyle in QUOTE_IMAGE_STYLES))
     throw Error("Gaya gambar quote tidak dikenal");
   return {
+    instagramAccountId,
     stockKinds: STOCK_KINDS.filter((k) => needed.has(k)),
     sentenceKinds: STOCK_KINDS.filter((k) => sentence.includes(k)),
     sentenceVideoKind,

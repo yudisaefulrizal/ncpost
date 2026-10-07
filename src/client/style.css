@@ -1481,3 +1481,16 @@ tr.grp .grp-action {
   float: right;
   font-weight: 600;
 }
+
+.cron-table td {
+  vertical-align: top;
+  min-width: 185px;
+}
+.cron-table input:not([type="checkbox"]) {
+  width: 165px;
+}
+
+.book-filter {
+  width: 240px;
+  max-width: 100%;
+}

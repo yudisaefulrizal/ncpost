@@ -1,5 +1,12 @@
 import mysql from "mysql2/promise";
 import {
+  CRON_TYPES,
+  intervalDue,
+  cronJobs,
+  normalizeCron,
+  type BookCron,
+} from "./cron";
+import {
   validateArticle,
   roundRobin,
   canStart,
@@ -410,6 +417,156 @@ export class Store {
     );
     return settings;
   }
+  async bookCrons(): Promise<BookCron[]> {
+    const chapters = await this.list();
+    let saved: any[];
+    let migrationNeeded = false;
+    try {
+      saved = await rows<any>(this.db, "SELECT * FROM book_cron");
+    } catch (e) {
+      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE") throw e;
+      saved = [];
+      migrationNeeded = true;
+    }
+    const books = new Map(chapters.map((c) => [bookKey(c.book), c.book]));
+    return [...books].flatMap(([key, book]) =>
+      CRON_TYPES.map(([kind]) => {
+        const row = saved.find((r) => r.book_key === key && r.kind === kind);
+        return {
+          book,
+          kind,
+          enabled: !!row?.enabled,
+          intervalHours: Number(row?.interval_hours ?? 24),
+          next_run: row?.next_run == null ? null : Number(row.next_run),
+          last_tick: row?.last_tick == null ? null : Number(row.last_tick),
+          last_result: migrationNeeded
+            ? "Tabel cron belum tersedia. Jalankan db:setup dengan akses admin MySQL."
+            : (row?.last_result ?? null),
+        };
+      }),
+    );
+  }
+  async saveBookCron(book: string, input: unknown, now = Date.now()) {
+    const key = bookKey(book);
+    if (
+      key.length > 255 ||
+      !(await this.list()).some((c) => bookKey(c.book) === key)
+    )
+      throw Error("Buku tidak ditemukan");
+    const c = normalizeCron(input);
+    try {
+      await run(
+        this.db,
+        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run) VALUES(?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run)`,
+        [
+          key,
+          c.kind,
+          c.enabled ? 1 : 0,
+          c.intervalHours,
+          c.enabled ? now + c.intervalHours * 3600000 : null,
+        ],
+      );
+    } catch (e) {
+      if ((e as { code?: string }).code === "ER_NO_SUCH_TABLE")
+        throw Error(
+          "Tabel cron belum tersedia. Jalankan db:setup dengan akses admin MySQL.",
+        );
+      throw e;
+    }
+    return c;
+  }
+  async scheduleCrons(now = Date.now()) {
+    const tick = Math.floor(now / 60000) * 60000;
+    const due = await rows<any>(
+      this.db,
+      "SELECT * FROM book_cron WHERE enabled=1",
+    );
+    for (const cron of due) {
+      try {
+        if (
+          Number(cron.last_tick) >= tick ||
+          !intervalDue(
+            cron.next_run == null ? null : Number(cron.next_run),
+            now,
+          )
+        )
+          continue;
+        await this.tx(async (db) => {
+          const current = (
+            await rows<any>(
+              db,
+              "SELECT * FROM book_cron WHERE book_key=? AND kind=? FOR UPDATE",
+              [cron.book_key, cron.kind],
+            )
+          )[0];
+          if (
+            !current?.enabled ||
+            Number(current.last_tick) >= tick ||
+            !intervalDue(
+              current.next_run == null ? null : Number(current.next_run),
+              now,
+            )
+          )
+            return;
+          const chapters = (
+            await rows<Chapter>(
+              db,
+              "SELECT * FROM chapters ORDER BY COALESCE(part_number,id),id",
+            )
+          ).filter((c) => bookKey(c.book) === cron.book_key);
+          let result = "Tidak ada bagian yang siap / belum selesai";
+          for (const c of chapters) {
+            const active = await rows<Job>(
+              db,
+              "SELECT * FROM jobs WHERE chapter_id=? AND state IN ('queued','running')",
+              [c.id],
+            );
+            if (active.some((j) => ["ARTICLE", "EDITOR"].includes(j.kind)))
+              continue;
+            const settings = await this.bookSettings(c.book, db);
+            const stock = await this.stock(c.id, undefined, db);
+            c.stock_counts = {};
+            for (const b of stock)
+              c.stock_counts[b.kind] = (c.stock_counts[b.kind] ?? 0) + 1;
+            const kinds = cronJobs(cron.kind, c, settings).filter(
+              (k) => !active.some((j) => j.kind === k),
+            );
+            if (!kinds.length) continue;
+            for (const k of kinds) await this.enqueue(c.id, k, false, db);
+            result = `Bagian ${c.part_number ?? c.id}: ${kinds.join(", ")} masuk antrean`;
+            break;
+          }
+          await run(
+            db,
+            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=? WHERE book_key=? AND kind=?",
+            [
+              tick,
+              result,
+              now + Number(current.interval_hours) * 3600000,
+              cron.book_key,
+              cron.kind,
+            ],
+          );
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : "Cron gagal";
+        await run(
+          this.db,
+          `UPDATE book_cron SET last_tick=?,last_result=?,next_run=?
+          WHERE book_key=? AND kind=? AND (last_tick IS NULL OR last_tick<?)`,
+          [
+            tick,
+            `Gagal: ${message}`,
+            now + Number(cron.interval_hours) * 3600000,
+            cron.book_key,
+            cron.kind,
+            tick,
+          ],
+        );
+      }
+    }
+  }
   async chapter(id: number, db: Db = this.db) {
     return (
       await rows<Chapter>(db, "SELECT * FROM chapters WHERE id=?", [id])
@@ -440,8 +597,13 @@ export class Store {
       await run(db, "DELETE FROM chapter_stock WHERE chapter_id=?", [id]);
     });
   }
-  async enqueue(id: number, kind: string, replace = false) {
-    const c = await this.chapter(id);
+  async enqueue(
+    id: number,
+    kind: string,
+    replace = false,
+    connection?: mysql.PoolConnection,
+  ) {
+    const c = await this.chapter(id, connection);
     if (!c) throw Error("Bagian tidak ditemukan");
     if (
       ![
@@ -466,9 +628,9 @@ export class Store {
     if (/^(S_)?IMAGE_/.test(kind) && c.article_status !== "siap")
       throw Error("Review editorial harus lolos sebelum stok gambar");
     if (kind === "PANEL") {
-      const settings = await this.bookSettings(c.book);
+      const settings = await this.bookSettings(c.book, connection);
       for (const source of panelSources(settings))
-        if ((await this.stock(id, source)).length < PANEL_COUNT)
+        if ((await this.stock(id, source, connection)).length < PANEL_COUNT)
           throw Error("Render panel butuh enam stok gambar " + source);
     }
     if (kind === "QUOTE_IMAGE" && !c.quote)
@@ -490,7 +652,7 @@ export class Store {
     if (kind === "TTS_KALIMAT" && c.article_status !== "siap")
       throw Error("Audio kalimat butuh artikel lolos editor");
     if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
-      const settings = await this.bookSettings(c.book);
+      const settings = await this.bookSettings(c.book, connection);
       const source =
         kind === "VIDEO_KALIMAT"
           ? settings.sentenceVideoKind
@@ -500,7 +662,7 @@ export class Store {
           `Pilih sumber gambar Video Kalimat${kind === "VIDEO_KALIMAT_H" ? " H" : ""} di Pengaturan Konten`,
         );
       const n = articleSentences(c.article).length;
-      if ((await this.stock(id, "S_" + source)).length < n)
+      if ((await this.stock(id, "S_" + source, connection)).length < n)
         throw Error("Video kalimat butuh gambar untuk setiap kalimat");
       if (!c.sentence_audio)
         throw Error("Video kalimat butuh audio per kalimat");
@@ -522,7 +684,7 @@ export class Store {
     // Regenerate stok: ikatan lajur ini dilepas dan job memaksa gambar baru.
     const regenerate = /^(S_)?IMAGE_/.test(kind) && replace;
     try {
-      return await this.tx(async (db) => {
+      const insert = async (db: mysql.PoolConnection) => {
         const jobId = (
           await run(
             db,
@@ -554,7 +716,8 @@ export class Store {
           );
         }
         return jobId;
-      });
+      };
+      return connection ? await insert(connection) : await this.tx(insert);
     } catch (e) {
       if ((e as { code?: string }).code === "ER_DUP_ENTRY")
         throw Error("Job aktif sudah ada");
@@ -674,9 +837,9 @@ export class Store {
       )
     ).insertId;
   }
-  stock(chapterId: number, kind?: string) {
+  stock(chapterId: number, kind?: string, db: Db = this.db) {
     return rows<Binding>(
-      this.db,
+      db,
       "SELECT s.kind,s.panel,s.asset_id,a.file,a.description FROM chapter_stock s JOIN assets a ON a.id=s.asset_id WHERE s.chapter_id=? AND (? IS NULL OR s.kind=?) ORDER BY s.kind,s.panel",
       [chapterId, kind ?? null, kind ?? null],
     );

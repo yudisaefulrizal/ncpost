@@ -1,3 +1,4 @@
+import { selectInstagramAccount } from "../server/instagram-account";
 import {
   mkdirSync,
   writeFileSync,
@@ -450,12 +451,11 @@ async function runJob(job: Job) {
     } else if (job.kind === "POST_IG") {
       if (c.panel_status !== "tersedia" || !c.panels)
         throw Error("Post IG butuh panel yang sudah dirender");
-      const acc: any = await accounts();
-      const igUserId = acc.accounts?.[0]?.id;
-      if (!igUserId)
-        throw Error(
-          "Akun Instagram NC-WA belum terhubung: " + (acc.reason ?? ""),
-        );
+      const bookSettings = await store.bookSettings(c.book);
+      const igUserId = selectInstagramAccount(
+        bookSettings.instagramAccountId,
+        await accounts(),
+      ).id;
       // Percobaan setelah gagal memakai requestId baru; selain itu ID lama dipakai ulang.
       const requestId =
         c.post_request_id && c.post_status !== "failed"
@@ -476,12 +476,11 @@ async function runJob(job: Job) {
     } else if (job.kind === "REELS_IG") {
       if (!c.sentence_video)
         throw Error("Reels IG butuh Video yang sudah dirender");
-      const acc: any = await accounts();
-      const igUserId = acc.accounts?.[0]?.id;
-      if (!igUserId)
-        throw Error(
-          "Akun Instagram NC-WA belum terhubung: " + (acc.reason ?? ""),
-        );
+      const bookSettings = await store.bookSettings(c.book);
+      const igUserId = selectInstagramAccount(
+        bookSettings.instagramAccountId,
+        await accounts(),
+      ).id;
       const requestId =
         c.reels_request_id && c.reels_status !== "failed"
           ? c.reels_request_id
@@ -682,9 +681,21 @@ async function runJob(job: Job) {
 // ketergantungan per bagian dijaga oleh store.claim (canStart).
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
 const running = new Set<Promise<void>>();
+let lastCronMinute = -1;
 while (!stop) {
   await store.recover();
   await pollPosts();
+  const minute = Math.floor(Date.now() / 60000);
+  if (minute !== lastCronMinute) {
+    try {
+      await store.scheduleCrons();
+      lastCronMinute = minute;
+    } catch (e) {
+      console.error("Cron gagal:", (e as Error).message);
+      // Retry next minute; queue processing remains available.
+      lastCronMinute = minute;
+    }
+  }
   while (running.size < CONCURRENCY) {
     const job = await store.claim();
     if (!job) break;

@@ -1,3 +1,7 @@
+import {
+  selectInstagramAccount,
+  type InstagramConnection,
+} from "../server/instagram-account";
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/plus-jakarta-sans/400.css";
@@ -23,6 +27,12 @@ import {
   panelSources,
   type BookSettings,
 } from "../server/book-settings";
+import {
+  CRON_TYPES,
+  validIntervalHours,
+  MAX_INTERVAL_HOURS,
+  type BookCron,
+} from "../server/cron";
 import { QUOTE_IMAGE_STYLES } from "../server/quote-prompt";
 import {
   status,
@@ -42,12 +52,23 @@ async function api(url: string, method = "GET", body?: unknown) {
   if (!r.ok) throw Error(data.error || "Operasi gagal");
   return data;
 }
+const importJsonExample =
+  JSON.stringify(
+    [
+      { buku: "Judul Buku Pertama", tema: "Judul Bagian 1" },
+      { buku: "Judul Buku Pertama", tema: "Judul Bagian 2" },
+      { buku: "Judul Buku Kedua", tema: "Judul Bagian 1" },
+    ],
+    null,
+    2,
+  ) + "\n";
 const navGroups: [string, [string, IconName][]][] = [
   [
     "Kerja",
     [
       ["Produksi", "video"],
       ["Pengaturan Konten", "sliders"],
+      ["Cronjob", "gear"],
     ],
   ],
   [
@@ -108,6 +129,7 @@ function App() {
     [bookSettings, setBookSettings] = useState<
       { book: string; settings: BookSettings }[]
     >([]),
+    [bookCrons, setBookCrons] = useState<BookCron[]>([]),
     [viewingQuote, setViewingQuote] = useState<any>(null),
     [viewingQuoteImage, setViewingQuoteImage] = useState<any>(null),
     [watching, setWatching] = useState<{
@@ -123,14 +145,19 @@ function App() {
     [search, setSearch] = useState(""),
     [queuePage, setQueuePage] = useState(1),
     [filter, setFilter] = useState<Filter>("semua"),
+    [filterBook, setFilterBook] = useState(""),
     [jobs, setJobs] = useState<any[]>([]),
     [settings, setSettings] = useState<any>(null),
+    [instagram, setInstagram] = useState<InstagramConnection>({
+      state: "loading",
+    }),
     [creds, setCreds] = useState<any>(null),
     [credInput, setCredInput] = useState<Record<string, string>>({});
   const refresh = async () => {
     setRows(await api("/chapters"));
     setJobs(await api("/jobs"));
     setBookSettings(await api("/book-settings"));
+    setBookCrons(await api("/book-crons"));
   };
   const settingsFor = (book: string): BookSettings =>
     bookSettings.find((b) => bookKey(b.book) === bookKey(book))?.settings ??
@@ -138,8 +165,26 @@ function App() {
   const count = (c: any, kind: string) => Number(c.stock_counts?.[kind] ?? 0);
   const loadSettings = () =>
     api("/settings")
-      .then(setSettings)
+      .then((r) => {
+        setSettings(r);
+        setInstagram(r.ncwa);
+      })
       .catch(() => {});
+  const refreshInstagram = () =>
+    action(async () => setInstagram(await api("/instagram/accounts")));
+  const instagramTarget = (book: string) => {
+    try {
+      return {
+        account: selectInstagramAccount(
+          settingsFor(book).instagramAccountId,
+          instagram,
+        ),
+        error: "",
+      };
+    } catch (e) {
+      return { account: null, error: (e as Error).message };
+    }
+  };
   useEffect(() => {
     api("/session")
       .then((r) => {
@@ -583,9 +628,10 @@ function App() {
     if (n === "Kredensial")
       action(async () => setCreds(await api("/credentials")));
     if (n === "Pengaturan") loadSettings();
+    if (n === "Pengaturan Konten") refreshInstagram();
     if (n === "Produksi") setFilter("semua");
   };
-  useEffect(() => setQueuePage(1), [search, filter]);
+  useEffect(() => setQueuePage(1), [search, filter, filterBook]);
   const ttsLive = !!settings?.tts?.enabled;
   // Urut per buku (urutan buku pertama kali diinput), lalu per bagian.
   const bookOrder = new Map<string, number>();
@@ -596,7 +642,8 @@ function App() {
     .filter(
       (c) =>
         (c.book + " " + c.title).toLowerCase().includes(search.toLowerCase()) &&
-        matchFilter(c, filter),
+        matchFilter(c, filter) &&
+        (!filterBook || bookKey(c.book) === filterBook),
     )
     .sort(
       (a, b) =>
@@ -719,6 +766,21 @@ function App() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <select
+            className="book-filter"
+            aria-label="Filter judul buku"
+            value={filterBook}
+            onChange={(e) => setFilterBook(e.target.value)}
+          >
+            <option value="">Semua buku</option>
+            {[
+              ...new Map(rows.map((c) => [bookKey(c.book), c.book])).entries(),
+            ].map(([key, book]) => (
+              <option key={key} value={key}>
+                {book}
+              </option>
+            ))}
+          </select>
           <div className="seg" role="group" aria-label="Filter status">
             {filters.map(([id, label]) => (
               <button
@@ -786,6 +848,15 @@ function App() {
               }}
             />
           </label>
+          <a
+            className="btn btn-sec"
+            href={`data:application/json;charset=utf-8,${encodeURIComponent(importJsonExample)}`}
+            download="contoh-impor-buku.json"
+            title="Unduh contoh JSON, lalu ganti buku dan tema sesuai kebutuhan"
+          >
+            <Icon name="doc" />
+            Download contoh JSON
+          </a>
         </form>
       }
       <div className="table">
@@ -1188,11 +1259,27 @@ function App() {
         </section>
       </div>
     );
+  } else if (page === "Cronjob") {
+    sub =
+      "Jadwal otomatis per judul buku dan jenis konten · Asia/Jakarta (WIB).";
+    content = (
+      <CronSettings
+        items={bookCrons}
+        onSave={async (cron) => {
+          await api("/book-crons", "PUT", cron);
+          await refresh();
+          setMsg(`Cronjob "${cron.book}" disimpan`);
+        }}
+      />
+    );
   } else if (page === "Pengaturan Konten") {
-    sub = "Gambar yang dibuat dan sumber gambar panel, per judul buku.";
+    sub =
+      "Jenis gambar, sumber panel, dan akun Instagram tujuan per judul buku.";
     content = (
       <ContentSettings
         items={bookSettings}
+        instagram={instagram}
+        onRefreshInstagram={refreshInstagram}
         onSave={(book, settings) =>
           action(async () => {
             await api("/book-settings", "PUT", { book, settings });
@@ -1304,9 +1391,9 @@ function App() {
           </div>
           <small className="muted">
             Instagram{" "}
-            {settings?.ncwa?.accounts?.[0]
-              ? "@" + settings.ncwa.accounts[0].username
-              : ""}{" "}
+            {instagram.state === "connected"
+              ? `${instagram.accounts?.length ?? 0} akun`
+              : "belum terhubung"}{" "}
             via NC-WA
           </small>
           {user && <small className="muted">Masuk sebagai {user}</small>}
@@ -1493,6 +1580,7 @@ function App() {
         {postingReels && (
           <ReelsModal
             c={postingReels}
+            target={instagramTarget(postingReels.book)}
             onClose={() => setPostingReels(null)}
             onConfirm={() => {
               const c = postingReels;
@@ -1504,6 +1592,7 @@ function App() {
         {posting && (
           <PostModal
             c={posting}
+            target={instagramTarget(posting.book)}
             onClose={() => setPosting(null)}
             onConfirm={() => {
               const c = posting;
@@ -1513,8 +1602,8 @@ function App() {
           />
         )}
         <footer className="muted small">
-          NC Post Buku · Tidak ada scheduler otomatis · Preview bukan hasil
-          produksi final
+          NC Post Buku · Jadwal otomatis di halaman Cronjob · Preview bukan
+          hasil produksi final
         </footer>
       </main>
     </div>
@@ -2105,12 +2194,176 @@ type PlayProps = {
   view?: () => void;
   viewTitle?: string;
 };
-// Pengaturan Konten: satu kartu per judul buku dengan draf lokal sampai disimpan.
-function ContentSettings({
+function CronSettings({
   items,
   onSave,
 }: {
+  items: BookCron[];
+  onSave: (cron: BookCron) => Promise<void>;
+}) {
+  const books = [...new Set(items.map((c) => c.book))];
+  return (
+    <div className="stack-lg">
+      <section className="card pad stack-sm">
+        <b>Cronjob per buku</b>
+        <p>
+          Setiap jadwal memproses satu bagian berikutnya yang belum selesai dan
+          memenuhi prasyarat. Gambar Panel/Video mengikuti lajur di Pengaturan
+          Konten.
+        </p>
+        <p className="muted">
+          Pilih setiap berapa jam masing-masing jenis konten diproses, misalnya
+          2, 6, atau 24 jam. Jadwal pertama berjalan setelah interval sejak
+          disimpan. Worker harus berjalan; jadwal yang terlewat dijalankan
+          sekali saat worker kembali aktif.
+        </p>
+        <p className="muted">
+          Aktifkan Post IG atau Reels IG untuk menerbitkan otomatis saat panel
+          atau video siap. Hasil yang sudah terbit atau statusnya belum pasti
+          tidak dikirim ulang.
+        </p>
+      </section>
+      {!books.length && (
+        <section className="card pad">
+          Belum ada buku. Tambahkan bagian di halaman Produksi.
+        </section>
+      )}
+      {books.map((book) => (
+        <section key={book} className="card pad stack">
+          <h2 className="h3">{book}</h2>
+          <div className="table">
+            <table className="cron-table">
+              <thead>
+                <tr>
+                  {CRON_TYPES.map(([kind, label]) => (
+                    <th key={kind}>{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  {CRON_TYPES.map(([kind, label]) => (
+                    <td key={kind}>
+                      <CronCell
+                        cron={
+                          items.find((c) => c.book === book && c.kind === kind)!
+                        }
+                        label={label}
+                        onSave={onSave}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+function CronCell({
+  cron,
+  label,
+  onSave,
+}: {
+  cron: BookCron;
+  label: string;
+  onSave: (c: BookCron) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState(cron);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(
+    () => setDraft(cron),
+    [cron.book, cron.kind, cron.enabled, cron.intervalHours],
+  );
+  const invalid = validIntervalHours(draft.intervalHours)
+    ? ""
+    : `Isi angka bulat 1–${MAX_INTERVAL_HOURS} jam`;
+  const changed =
+    draft.enabled !== cron.enabled ||
+    draft.intervalHours !== cron.intervalHours;
+  return (
+    <div className="stack-sm">
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={draft.enabled}
+          disabled={saving}
+          aria-label={`Aktifkan ${label} ${cron.book}`}
+          onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
+        />{" "}
+        Aktif
+      </label>
+      <label className="field">
+        Setiap berapa jam
+        <input
+          type="number"
+          min={1}
+          max={MAX_INTERVAL_HOURS}
+          step={1}
+          aria-label={`Interval jam ${label} ${cron.book}`}
+          value={Number.isNaN(draft.intervalHours) ? "" : draft.intervalHours}
+          disabled={saving}
+          onChange={(e) =>
+            setDraft({ ...draft, intervalHours: e.target.valueAsNumber })
+          }
+        />
+      </label>
+      {(invalid || error) && (
+        <small role="alert" className="warn">
+          {invalid || error}
+        </small>
+      )}
+      <button
+        className="btn btn-sec btn-sm"
+        disabled={!changed || !!invalid || saving}
+        onClick={async () => {
+          setSaving(true);
+          setError("");
+          try {
+            await onSave(draft);
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      >
+        {saving ? "Menyimpan…" : "Simpan"}
+      </button>
+      <small className="muted">
+        {cron.last_tick == null
+          ? "Belum dijalankan"
+          : new Date(cron.last_tick).toLocaleString("id-ID", {
+              timeZone: "Asia/Jakarta",
+            }) + " WIB"}
+      </small>
+      {cron.enabled && cron.next_run != null && (
+        <small className="muted">
+          Berikutnya:{" "}
+          {new Date(cron.next_run).toLocaleString("id-ID", {
+            timeZone: "Asia/Jakarta",
+          })}{" "}
+          WIB
+        </small>
+      )}
+      {cron.last_result && <small className="muted">{cron.last_result}</small>}
+    </div>
+  );
+}
+
+// Pengaturan Konten: satu kartu per judul buku dengan draf lokal sampai disimpan.
+function ContentSettings({
+  items,
+  instagram,
+  onRefreshInstagram,
+  onSave,
+}: {
   items: { book: string; settings: BookSettings }[];
+  instagram: InstagramConnection;
+  onRefreshInstagram: () => void;
   onSave: (book: string, settings: BookSettings) => void;
 }) {
   if (!items.length)
@@ -2124,7 +2377,13 @@ function ContentSettings({
   return (
     <div className="stack-lg">
       {items.map((x) => (
-        <BookSettingsCard key={x.book} {...x} onSave={onSave} />
+        <BookSettingsCard
+          key={x.book}
+          {...x}
+          instagram={instagram}
+          onRefreshInstagram={onRefreshInstagram}
+          onSave={onSave}
+        />
       ))}
     </div>
   );
@@ -2132,10 +2391,14 @@ function ContentSettings({
 function BookSettingsCard({
   book,
   settings,
+  instagram,
+  onRefreshInstagram,
   onSave,
 }: {
   book: string;
   settings: BookSettings;
+  instagram: InstagramConnection;
+  onRefreshInstagram: () => void;
   onSave: (book: string, settings: BookSettings) => void;
 }) {
   const [draft, setDraft] = useState(settings);
@@ -2194,6 +2457,47 @@ function BookSettingsCard({
         >
           Simpan
         </button>
+      </div>
+      <div className="stack-sm">
+        <label className="field">
+          Akun Instagram tujuan
+          <select
+            aria-label={`Akun Instagram tujuan ${book}`}
+            value={draft.instagramAccountId ?? ""}
+            onChange={(e) =>
+              set({ instagramAccountId: e.target.value || null })
+            }
+          >
+            <option value="">Otomatis (jika hanya satu akun)</option>
+            {(instagram.accounts ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                @{a.username}
+              </option>
+            ))}
+            {draft.instagramAccountId &&
+              !instagram.accounts?.some(
+                (a) => a.id === draft.instagramAccountId,
+              ) && (
+                <option value={draft.instagramAccountId}>
+                  Akun tersimpan tidak tersedia ({draft.instagramAccountId})
+                </option>
+              )}
+          </select>
+        </label>
+        <div className="row-gap">
+          <button className="btn btn-sec btn-sm" onClick={onRefreshInstagram}>
+            Muat ulang akun Instagram
+          </button>
+          <small className="muted">
+            Tujuan Post IG dan Reels IG, termasuk cronjob. Jika ada beberapa
+            akun, pilih satu untuk buku ini.
+          </small>
+        </div>
+        {instagram.state !== "connected" && (
+          <small className="warn">
+            {instagram.reason ?? "Memuat akun Instagram…"}
+          </small>
+        )}
       </div>
       <div className="settings-grid">
         <div className="stack-sm">
@@ -2652,10 +2956,12 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
 // Konfirmasi Post IG: pratinjau carousel dan caption sebelum terbit ke publik.
 function PostModal({
   c,
+  target,
   onClose,
   onConfirm,
 }: {
   c: any;
+  target: { account: { id: string; username: string } | null; error: string };
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -2669,6 +2975,15 @@ function PostModal({
   }, [c.id]);
   return (
     <Modal c={c} title="Post carousel ke Instagram" onClose={onClose} wide>
+      {target.account ? (
+        <p>
+          Tujuan: <b>@{target.account.username}</b>
+        </p>
+      ) : (
+        <p role="alert" className="warn">
+          {target.error}
+        </p>
+      )}
       <div className="panel-strip">
         {files.map((f) => (
           <img
@@ -2686,7 +3001,11 @@ function PostModal({
         <button className="btn btn-sec" onClick={onClose}>
           Batal
         </button>
-        <button className="btn btn-pri" disabled={!caption} onClick={onConfirm}>
+        <button
+          className="btn btn-pri"
+          disabled={!caption || !target.account}
+          onClick={onConfirm}
+        >
           Posting sekarang
         </button>
         <small className="muted">
@@ -2698,10 +3017,12 @@ function PostModal({
 }
 function ReelsModal({
   c,
+  target,
   onClose,
   onConfirm,
 }: {
   c: any;
+  target: { account: { id: string; username: string } | null; error: string };
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -2714,6 +3035,15 @@ function ReelsModal({
   }, [c.id]);
   return (
     <Modal c={c} title="Post Reels ke Instagram" onClose={onClose} wide>
+      {target.account ? (
+        <p>
+          Tujuan: <b>@{target.account.username}</b>
+        </p>
+      ) : (
+        <p role="alert" className="warn">
+          {target.error}
+        </p>
+      )}
       <video
         className="reels-player"
         controls
@@ -2728,7 +3058,11 @@ function ReelsModal({
         <button className="btn btn-sec" onClick={onClose}>
           Batal
         </button>
-        <button className="btn btn-pri" disabled={!caption} onClick={onConfirm}>
+        <button
+          className="btn btn-pri"
+          disabled={!caption || !target.account}
+          onClick={onConfirm}
+        >
           Posting sekarang
         </button>
         <small className="muted">

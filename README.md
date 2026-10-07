@@ -19,7 +19,7 @@ Server hanya bind `127.0.0.1:8072`. Di terminal kedua, pada direktori yang sama:
 npm run worker
 ```
 
-`npm run dev` menjalankan frontend Vite melalui server Express pada port yang sama. Worker tidak otomatis dimulai oleh HTTP server. Tidak ada scheduler, tunnel, atau publikasi otomatis. Bab tidak diimpor; judul buku dan judul bab diinput lewat aplikasi (form Tambah bab di Antrean).
+`npm run dev` menjalankan frontend Vite melalui server Express pada port yang sama. Server dan worker berjalan sebagai proses terpisah melalui `npm run dev` / `npm start`. Cronjob otomatis dapat diaktifkan per buku di halaman Cronjob. Bab tidak diimpor; judul buku dan judul bab diinput lewat aplikasi (form Tambah bab di Antrean).
 
 Login memakai akun di tabel `users` (password hash scrypt). Akun default: `admin@gmail.com` / `admin123`. Cookie sesi ditandatangani `SESSION_SECRET` di `.env` (dibuat otomatis bila `.env` belum ada; minimal 16 karakter).
 
@@ -115,3 +115,17 @@ npm start        # produksi: build frontend lalu jalankan server + worker
 ```
 
 Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `Ctrl+C` menghentikan keduanya. Perubahan skema database: `MYSQL_ROOT_PASSWORD=... npm run db:setup` (idempoten). Contoh service systemd (opsional, gaya nc-wa) ada di `deploy/`.
+
+## Cronjob per judul buku
+
+Halaman **Cronjob** menyediakan 11 jadwal independen per buku: Artikel, Quote, Gambar Quote, Gambar Panel, Gambar Video, Audio, Video V, Video H, Panel, Post IG, dan Reels IG. Isi **setiap berapa jam** (angka bulat 1–8760), aktifkan, lalu simpan tiap jenis secara terpisah. Bawaan 24 jam dan nonaktif. Jadwal pertama berjalan setelah interval sejak disimpan; mengubah interval atau status lalu menyimpan memulai hitungan baru. Waktu berikutnya dan pemeriksaan terakhir tampil dalam WIB.
+
+Worker mengantrekan satu bagian berikutnya yang belum selesai dan memenuhi prasyarat. Gambar mengikuti lajur Pengaturan Konten. Tidak membuat ulang hasil, menimpa draf, atau menggandakan job aktif. Post/Reels hanya mengirim status awal `belum`. Ketika worker mati melewati jadwal, satu pemeriksaan dilakukan saat worker kembali, lalu hitungan interval dilanjutkan dari pemeriksaan tersebut; tidak merapel semua interval yang terlewat. Penguncian MySQL menjaga eksekusi lintas worker.
+
+Jalankan ulang `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk menambahkan kolom interval tanpa menghapus data. Jadwal lama memakai interval 24 jam; jadwal yang aktif mulai dihitung sejak migrasi.
+
+## Akun Instagram per buku
+
+Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada masing-masing buku, lalu Simpan. Pilihan tersimpan dalam pengaturan buku dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Tombol **Muat ulang akun Instagram** mengambil daftar terkini dari NC-WA. Konfirmasi publikasi manual menampilkan akun tujuan.
+
+Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa akun tersedia, pilih tujuan per buku. Akun pilihan yang hilang tidak dialihkan ke akun lain. Perubahan tujuan berlaku pada job yang diproses berikutnya; hasil yang sudah terbit tetap tercatat dan tidak dikirim ulang. Pengaturan ini menggunakan kolom JSON yang sudah ada sehingga tidak membutuhkan migrasi database.

@@ -92,3 +92,16 @@ CREATE TABLE IF NOT EXISTS book_settings (
   settings TEXT NOT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cron independen per buku/jenis; last_tick mengunci eksekusi per menit lintas worker.
+CREATE TABLE IF NOT EXISTS book_cron (
+  book_key VARCHAR(255) NOT NULL,
+  kind VARCHAR(32) NOT NULL,
+  enabled TINYINT NOT NULL DEFAULT 0,
+  expression VARCHAR(100) NOT NULL DEFAULT '0 9 * * *', -- kolom legacy, tidak lagi dipakai
+  interval_hours INT NOT NULL DEFAULT 24,
+  next_run BIGINT NULL,
+  last_tick BIGINT NULL,
+  last_result TEXT NULL,
+  PRIMARY KEY (book_key, kind)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
