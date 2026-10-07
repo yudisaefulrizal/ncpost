@@ -45,21 +45,50 @@ Simpan draf membatalkan job aktif, menambah revisi dan menghapus pointer hasil t
 
 Preview boleh dibuat setelah lint struktur, tetapi diberi label template-only dan tidak membuka gate produksi. Worker menghasilkan lima PNG 1080×1350 memakai Template 1 asli, DejaVuSans, geometri registry, heading hanya panel 1, progress of-05, footer buku/bagian. CTA berasal dari closing-slide asli. Gallery menampilkan hanya ID 1,2,4,4B,6. Preview API/renderer dapat menguji 1/2/6; vertical tanpa portrait ditolak. Pemilihan template acak, skor registry sumber, crop stok aktual, font parity piksel dengan Pillow, dan renderer final belum selesai. Jangan menyebut preview sebagai stok gambar atau paket siap tayang.
 
-Data di MySQL database `ncpost`; output hanya di `output/`. Template dan CTA sumber dibaca saja. Semua prompt (artikel, review, quote, gambar quote, stok gambar, pembungkus Codex) dan lexicon editor ada di folder `prompts/`, satu file per prompt; lihat `prompts/README.md`.
+## Impor buku dari JSON
+
+Di halaman Produksi, tombol **Impor JSON** membuat satu bagian untuk tiap entri file berformat:
+
+```json
+[
+  {
+    "buku": "How to Win Friends and Influence People",
+    "tema": "Cara Membuat Orang Menyukai Anda - Biasakan tersenyum"
+  },
+  {
+    "buku": "How to Win Friends and Influence People",
+    "tema": "Cara Membuat Orang Menyukai Anda - Ingat dan gunakan nama orang dengan baik"
+  }
+]
+```
+
+`buku` menjadi judul buku dan `tema` menjadi judul bagian. Nomor bagian berurutan sesuai file dan melanjutkan nomor terbesar di bukunya. Entri yang sudah ada (buku dan judul sama, tanpa beda huruf besar/kecil dan spasi) dilewati, jadi aman diulang. Aplikasi menampilkan pratinjau dulu (jumlah baru dan yang dilewati) sebelum menulis. Maksimal 500 entri per impor; satu entri yang salah membatalkan seluruh impor.
+
+Data di MySQL database `ncpost`; output hanya di `output/`. Hasil render tiap bagian ada di folder yang bisa dibaca, `output/<buku>/<NN-judul-bagian>/`:
+
+```
+output/how-to-win-friends-and-influence-people/02-ganti-kritik-dengan-empati/
+├─ panel/        01-panel.jpg … 07-slide-penutup.jpg
+├─ audio/        kalimat_01.mp3 …
+├─ video-v.mp4   (9:16)      video-h.mp4   (16:9)
+└─ quote.jpg
+```
+
+Nama folder mengikuti nomor bagian: mengubah atau mengurutkan ulang nomor mengganti nama foldernya (panel dan video dibuang karena memuat nomor lama), dan menghapus bagian menghapus foldernya. Kolam stok gambar (`output/stock`), salinan publik (`output/public`), `cache/`, dan `work/` tetap di tempatnya, dan namanya tidak dipakai sebagai nama folder buku. Hasil render lama per id dipindahkan dengan `npx tsx scripts/migrate-output.ts`. Template dan CTA sumber dibaca saja. Semua prompt (artikel, review, quote, gambar quote, stok gambar, pembungkus Codex) dan lexicon editor ada di folder `prompts/`, satu file per prompt; lihat `prompts/README.md`.
 
 ## Status implementasi
 
-| Bagian | Implementasi | Verifikasi |
-|---|---|---|
-| Auth, CSRF, sesi, API media | Aktif lokal | Unit + browser nyata |
-| Antrean bab (input manual), pencarian/filter | Aktif | MySQL + browser |
-| Artikel Codex + laporan editor | Worker/job nyata | Runner mock, parent live teks; editorial worker belum live |
-| Gambar CLI | Adapter + tiga lane worker | Parent live PNG; collector fixture nyata, worker lima panel belum live |
-| Preview lima PNG + CTA | Aktif template-only | Sharp + browser worker nyata |
-| ElevenLabs lima panel | Adapter HTTP; live diblokir | Mock HTTP saja |
-| Video karaoke/produksi final | Belum tersedia; disabled | Belum diuji |
-| Instagram akun | GET dengan env key | Parent OpenAPI; koneksi key aplikasi belum diuji |
-| Instagram Reels | Diblokir sebelum network | Guard unit; kontrak belum mendukung |
+| Bagian                                       | Implementasi                | Verifikasi                                                             |
+| -------------------------------------------- | --------------------------- | ---------------------------------------------------------------------- |
+| Auth, CSRF, sesi, API media                  | Aktif lokal                 | Unit + browser nyata                                                   |
+| Antrean bab (input manual), pencarian/filter | Aktif                       | MySQL + browser                                                        |
+| Artikel Codex + laporan editor               | Worker/job nyata            | Runner mock, parent live teks; editorial worker belum live             |
+| Gambar CLI                                   | Adapter + tiga lane worker  | Parent live PNG; collector fixture nyata, worker lima panel belum live |
+| Preview lima PNG + CTA                       | Aktif template-only         | Sharp + browser worker nyata                                           |
+| ElevenLabs lima panel                        | Adapter HTTP; live diblokir | Mock HTTP saja                                                         |
+| Video karaoke/produksi final                 | Belum tersedia; disabled    | Belum diuji                                                            |
+| Instagram akun                               | GET dengan env key          | Parent OpenAPI; koneksi key aplikasi belum diuji                       |
+| Instagram Reels                              | Diblokir sebelum network    | Guard unit; kontrak belum mendukung                                    |
 
 ## Pengujian
 

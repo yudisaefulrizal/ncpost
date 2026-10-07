@@ -593,7 +593,7 @@ async function encodePiece(
 // Klip → potongan → gabung tanpa encode ulang → mux audio → cek integritas.
 export async function buildReels(
   slides: ReelsSlide[],
-  outDir: string,
+  outFile: string,
   work: string,
   format: VideoFormat,
   cacheRoot: string,
@@ -691,7 +691,7 @@ export async function buildReels(
   }
   const list = path.join(work, "pieces.txt");
   writeFileSync(list, files.map((f) => `file '${f}'`).join("\n") + "\n");
-  const video = path.join(outDir, "reels_video.mp4");
+  const video = outFile;
   await run("ffmpeg", [
     "-y",
     "-v",
@@ -716,7 +716,7 @@ export async function buildReels(
   ]);
   const check = await verify(video, plan.total);
   return {
-    file: "reels_video.mp4",
+    file: path.basename(outFile),
     duration: check.duration,
     frames: plan.total,
     fps: FPS,

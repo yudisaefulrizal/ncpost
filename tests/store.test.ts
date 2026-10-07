@@ -470,3 +470,160 @@ it("video kalimat H: butuh sumber horizontal; hilang saat audio kalimat dibuat u
   await s.complete(t2, { sentenceAudio: "{}" });
   expect((await s.chapter(c))?.sentence_video_h).toBeNull();
 });
+it("impor JSON: berurutan, nomor melanjutkan, entri yang sudah ada dilewati, ejaan buku dipakai ulang", async () => {
+  await s.create("Buku  Satu", "Judul Lama");
+  const items = [
+    { buku: "buku satu", tema: "Tema A" },
+    { buku: "Buku Satu", tema: "  judul   lama " }, // sudah ada (beda spasi/huruf)
+    { buku: "Buku Dua", tema: "Tema B" },
+    { buku: "Buku Satu", tema: "Tema C" },
+    { buku: "Buku Satu", tema: "tema a" }, // ganda di dalam file
+  ];
+  expect(await s.importChapters(items, true)).toEqual({
+    created: 3,
+    skipped: 2,
+    books: 2,
+    dryRun: true,
+  });
+  expect(await s.list()).toHaveLength(1); // dryRun tidak menulis
+  expect(await s.importChapters(items)).toMatchObject({
+    created: 3,
+    skipped: 2,
+  });
+  expect((await s.list()).map((x) => [x.book, x.title, x.part_number])).toEqual(
+    [
+      ["Buku Satu", "Judul Lama", 1],
+      ["Buku Satu", "Tema A", 2],
+      ["Buku Dua", "Tema B", 1],
+      ["Buku Satu", "Tema C", 3],
+    ],
+  );
+  // Diulang: tidak ada yang baru.
+  expect(await s.importChapters(items)).toMatchObject({
+    created: 0,
+    skipped: 5,
+  });
+  expect(await s.list()).toHaveLength(4);
+});
+it("impor JSON: satu entri salah membatalkan semua; batas dan bentuk file divalidasi", async () => {
+  await expect(
+    s.importChapters([
+      { buku: "B", tema: "Ok" },
+      { buku: "B", tema: "" },
+    ]),
+  ).rejects.toThrow(/Entri 2/);
+  await expect(s.importChapters([{ buku: 5, tema: "x" }])).rejects.toThrow(
+    /Entri 1/,
+  );
+  await expect(s.importChapters({ buku: "B" })).rejects.toThrow(/array/);
+  await expect(s.importChapters([])).rejects.toThrow(/tidak berisi/);
+  await expect(
+    s.importChapters(
+      Array.from({ length: 501 }, (_, i) => ({ buku: "B", tema: "T" + i })),
+    ),
+  ).rejects.toThrow(/500/);
+  await expect(
+    s.importChapters([{ buku: "B", tema: "x".repeat(501) }]),
+  ).rejects.toThrow(/terlalu panjang/);
+  expect(await s.list()).toHaveLength(0);
+});
+it("urutkan ulang buku: celah ditutup, urutan nomor dipertahankan, hanya yang berubah dibuang panel/videonya", async () => {
+  const a = await s.create("Buku", "Satu"); // 1
+  const b = await s.create("Buku", "Dua"); // 2
+  const c = await s.create("Buku", "Tiga"); // 3
+  const d = await s.create("Buku", "Empat"); // 4
+  const other = await s.create("Lain", "X");
+  await s.db.query(
+    "UPDATE chapters SET panel_status='tersedia',panels='{}',sentence_video='{}' WHERE id IN (?,?,?,?,?)",
+    [a, b, c, d, other],
+  );
+  await s.remove(b); // celah: 1, 3, 4
+  expect(await s.renumberBook("buku")).toEqual({ total: 3, changed: 2 });
+  const rows = await s.list();
+  expect(
+    rows.filter((x) => x.book === "Buku").map((x) => [x.id, x.part_number]),
+  ).toEqual([
+    [a, 1],
+    [c, 2],
+    [d, 3],
+  ]);
+  // Bagian 1 tidak berubah → panel/video tetap; yang berganti nomor dibuang.
+  expect(rows.find((x) => x.id === a)).toMatchObject({
+    panel_status: "tersedia",
+    sentence_video: "{}",
+  });
+  for (const id of [c, d])
+    expect(rows.find((x) => x.id === id)).toMatchObject({
+      panel_status: "belum",
+      panels: null,
+      sentence_video: null,
+    });
+  expect(rows.find((x) => x.id === other)?.panel_status).toBe("tersedia");
+  // Sudah berurutan: tidak ada yang berubah.
+  expect(await s.renumberBook("Buku")).toEqual({ total: 3, changed: 0 });
+  // Urutan mengikuti nomor, bukan id: nomor diedit lebih dulu.
+  await s.setPartNumber(a, 9);
+  expect(await s.renumberBook("Buku")).toEqual({ total: 3, changed: 3 });
+  expect(
+    (await s.list())
+      .filter((x) => x.book === "Buku")
+      .map((x) => [x.id, x.part_number]),
+  ).toEqual([
+    [a, 3],
+    [c, 1],
+    [d, 2],
+  ]);
+  await expect(s.renumberBook("Tidak Ada")).rejects.toThrow(/tidak ditemukan/);
+});
+it("urutkan ulang ditolak saat ada job aktif di bagian yang nomornya berubah", async () => {
+  const a = await s.create("Buku", "Satu");
+  const b = await s.create("Buku", "Dua");
+  const c = await s.create("Buku", "Tiga");
+  await s.remove(a); // 2, 3 → 1, 2
+  await s.db.query(
+    "INSERT INTO jobs(chapter_id,kind,state,revision) VALUES(?,?,?,0)",
+    [c, "QUOTE", "queued"],
+  );
+  await expect(s.renumberBook("Buku")).rejects.toThrow(/job aktif/);
+  expect((await s.chapter(b))?.part_number).toBe(2);
+});
+it("folder hasil mengikuti nomor bagian: ganti nomor, urutkan ulang, dan hapus", async () => {
+  const { chapterDir, quoteImagePath, panelDir, outputRoot } = await import(
+    "../src/server/output-paths"
+  );
+  const { rmSync, mkdirSync, writeFileSync, existsSync } = await import(
+    "node:fs"
+  );
+  const path = await import("node:path");
+  const make = async (title: string) => {
+    const id = await s.create("Buku Uji", title);
+    const c = (await s.chapter(id))!;
+    mkdirSync(path.dirname(quoteImagePath(c)), { recursive: true });
+    writeFileSync(quoteImagePath(c), "q");
+    mkdirSync(panelDir(c), { recursive: true });
+    return c;
+  };
+  try {
+    const a = await make("Satu"),
+      b = await make("Dua"),
+      c = await make("Tiga");
+    await s.setPartNumber(a.id, 3); // a ↔ c
+    const a2 = (await s.chapter(a.id))!,
+      c2 = (await s.chapter(c.id))!;
+    expect(existsSync(quoteImagePath(a2))).toBe(true);
+    expect(existsSync(quoteImagePath(c2))).toBe(true);
+    expect(existsSync(chapterDir(a))).toBe(false); // folder lama (01-satu) sudah pindah
+    expect(existsSync(panelDir(a2))).toBe(false); // panel dibuang saat nomor berubah
+    await s.remove(b.id);
+    expect(existsSync(chapterDir(b))).toBe(false);
+    expect(await s.renumberBook("Buku Uji")).toEqual({ total: 2, changed: 1 });
+    const a3 = (await s.chapter(a.id))!;
+    expect(a3.part_number).toBe(2);
+    expect(existsSync(quoteImagePath(a3))).toBe(true);
+    await s.remove(a.id);
+    await s.remove(c.id);
+    expect(existsSync(path.join(outputRoot(), "buku-uji"))).toBe(false);
+  } finally {
+    rmSync(outputRoot(), { recursive: true, force: true });
+  }
+});

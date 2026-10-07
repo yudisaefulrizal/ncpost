@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { initConfig, ROOT } from "./config";
-import { Store } from "./store";
+import { Store, type Chapter } from "./store";
 import { CTA_ROOT, overlayPath, safeFile, templates } from "./templates";
 import {
   allowedOrigin,
@@ -12,12 +12,22 @@ import {
 } from "./auth";
 import { validateArticle, instagramCaption, bookKey } from "./domain";
 import { STOCK_KINDS } from "./book-settings";
+import {
+  audioDir,
+  chapterDir,
+  outputRoot,
+  panelDir,
+  quoteImagePath,
+} from "./output-paths";
 import { runCli, accounts, publish, postStatus } from "./providers";
 import { credentialStatus, setCredential } from "./credentials";
 const cfg = initConfig(),
   app = express(),
   limit = new RateLimiter();
 app.disable("x-powered-by");
+// Impor JSON boleh lebih besar (maks 500 entri); parser pertama yang membaca
+// body menang, jadi ini harus dipasang sebelum parser umum.
+app.use("/api/chapters/import", express.json({ limit: "512kb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -91,6 +101,11 @@ app.post("/api/chapters", async (req, res) => {
     throw Error("Judul buku dan judul bagian wajib diisi");
   res.status(201).json({ id: await store.create(book, title) });
 });
+app.post("/api/chapters/import", async (req, res) => {
+  res.json(
+    await store.importChapters(req.body?.items, req.body?.dryRun === true),
+  );
+});
 app.delete("/api/chapters/:id", async (req, res) => {
   await store.remove(Number(req.params.id));
   res.json({ ok: true });
@@ -99,6 +114,10 @@ app.put("/api/chapters/:id/part", async (req, res) => {
   res.json(
     await store.setPartNumber(Number(req.params.id), Number(req.body?.part)),
   );
+});
+app.post("/api/books/renumber", async (req, res) => {
+  if (typeof req.body?.book !== "string") throw Error("Judul buku wajib diisi");
+  res.json(await store.renumberBook(req.body.book));
 });
 app.get("/api/chapters/:id/caption", async (req, res) => {
   const c = await store.chapter(Number(req.params.id));
@@ -167,67 +186,37 @@ app.get("/api/cta", (_, res) =>
     ),
   ),
 );
-app.get("/api/audio-kalimat/:id/:file", (req, res) => {
-  if (
-    !/^\d+$/.test(String(req.params.id)) ||
-    !/^kalimat_\d{2}\.mp3$/.test(String(req.params.file))
-  )
-    return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(
-      path.join(ROOT, "output/audio-kalimat"),
-      path.join(ROOT, "output/audio-kalimat", req.params.id, req.params.file),
-    ),
-  );
-});
-app.get("/api/video-kalimat-h/:id/:file", (req, res) => {
-  if (
-    !/^\d+$/.test(String(req.params.id)) ||
-    !/^reels_video\.mp4$/.test(String(req.params.file))
-  )
-    return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(
-      path.join(ROOT, "output/video-kalimat-h"),
-      path.join(ROOT, "output/video-kalimat-h", req.params.id, req.params.file),
-    ),
-  );
-});
-app.get("/api/video-kalimat/:id/:file", (req, res) => {
-  if (
-    !/^\d+$/.test(String(req.params.id)) ||
-    !/^reels_video\.mp4$/.test(String(req.params.file))
-  )
-    return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(
-      path.join(ROOT, "output/video-kalimat"),
-      path.join(ROOT, "output/video-kalimat", req.params.id, req.params.file),
-    ),
-  );
-});
-app.get("/api/quote-image/:id", (req, res) => {
-  if (!/^\d+$/.test(String(req.params.id))) return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(
-      path.join(ROOT, "output/quote-images"),
-      path.join(ROOT, "output/quote-images", req.params.id, "quote.jpg"),
-    ),
-  );
-});
-app.get("/api/panels/:id/:file", (req, res) => {
-  if (
-    !/^\d+$/.test(String(req.params.id)) ||
-    !/^0[1-7]-(panel|slide-penutup)\.(jpg|png)$/.test(String(req.params.file))
-  )
-    return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(
-      path.join(ROOT, "output/panels"),
-      path.join(ROOT, "output/panels", req.params.id, req.params.file),
-    ),
-  );
-});
+// Berkas hasil render per bagian: URL tetap memakai id, jalurnya dicari dari
+// buku dan nomor bagian (lihat output-paths.ts).
+function chapterFile(
+  route: string,
+  allowed: RegExp,
+  resolve: (c: Chapter, file: string) => string,
+) {
+  app.get(route, async (req, res) => {
+    const file = String(req.params.file ?? "quote.jpg");
+    if (!/^\d+$/.test(String(req.params.id)) || !allowed.test(file))
+      return void res.sendStatus(404);
+    const c = await store.chapter(Number(req.params.id));
+    if (!c) return void res.sendStatus(404);
+    res.sendFile(safeFile(outputRoot(), resolve(c, file)));
+  });
+}
+chapterFile("/api/audio-kalimat/:id/:file", /^kalimat_\d{2}\.mp3$/, (c, file) =>
+  path.join(audioDir(c), file),
+);
+chapterFile("/api/video-kalimat-h/:id/:file", /^video-h\.mp4$/, (c, file) =>
+  path.join(chapterDir(c), file),
+);
+chapterFile("/api/video-kalimat/:id/:file", /^video-v\.mp4$/, (c, file) =>
+  path.join(chapterDir(c), file),
+);
+chapterFile("/api/quote-image/:id", /^quote\.jpg$/, (c) => quoteImagePath(c));
+chapterFile(
+  "/api/panels/:id/:file",
+  /^0[1-7]-(panel|slide-penutup)\.(jpg|png)$/,
+  (c, file) => path.join(panelDir(c), file),
+);
 app.get("/api/media/:job/:file", (req, res) => {
   if (
     !/^\d+$/.test(String(req.params.job)) ||

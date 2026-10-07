@@ -1477,3 +1477,7 @@ tr.row:hover td {
 .reels-player.tall {
   aspect-ratio: 9 / 16;
 }
+tr.grp .grp-action {
+  float: right;
+  font-weight: 600;
+}

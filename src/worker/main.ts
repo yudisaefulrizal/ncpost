@@ -57,6 +57,13 @@ import {
   sentenceJob,
 } from "../server/book-settings";
 import { SOURCE } from "../server/templates";
+import {
+  audioDir,
+  chapterDir,
+  panelDir,
+  quoteImagePath,
+  videoPath,
+} from "../server/output-paths";
 import { panelHeading, stripMarkdownEmphasis } from "../server/stock-prompts";
 import {
   bestAsset,
@@ -236,10 +243,7 @@ function publicPanels(c: Chapter) {
           .update(`${c.id}:${m.renderedAt}:${file}`)
           .digest("hex")
           .slice(0, 32) + ".jpg";
-      copyFileSync(
-        path.join(ROOT, "output/panels", String(c.id), file),
-        path.join(dir, name),
-      );
+      copyFileSync(path.join(panelDir(c), file), path.join(dir, name));
       return `${origin}/pub/${name}`;
     },
   );
@@ -255,10 +259,7 @@ function publicVideo(c: Chapter) {
       .update(`${c.id}:${m.renderedAt}:${m.file}`)
       .digest("hex")
       .slice(0, 32) + ".mp4";
-  copyFileSync(
-    path.join(ROOT, "output/video-kalimat", String(c.id), m.file),
-    path.join(dir, name),
-  );
+  copyFileSync(path.join(chapterDir(c), m.file), path.join(dir, name));
   return `${origin}/pub/${name}`;
 }
 async function runJob(job: Job) {
@@ -315,7 +316,7 @@ async function runJob(job: Job) {
         key: process.env.ELEVENLABS_API_KEY ?? "",
         voice: process.env.ELEVENLABS_VOICE_ID ?? "",
       };
-      const dir = path.join(ROOT, "output/audio-kalimat", String(c.id));
+      const dir = audioDir(c);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const sentences = [];
@@ -386,32 +387,23 @@ async function runJob(job: Job) {
         );
         panels.push({
           image,
-          audio: path.join(
-            ROOT,
-            "output/audio-kalimat",
-            String(c.id),
-            audio.sentences[i].file,
-          ),
+          audio: path.join(audioDir(c), audio.sentences[i].file),
           layout,
           // Karaoke kalimat 1 menunggu heading hook selesai dibacakan.
           heading: i === 0 ? stripMarkdownEmphasis(hookHeading) : "",
           paragraph: s.text,
         });
       }
-      const dir = path.join(
-        ROOT,
-        horizontal ? "output/video-kalimat-h" : "output/video-kalimat",
-        String(c.id),
-      );
-      rmSync(dir, { recursive: true, force: true });
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      const outFile = videoPath(c, horizontal);
+      rmSync(outFile, { force: true });
+      mkdirSync(path.dirname(outFile), { recursive: true, mode: 0o700 });
       // Video vertikal dan horizontal memakai narasi dan jeda yang sama, jadi
       // audio dan visualizer-nya dibagi lewat cache timeline.
       let result;
       try {
         result = await buildReels(
           panels,
-          dir,
+          outFile,
           work,
           horizontal ? LANDSCAPE : VERTICAL,
           path.join(ROOT, "output/cache/timeline", String(c.id), "kalimat"),
@@ -433,9 +425,8 @@ async function runJob(job: Job) {
       if (!c.quote) throw Error("Gambar quote butuh quote");
       const { quoteImageStyle } = await store.bookSettings(c.book);
       const prompt = quoteImagePrompt(quoteImageStyle, c.quote);
-      const dir = path.join(ROOT, "output/quote-images", String(c.id));
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
-      const file = path.join(dir, "quote.jpg");
+      const file = quoteImagePath(c);
+      mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
       let failure = "";
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -528,7 +519,7 @@ async function runJob(job: Job) {
           throw Error("Render panel butuh lima stok gambar " + source);
       const part = partNumber(await store.list(), c);
       const footer = `${c.book} - Bagian ${part}`;
-      const dir = path.join(ROOT, "output/panels", String(c.id));
+      const dir = panelDir(c);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const panels = [];

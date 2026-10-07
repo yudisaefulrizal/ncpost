@@ -198,6 +198,32 @@ function App() {
       if (detail?.id === c.id) await open(c);
     });
   };
+  // Rapatkan nomor satu buku menjadi 1..N (mis. setelah ada bagian dihapus).
+  const renumberBook = (book: string) => {
+    const list = rows.filter((r) => bookKey(r.book) === bookKey(book));
+    const sorted = [...list].sort(
+      (a, b) => partNumber(rows, a) - partNumber(rows, b) || a.id - b.id,
+    );
+    const willChange = sorted.filter(
+      (c, i) => partNumber(rows, c) !== i + 1,
+    ).length;
+    if (!willChange) {
+      setMsg(`Nomor bagian "${book}" sudah berurutan 1–${list.length}`);
+      return;
+    }
+    if (
+      !confirm(
+        `Urutkan ulang nomor bagian "${book}" menjadi 1–${list.length}?\n` +
+          `${willChange} bagian berganti nomor; panel dan video bagian itu perlu dirender ulang.`,
+      )
+    )
+      return;
+    action(async () => {
+      const r = await api("/books/renumber", "POST", { book });
+      setMsg(`${r.changed} dari ${r.total} bagian "${book}" diurutkan ulang`);
+      await refresh();
+    });
+  };
   const removeChapter = (c: any) =>
     confirm(`Hapus bagian "${c.title}"? Artikel dan job-nya ikut terhapus.`) &&
     action(async () => {
@@ -209,6 +235,34 @@ function App() {
   const enqueue = async (kind: string, replace = false) => {
     await api("/chapters/" + detail.id + "/jobs", "POST", { kind, replace });
     setMsg(`Job ${kind} masuk antrean`);
+    await refresh();
+  };
+  // Impor buku dari JSON [{ buku, tema }]: pratinjau dulu, lalu konfirmasi.
+  const importJson = async (file: File) => {
+    let items: unknown;
+    try {
+      items = JSON.parse(await file.text());
+    } catch {
+      throw Error("File bukan JSON yang valid");
+    }
+    const plan = await api("/chapters/import", "POST", { items, dryRun: true });
+    if (!plan.created) {
+      setMsg(`Tidak ada bagian baru: ${plan.skipped} entri sudah ada`);
+      return;
+    }
+    if (
+      !confirm(
+        `Impor ${plan.created} bagian baru dari ${plan.books} buku?` +
+          (plan.skipped
+            ? `\n${plan.skipped} entri sudah ada dan dilewati.`
+            : ""),
+      )
+    )
+      return;
+    const r = await api("/chapters/import", "POST", { items });
+    setMsg(
+      `${r.created} bagian diimpor${r.skipped ? `, ${r.skipped} dilewati` : ""}`,
+    );
     await refresh();
   };
   const addChapter = async () => {
@@ -715,6 +769,23 @@ function App() {
             <Icon name="plus" />
             Tambah bagian
           </button>
+          <label
+            className="btn btn-sec"
+            title='Impor dari JSON: [{ "buku": "...", "tema": "..." }]'
+          >
+            <Icon name="doc" />
+            Impor JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) action(() => importJson(file));
+              }}
+            />
+          </label>
         </form>
       }
       <div className="table">
@@ -749,6 +820,13 @@ function App() {
                       }{" "}
                       bagian
                     </span>
+                    <button
+                      className="btn btn-sec btn-sm grp-action"
+                      title="Rapatkan nomor bagian menjadi 1, 2, 3, … tanpa celah"
+                      onClick={() => renumberBook(g.book)}
+                    >
+                      Urutkan ulang
+                    </button>
                   </td>
                 </tr>
                 {g.rows.map((c) => (

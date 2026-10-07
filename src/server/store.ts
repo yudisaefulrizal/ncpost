@@ -17,6 +17,11 @@ import {
   type BookSettings,
 } from "./book-settings";
 import { dbConfig } from "./config";
+import {
+  moveChapterOutputs,
+  removeChapterOutputs,
+  type ChapterRef,
+} from "./output-paths";
 export interface Chapter {
   id: number;
   book: string;
@@ -142,13 +147,152 @@ export class Store {
       )
     ).insertId;
   }
+  // Impor dari JSON [{ "buku": "...", "tema": "..." }]: buku = judul buku,
+  // tema = judul bagian. Berurutan sesuai file; nomor bagian melanjutkan nomor
+  // terbesar di bukunya. Entri yang sudah ada (buku + judul sama, tanpa beda
+  // huruf besar/kecil dan spasi) dilewati, jadi aman diulang. Semua entri
+  // divalidasi dulu; satu yang salah membatalkan seluruh impor. dryRun = hitung
+  // saja, tanpa menulis.
+  async importChapters(items: unknown, dryRun = false) {
+    if (!Array.isArray(items)) throw Error("File harus berisi array JSON");
+    if (!items.length) throw Error("File tidak berisi entri");
+    if (items.length > 500) throw Error("Maksimal 500 bagian per impor");
+    const clean = items.map((x: any, i) => {
+      const book =
+        typeof x?.buku === "string" ? x.buku.replace(/\s+/g, " ").trim() : "";
+      const title =
+        typeof x?.tema === "string" ? x.tema.replace(/\s+/g, " ").trim() : "";
+      if (!book || !title)
+        throw Error(`Entri ${i + 1}: "buku" dan "tema" wajib berupa teks`);
+      if (book.length > 255 || title.length > 500)
+        throw Error(`Entri ${i + 1}: judul terlalu panjang`);
+      return { book, title };
+    });
+    return this.tx(async (db) => {
+      const existing = await rows<Chapter>(
+        db,
+        "SELECT book,title,part_number FROM chapters FOR UPDATE",
+      );
+      const seen = new Set(
+        existing.map((x) => bookKey(x.book) + "\n" + bookKey(x.title)),
+      );
+      // Ejaan buku yang sudah ada dipakai ulang; nomor berikutnya per buku.
+      const spelling = new Map<string, string>();
+      const next = new Map<string, number>();
+      for (const x of existing) {
+        const key = bookKey(x.book);
+        if (!spelling.has(key)) spelling.set(key, x.book);
+        next.set(
+          key,
+          Math.max((next.get(key) ?? 0) + 1, Number(x.part_number ?? 0) + 1),
+        );
+      }
+      const fresh: [string, string, number, string][] = [];
+      let skipped = 0;
+      for (const { book, title } of clean) {
+        const key = bookKey(book);
+        const id = key + "\n" + bookKey(title);
+        if (seen.has(id)) {
+          skipped++;
+          continue;
+        }
+        seen.add(id);
+        if (!spelling.has(key)) spelling.set(key, book);
+        const part = next.get(key) ?? 1;
+        next.set(key, part + 1);
+        fresh.push([spelling.get(key)!, title, part, ""]);
+      }
+      if (!dryRun && fresh.length)
+        await run(
+          db,
+          "INSERT INTO chapters(book,title,part_number,article) VALUES ?",
+          [fresh],
+        );
+      return {
+        created: fresh.length,
+        skipped,
+        books: new Set(fresh.map((x) => bookKey(x[0]))).size,
+        dryRun,
+      };
+    });
+  }
+  // Urutkan ulang nomor satu buku menjadi 1..N tanpa celah (mis. setelah ada
+  // bagian yang dihapus), mengikuti urutan nomor sekarang (seri: urutan input).
+  // Panel dan video bagian yang nomornya berubah dibuang karena footer dan label
+  // slide pembukanya memuat nomor.
+  async renumberBook(book: string) {
+    const done = await this.tx(async (db) => {
+      const all = await rows<Chapter>(
+        db,
+        "SELECT * FROM chapters ORDER BY id FOR UPDATE",
+      );
+      const same = all
+        .filter((x) => bookKey(x.book) === bookKey(book))
+        .sort((a, b) => partNumber(all, a) - partNumber(all, b) || a.id - b.id);
+      if (!same.length) throw Error("Buku tidak ditemukan");
+      const changed = same
+        .map((x, i) => ({ id: x.id, part: i + 1, was: partNumber(all, x) }))
+        .filter(
+          (x) =>
+            x.part !== x.was ||
+            same.find((c) => c.id === x.id)!.part_number == null,
+        );
+      const renumbered = changed
+        .filter((x) => x.part !== x.was)
+        .map((x) => x.id);
+      if (renumbered.length) {
+        const [busy] = await rows<{ n: number }>(
+          db,
+          "SELECT COUNT(*) AS n FROM jobs WHERE chapter_id IN (?) AND state IN ('queued','running')",
+          [renumbered],
+        );
+        if (Number(busy.n))
+          throw Error(
+            "Masih ada job aktif di bagian yang nomornya berubah; tunggu selesai",
+          );
+      }
+      for (const x of changed)
+        await run(db, "UPDATE chapters SET part_number=? WHERE id=?", [
+          x.part,
+          x.id,
+        ]);
+      if (renumbered.length)
+        await run(
+          db,
+          "UPDATE chapters SET panel_status='belum',panels=NULL,sentence_video=NULL,sentence_video_h=NULL WHERE id IN (?)",
+          [renumbered],
+        );
+      // Folder hasil mengikuti nomor baru (dipindah setelah commit).
+      const moves = changed
+        .filter((x) => x.part !== x.was)
+        .map((x) => {
+          const row = same.find((c) => c.id === x.id)!;
+          return {
+            before: { ...row, part_number: x.was } as ChapterRef,
+            after: { ...row, part_number: x.part } as ChapterRef,
+          };
+        });
+      return {
+        result: { total: same.length, changed: renumbered.length },
+        moves,
+      };
+    });
+    this.moveOutputs(done.moves);
+    return done.result;
+  }
+  // Pemindahan folder tidak boleh menggagalkan perubahan di database.
+  private moveOutputs(moves: { before: ChapterRef; after: ChapterRef }[]) {
+    try {
+      moveChapterOutputs(moves);
+    } catch {}
+  }
   // Ubah nomor bagian. Bila nomor itu dipakai bagian lain di buku yang sama,
   // keduanya bertukar nomor. Footer panel dan label slide pembuka video memuat
   // nomor, jadi panel dan video bagian yang berubah dibuang.
   async setPartNumber(id: number, part: number) {
     if (!Number.isInteger(part) || part < 1 || part > 9999)
       throw Error("Nomor bagian harus bilangan bulat 1–9999");
-    return this.tx(async (db) => {
+    const done = await this.tx(async (db) => {
       const c = await this.chapter(id, db);
       if (!c) throw Error("Bagian tidak ditemukan");
       const same = await rows<Chapter>(
@@ -157,7 +301,11 @@ export class Store {
         [c.book],
       );
       const current = partNumber(same, same.find((x) => x.id === id)!);
-      if (current === part) return { id, part, swapped: null as number | null };
+      if (current === part)
+        return {
+          result: { id, part, swapped: null as number | null },
+          moves: [] as { before: ChapterRef; after: ChapterRef }[],
+        };
       const other = same.find(
         (x) => x.id !== id && partNumber(same, x) === part,
       );
@@ -180,12 +328,29 @@ export class Store {
         "UPDATE chapters SET panel_status='belum',panels=NULL,sentence_video=NULL,sentence_video_h=NULL WHERE id IN (?)",
         [ids],
       );
-      return { id, part, swapped: other?.id ?? null };
+      const mine = same.find((x) => x.id === id)!;
+      const moves = [
+        {
+          before: { ...mine, part_number: current } as ChapterRef,
+          after: { ...mine, part_number: part } as ChapterRef,
+        },
+        ...(other
+          ? [
+              {
+                before: { ...other, part_number: part } as ChapterRef,
+                after: { ...other, part_number: current } as ChapterRef,
+              },
+            ]
+          : []),
+      ];
+      return { result: { id, part, swapped: other?.id ?? null }, moves };
     });
+    this.moveOutputs(done.moves);
+    return done.result;
   }
   // Hapus bab beserta job dan ikatan stoknya; gambar tetap di kolam.
   async remove(id: number) {
-    await this.tx(async (db) => {
+    const gone = await this.tx(async (db) => {
       const c = await this.chapter(id, db);
       if (!c) throw Error("Bagian tidak ditemukan");
       await run(db, "DELETE FROM chapter_stock WHERE chapter_id=?", [id]);
@@ -193,7 +358,13 @@ export class Store {
       await run(db, "DELETE FROM chapters WHERE id=?", [id]);
       // Nomor bagian lain tidak bergeser (tersimpan per bagian), jadi panel
       // dan video bagian lain tetap berlaku.
+      return c;
     });
+    // Hasil render bagian ini (folder per bagian) ikut dihapus; kolam stok
+    // gambar tidak disentuh.
+    try {
+      removeChapterOutputs(gone);
+    } catch {}
   }
   // stock_counts: jumlah panel terikat per lajur stok (syarat ✓ Gambar dan Panel).
   async list() {
