@@ -1,7 +1,9 @@
 import type { NewsResult } from "../../src/server/news";
 export function newsFixture(): NewsResult {
-  const paragraph =
-    Array.from({ length: 20 }, (_, i) => `kata${i + 1}`).join(" ") + ".";
+  const paragraph = Array.from(
+    { length: 20 },
+    (_, i) => `kata${i + 1}${i === 9 || i === 19 ? "." : ""}`,
+  ).join(" ");
   return {
     article: `Kabar teknologi baru\n\n${Array(4).fill(paragraph).join("\n\n")}\n\nSumber:\n1. [The Guardian](https://www.theguardian.com/technology/2026/oct/07/test)\n\nTag: teknologi, perangkat`,
     candidate_topics: [

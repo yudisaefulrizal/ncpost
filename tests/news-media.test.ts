@@ -15,7 +15,7 @@ import {
 it("berita memakai empat paragraf dan audio hanya isi tanpa judul atau sumber", () => {
   const c = newsContent(newsFixture().article);
   expect(c.paragraphs).toHaveLength(4);
-  expect(c.sentences).toHaveLength(4);
+  expect(c.sentences).toHaveLength(8);
   expect(c.sentences[0].text).not.toContain("Kabar");
   expect(newsCaption(newsFixture().article)).toContain("#berita");
   expect(newsCaption(newsFixture().article)).not.toContain("#buku");

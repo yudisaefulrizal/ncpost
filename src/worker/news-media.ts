@@ -23,13 +23,13 @@ import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
 import { stripMarkdownEmphasis } from "../server/stock-prompts";
 import { generateStock } from "./stock-generator";
 import {
-  tts,
   accounts,
   publish,
   publishCarousel,
   postStatus,
 } from "../server/providers";
 import { sanitizeForTts } from "../server/tts-text";
+import { edgeTts, newsTtsConfig } from "../server/edge-tts";
 import {
   renderPanel,
   pickTemplate,
@@ -145,11 +145,7 @@ export async function runNewsMediaJob(
       return;
     }
     if (j.kind === "TTS_KALIMAT") {
-      const config = {
-        live: process.env.LIVE_TTS === "true",
-        key: process.env.ELEVENLABS_API_KEY ?? "",
-        voice: process.env.ELEVENLABS_VOICE_ID ?? "",
-      };
+      const config = newsTtsConfig();
       const sentences = [];
       for (const [i, s] of content.sentences.entries()) {
         const file = path.join(
@@ -157,7 +153,7 @@ export async function runNewsMediaJob(
           `kalimat_${String(i + 1).padStart(2, "0")}.mp3`,
         );
         const text = sanitizeForTts(s.text);
-        writeFileSync(file, await tts(text, config));
+        await edgeTts(text, file, config);
         sentences.push({
           sentence: i + 1,
           paragraph: s.paragraph,
@@ -166,8 +162,9 @@ export async function runNewsMediaJob(
         });
       }
       await store.complete(j, {
-        provider: "elevenlabs",
-        model_id: "eleven_v3",
+        provider: config.provider,
+        voice: config.voice,
+        rate: config.rate,
         sentences,
         renderedAt,
       });
@@ -257,7 +254,12 @@ export async function runNewsMediaJob(
           await renderSubtitleFrame(
             path.join(ROOT, binding.file),
             layout,
-            undefined,
+            i === 0
+              ? {
+                  heading: stripMarkdownEmphasis(v.title),
+                  label: `Berita Teknologi · #${n.id}`,
+                }
+              : undefined,
             spec,
           ),
         );
@@ -265,6 +267,8 @@ export async function runNewsMediaJob(
           image,
           audio: path.join(ROOT, audio.sentences[i].file),
           layout,
+          // Title is visual only; existing audio starts with the sentence,
+          // so karaoke must not wait for a spoken title.
           heading: "",
           paragraph: s.text,
         });

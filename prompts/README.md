@@ -36,18 +36,19 @@ SHA-256 saat diimpor: `532f30e102d536923a53efeaea747ef98a6aa41835ff3817343eba4dd
 File dikirim utuh ke Codex dengan live web search, tanpa interpolasi,
 pemangkasan, prefix, atau suffix. Instruksi sumber yang masih menyebut enam
 bagian pada rencana artikel juga dipertahankan. Sesuai permintaan format
-ncpost, `berita/format.md` menggantikan ketentuan heading melalui instruksi
-runtime terpisah: judul teks biasa, empat paragraf tanpa header, Sumber, lalu
-Tag. Gaya bahasa, urutan gagasan, dan riset dari sumber tetap berlaku.
+ncpost, `berita/format.md` menggantikan ketentuan heading dan batas panjang melalui
+instruksi runtime terpisah: judul teks biasa, empat paragraf tanpa header dengan
+tepat dua kalimat per paragraf, Sumber, lalu Tag. Tidak ada batas jumlah kata atau
+karakter. Gaya bahasa, urutan gagasan, dan riset dari sumber tetap berlaku.
 
 `berita/output.schema.json` hanya mengatur pengiriman hasil sebagai objek
 terstruktur: artikel bersih, tiga kandidat, rencana artikel, peta klaim, dan
 sebelas pemeriksaan. Aplikasi menyimpan field tersebut sebagai artefak JSON
 di `output/berita/<id>/<percobaan>/`, bukan meminta model menulis ke filesystem.
-Pemeriksaan panjang teks dan sumber dijalankan kembali oleh aplikasi;
+Pemeriksaan jumlah kalimat dan sumber dijalankan kembali oleh aplikasi;
 penilaian faktual/substantif tetap berasal dari model yang melakukan riset.
 
 Instruksi runtime terpisah (`developer_instructions`) menjelaskan bahwa host
 menyimpan field audit sebagai berkas, karena sesi Codex read-only. Prompt
-Hermes tetap dikirim byte-for-byte. Host tetap memeriksa format dan panjang
+Hermes tetap dikirim byte-for-byte. Host tetap memeriksa format dan jumlah kalimat
 artikel; instruksi runtime tidak mengizinkan pemeriksaan fakta dilewati.

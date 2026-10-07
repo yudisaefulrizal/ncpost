@@ -16,7 +16,7 @@ export const NEWS_SCHEMA_PATH = path.join(
 // Explain the application transport separately; keep the Hermes prompt intact.
 export const NEWS_RUNTIME_INSTRUCTIONS = `Integrasi runtime ncpost: kerjakan seluruh riset dan penulisan sesuai prompt pengguna. Keluaran akhir wajib berupa objek JSON sesuai output schema. Field article berisi artikel Markdown final lengkap, bukan ringkasan atau pesan proses.
 Sesi model memakai filesystem read-only. Aplikasi host akan menyimpan candidate_topics, article_plan, claim_source_map, dan article_validation sebagai berkas JSON bernama sama di direktori run kanonis, serta article sebagai article.md. Pengembalian seluruh field audit yang lengkap adalah cara menyerahkan berkas kepada host; tidak perlu menulis berkas melalui tool. Nilai gate ketersediaan berkas audit berdasarkan kelengkapan data yang diserahkan untuk disimpan host. Jangan menahan artikel hanya karena model tidak dapat menulis filesystem.
-Aplikasi host menghitung kata dan karakter serta memvalidasi format sebelum menerima hasil. Jangan mengklaim menjalankan alat lokal jika tidak dilakukan. Semua pemeriksaan fakta tetap wajib dilakukan menggunakan riset web; jangan menyatakan lolos jika fakta atau data audit belum lengkap.
+Aplikasi host memeriksa dua kalimat lengkap per paragraf serta format sebelum menerima hasil; hitungan kata dan karakter hanya informasi audit, bukan batas kelulusan. Jangan mengklaim menjalankan alat lokal jika tidak dilakukan. Semua pemeriksaan fakta tetap wajib dilakukan menggunakan riset web; jangan menyatakan lolos jika fakta atau data audit belum lengkap.
 
 ${readFileSync(path.join(ROOT, "prompts/berita/format.md"), "utf8")}`;
 export function newsCliArgs(model = process.env.CODEX_MODEL) {

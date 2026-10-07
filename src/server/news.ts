@@ -1,3 +1,4 @@
+import { newsSentences } from "./news-production-domain";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "./config";
@@ -75,15 +76,17 @@ export function validateNewsArticle(raw: string) {
   );
   const wordCount = counts.reduce((a, b) => a + b, 0);
   const characterCount = [...paragraphs.map(plain).join("\n\n")].length;
+  const sentenceCounts = paragraphs.map((p) => newsSentences(p).length);
   if (
-    counts.some((n) => n < 20 || n > 25) ||
-    wordCount < 80 ||
-    wordCount > 100 ||
-    characterCount > 1400
+    paragraphs.some((p) => {
+      const sentences = newsSentences(p);
+      return (
+        sentences.length !== 2 ||
+        sentences.some((s) => !/[.!?]["'”’)]?$/.test(s))
+      );
+    })
   )
-    errors.push(
-      "Setiap paragraf wajib 20–25 kata, total 80–100 kata dan maksimal 1.400 karakter",
-    );
+    errors.push("Setiap paragraf wajib tepat dua kalimat lengkap");
   const tail =
     sourceAt < 0
       ? []
@@ -122,6 +125,7 @@ export function validateNewsArticle(raw: string) {
     paragraphs,
     counts,
     wordCount,
+    sentenceCounts,
     characterCount,
     sourceUrl,
     tags,

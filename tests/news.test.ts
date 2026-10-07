@@ -19,12 +19,13 @@ it("prompt berita tetap byte-for-byte sama dengan sumber Hermes yang diimpor", (
   );
   expect(newsArticlePrompt()).toContain("tepat 6 bagian isi"); // source preserved, including legacy wording
 });
-it("artikel berita memakai judul teks biasa dan empat paragraf tanpa header dengan batas kata tetap", () => {
+it("artikel berita memakai judul teks biasa dan empat paragraf tanpa header dan dua kalimat per paragraf", () => {
   const result = validateNewsArticle(newsFixture().article);
   expect(result).toMatchObject({
     ok: true,
     wordCount: 80,
     counts: [20, 20, 20, 20],
+    sentenceCounts: [2, 2, 2, 2],
     title: "Kabar teknologi baru",
     headings: [],
   });
@@ -34,7 +35,7 @@ it("artikel berita memakai judul teks biasa dan empat paragraf tanpa header deng
     ).ok,
   ).toBe(false);
   expect(
-    validateNewsArticle(newsFixture().article.replace("kata20.", "")).ok,
+    validateNewsArticle(newsFixture().article.replace("kata10.", "kata10")).ok,
   ).toBe(false);
   expect(
     validateNewsArticle(
@@ -130,4 +131,25 @@ it("hasil tanpa pencarian web nyata ditolak meskipun model mengklaim valid", () 
     .map((e) => JSON.stringify(e))
     .join("\n");
   expect(parseNewsResearch(raw).validation.ok).toBe(true);
+});
+
+it("panjang kata dan karakter berita tidak dibatasi; satu/tiga kalimat dan kalimat tidak selesai ditolak", () => {
+  const source = newsFixture().article.split("Sumber:")[1];
+  for (const paragraph of [
+    "Baru diumumkan. Dampaknya besar.",
+    `${Array(200).fill("perkembangan").join(" ")}. ${Array(200).fill("teknologi").join(" ")}.`,
+  ]) {
+    const article = `Judul berita\n\n${Array(4).fill(paragraph).join("\n\n")}\n\nSumber:${source}`;
+    expect(validateNewsArticle(article).ok).toBe(true);
+  }
+  for (const paragraph of [
+    "Hanya satu kalimat.",
+    "Satu kalimat. Dua kalimat. Tiga kalimat.",
+    "Satu kalimat. Kalimat belum selesai",
+  ])
+    expect(
+      validateNewsArticle(
+        `Judul berita\n\n${Array(4).fill(paragraph).join("\n\n")}\n\nSumber:${source}`,
+      ).ok,
+    ).toBe(false);
 });

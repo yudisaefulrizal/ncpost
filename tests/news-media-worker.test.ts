@@ -33,6 +33,16 @@ import { buildReels } from "../src/server/video";
 import { bestAsset } from "../src/server/stock-match";
 import type { NewsMediaStore } from "../src/server/news-media-store";
 import type { Store } from "../src/server/store";
+import { edgeTts } from "../src/server/edge-tts";
+vi.mock("../src/server/edge-tts", () => ({
+  edgeTts: vi.fn(),
+  newsTtsConfig: () => ({
+    enabled: true,
+    provider: "edge-tts",
+    voice: "id-ID-ArdiNeural",
+    rate: "+0%",
+  }),
+}));
 vi.mock("../src/worker/stock-generator", () => ({ generateStock: vi.fn() }));
 vi.mock("../src/server/providers", () => ({
   tts: vi.fn(),
@@ -139,7 +149,9 @@ beforeEach(async () => {
     reason: "Test mock",
     accounts: [{ id: "123", username: "news_test" }],
   });
-  vi.mocked(tts).mockResolvedValue(Buffer.alloc(101));
+  vi.mocked(edgeTts).mockImplementation(async (_text, file) => {
+    writeFileSync(file, Buffer.alloc(101));
+  });
   vi.mocked(pickTemplate).mockReturnValue({ id: "1", vertical: false } as any);
   const png = await sharp({
     create: { width: 20, height: 20, channels: 3, background: "#ffffff" },
@@ -185,21 +197,24 @@ it("reuse stok global tidak memanggil generator baru", async () => {
   vi.mocked(bestAsset).mockReturnValue({ asset: { id: 55 }, score: 1 } as any);
   await runNewsMediaJob(h.store, h.assets, job("S_IMAGE_VERTICAL"));
   expect(generateStock).not.toHaveBeenCalled();
-  expect(h.spies.bind).toHaveBeenCalledTimes(4);
+  expect(h.spies.bind).toHaveBeenCalledTimes(8);
 });
 it("audio berisi kalimat berita saja; kegagalan provider tidak ditandai selesai", async () => {
   const h = harness();
   await runNewsMediaJob(h.store, h.assets, job("TTS_KALIMAT"));
-  expect(tts).toHaveBeenCalledTimes(4);
-  expect(vi.mocked(tts).mock.calls[0][0]).not.toContain("Kabar teknologi");
-  expect(h.p.outputs.TTS_KALIMAT.sentences).toHaveLength(4);
+  expect(edgeTts).toHaveBeenCalledTimes(8);
+  expect(tts).not.toHaveBeenCalled();
+  expect(h.p.outputs.TTS_KALIMAT.provider).toBe("edge-tts");
+  expect(h.p.outputs.TTS_KALIMAT.voice).toBe("id-ID-ArdiNeural");
+  expect(vi.mocked(edgeTts).mock.calls[0][0]).not.toContain("Kabar teknologi");
+  expect(h.p.outputs.TTS_KALIMAT.sentences).toHaveLength(8);
   h.spies.complete.mockClear();
-  vi.mocked(tts).mockRejectedValueOnce(Error("ElevenLabs belum aktif"));
+  vi.mocked(edgeTts).mockRejectedValueOnce(Error("Edge TTS tidak tersedia"));
   await runNewsMediaJob(h.store, h.assets, job("TTS_KALIMAT"));
   expect(h.spies.complete).not.toHaveBeenCalled();
   expect(h.spies.fail).toHaveBeenCalledWith(
     expect.anything(),
-    "ElevenLabs belum aktif",
+    "Edge TTS tidak tersedia",
   );
 });
 it("panel berita menghasilkan empat panel tanpa heading dan satu penutup", async () => {
@@ -226,11 +241,11 @@ it("panel berita menghasilkan empat panel tanpa heading dan satu penutup", async
 it("video V/H memakai audio yang sama dan sumber stok per orientasi", async () => {
   const h = harness();
   h.p.outputs.TTS_KALIMAT = {
-    sentences: Array.from({ length: 4 }, () => ({
+    sentences: Array.from({ length: 8 }, () => ({
       file: "output/.test/audio.mp3",
     })),
   };
-  for (let panel = 1; panel <= 4; panel++)
+  for (let panel = 1; panel <= 8; panel++)
     for (const kind of ["S_IMAGE_HORIZONTAL", "S_IMAGE_VERTICAL"])
       h.p.stock.push({
         kind,
@@ -244,6 +259,18 @@ it("video V/H memakai audio yang sama dan sumber stok per orientasi", async () =
   expect(buildReels).toHaveBeenCalledTimes(2);
   expect(h.p.outputs.VIDEO_KALIMAT.source).toBe("IMAGE_VERTICAL");
   expect(h.p.outputs.VIDEO_KALIMAT_H.source).toBe("IMAGE_HORIZONTAL");
+  const frames = vi.mocked(renderSubtitleFrame).mock.calls;
+  for (const first of [0, 8]) {
+    expect(frames[first][2]).toEqual({
+      heading: "Kabar teknologi baru",
+      label: "Berita Teknologi · #-902",
+    });
+    for (let i = first + 1; i < first + 8; i++)
+      expect(frames[i][2]).toBeUndefined();
+  }
+  // A visual heading must not shift subtitles against sentence-only audio.
+  for (const [panels] of vi.mocked(buildReels).mock.calls)
+    expect(panels.every((panel) => panel.heading === "")).toBe(true);
   expect(h.spies.fail).not.toHaveBeenCalled();
 });
 it("publikasi mencatat request sebelum mengirim; timeout menjadi unknown tanpa retry", async () => {

@@ -3,6 +3,7 @@ import {
   NEWS_CRON_TYPES,
   emptyNewsProduction,
   newsKinds,
+  newsContent,
   newsPrerequisite,
   newsStageDone,
 } from "../server/news-production-domain";
@@ -1190,7 +1191,13 @@ function App() {
   } else if (page === "Produksi Berita") {
     sub =
       "Produksi berita teknologi: artikel, gambar, audio, panel, video, dan Instagram.";
-    content = <NewsProduction instagram={instagram} ttsLive={ttsLive} />;
+    content = (
+      <NewsProduction
+        instagram={instagram}
+        ttsReady={!!settings?.newsTts?.enabled}
+        ttsReason={settings?.newsTts?.reason ?? "Memeriksa Edge TTS berita…"}
+      />
+    );
   } else if (page === "Pengaturan Berita") {
     sub = "Sumber gambar, video, dan akun Instagram per jenis berita.";
     content = (
@@ -2417,10 +2424,12 @@ function CronCell({
 // Pengaturan Konten: satu kartu per judul buku dengan draf lokal sampai disimpan.
 function NewsProduction({
   instagram,
-  ttsLive,
+  ttsReady,
+  ttsReason,
 }: {
   instagram: InstagramConnection;
-  ttsLive: boolean;
+  ttsReady: boolean;
+  ttsReason: string;
 }) {
   const [mediaView, setMediaView] = useState<{
     id: number;
@@ -2517,8 +2526,8 @@ function NewsProduction({
         ? "Butuh artikel selesai"
         : !kinds.length
           ? "Pilih jenis gambar di Pengaturan Konten"
-          : stage === "TTS_KALIMAT" && !ttsLive
-            ? "Aktifkan ElevenLabs di Kredensial"
+          : stage === "TTS_KALIMAT" && !ttsReady
+            ? ttsReason
             : kinds
                 .map((k) => newsPrerequisite(k, p, settings, n.article))
                 .find(Boolean);
@@ -2743,27 +2752,14 @@ function NewsProduction({
             </div>
           ) : mediaView.stage === "IMAGES_PANEL" ||
             mediaView.stage === "IMAGES_VIDEO" ? (
-            <div className="gallery stock">
-              {(mediaCurrent.production?.stock ?? [])
-                .filter((b) =>
-                  newsKinds(
-                    mediaView.stage,
-                    mediaCurrent.settings ?? DEFAULT_BOOK_SETTINGS,
-                  ).includes(b.kind),
-                )
-                .map((b) => (
-                  <figure key={`${b.kind}-${b.panel}`}>
-                    <img
-                      src={`/api/stock/${b.asset_id}/image`}
-                      alt={b.description}
-                    />
-                    <figcaption>
-                      {laneName(b.kind.replace(/^S_/, ""))} · {b.panel}
-                      <small className="block muted">{b.description}</small>
-                    </figcaption>
-                  </figure>
-                ))}
-            </div>
+            <NewsStockView
+              key={`${mediaCurrent.id}-${mediaView.stage}`}
+              article={mediaCurrent}
+              stage={mediaView.stage}
+              busy={busy}
+              error={error}
+              onCreate={(kind) => runMedia(mediaCurrent, kind)}
+            />
           ) : mediaView.stage === "PANEL" ? (
             <div className="gallery">
               {Array.from({ length: 5 }, (_, i) => (
@@ -2782,6 +2778,13 @@ function NewsProduction({
             </div>
           ) : mediaView.stage === "TTS_KALIMAT" ? (
             <div className="stack">
+              <p className="muted">
+                Audio:{" "}
+                {mediaCurrent.production?.outputs.TTS_KALIMAT?.provider ===
+                "edge-tts"
+                  ? `Edge TTS · ${mediaCurrent.production.outputs.TTS_KALIMAT.voice}`
+                  : "ElevenLabs (hasil sebelumnya)"}
+              </p>
               {(
                 mediaCurrent.production?.outputs.TTS_KALIMAT?.sentences ?? []
               ).map((x: any, i: number) => (
@@ -2796,11 +2799,10 @@ function NewsProduction({
               ))}
             </div>
           ) : (
-            <video
-              controls
-              preload="metadata"
-              style={{ maxWidth: "100%", maxHeight: "75vh" }}
-              src={mediaUrl(mediaCurrent.id, mediaView.stage)}
+            <NewsVideoView
+              article={mediaCurrent}
+              stage={mediaView.stage}
+              onSelect={(stage) => setMediaView({ id: mediaCurrent.id, stage })}
             />
           )}
         </Modal>
@@ -2894,6 +2896,172 @@ function NewsProduction({
             </details>
           )}
         </Modal>
+      )}
+    </div>
+  );
+}
+
+function NewsStockView({
+  article,
+  stage,
+  busy,
+  error,
+  onCreate,
+}: {
+  article: NewsArticle;
+  stage: string;
+  busy: boolean;
+  error: string;
+  onCreate: (kind: string) => void;
+}) {
+  const p = article.production ?? emptyNewsProduction();
+  const kinds = newsKinds(stage, article.settings ?? DEFAULT_BOOK_SETTINGS);
+  const [selected, setSelected] = useState(kinds[0] ?? "");
+  const kind = kinds.includes(selected) ? selected : (kinds[0] ?? "");
+  const perSentence = stage === "IMAGES_VIDEO";
+  const content = newsContent(article.article);
+  const expected = perSentence ? content.sentences.length : 4;
+  const items = p.stock.filter((x) => x.kind === kind);
+  const active = p.jobs.some(
+    (j) => j.kind === kind && ["queued", "running"].includes(j.state),
+  );
+  if (!kinds.length)
+    return (
+      <p className="muted">Pilih jenis gambar di Pengaturan Konten berita.</p>
+    );
+  return (
+    <div className="stack">
+      <div className="seg" role="tablist" aria-label="Jenis gambar berita">
+        {kinds.map((k) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={kind === k}
+            className={kind === k ? "on" : ""}
+            onClick={() => setSelected(k)}
+          >
+            {laneName(k.replace(/^S_/, ""))} ·{" "}
+            {p.stock.filter((x) => x.kind === k).length}/{expected}
+          </button>
+        ))}
+      </div>
+      {error && (
+        <p role="alert" className="warn">
+          {error}
+        </p>
+      )}
+      {items.length < expected && (
+        <div className="row-gap">
+          <button
+            className="btn btn-pri btn-sm"
+            disabled={article.state !== "completed" || busy || active}
+            onClick={() => onCreate(kind)}
+          >
+            <Icon name="play" size={14} />
+            {active ? "Sedang diproses…" : "Buat stok lajur ini"}
+          </button>
+          <small className="muted">
+            Hanya lajur ini yang dibuat; lajur lain tetap tersimpan.
+          </small>
+        </div>
+      )}
+      {!items.length ? (
+        <div className="empty">Belum ada gambar untuk jenis ini.</div>
+      ) : (
+        <div
+          className={`stock-grid${HORIZONTAL_KINDS.includes(kind.replace(/^S_/, "")) ? " wide" : ""}`}
+        >
+          {items.map((x) => (
+            <figure key={x.panel}>
+              <a
+                href={`/api/stock/${x.asset_id}/image`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  loading="lazy"
+                  src={`/api/stock/${x.asset_id}/image`}
+                  alt={x.description}
+                />
+              </a>
+              <figcaption>
+                <span className="mono muted">
+                  {perSentence ? "Kalimat" : "Panel"} {x.panel}
+                </span>
+                <span>
+                  {perSentence
+                    ? (content.sentences[x.panel - 1]?.text ?? x.description)
+                    : x.description}
+                </span>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+function NewsVideoView({
+  article,
+  stage,
+  onSelect,
+}: {
+  article: NewsArticle;
+  stage: string;
+  onSelect: (stage: string) => void;
+}) {
+  const outputs = article.production?.outputs ?? {};
+  const m = outputs[stage];
+  const url = `/api/news/${article.id}/media/${stage}/0?v=${encodeURIComponent(m?.renderedAt ?? "")}`;
+  const metrics = [
+    Number.isFinite(m?.duration) ? `${Math.round(m.duration)} dtk` : null,
+    Number.isFinite(m?.frames) ? `${m.frames} frame` : null,
+    Number.isFinite(m?.fps) ? `${m.fps} fps` : null,
+    m?.width && m?.height ? `${m.width}×${m.height}` : null,
+    m?.integrity_check ? `cek integritas ${m.integrity_check}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="stack">
+      <div className="seg" role="tablist" aria-label="Orientasi video berita">
+        {[
+          ["VIDEO_KALIMAT", "Video V (9:16)"],
+          ["VIDEO_KALIMAT_H", "Video H (16:9)"],
+        ].map(([k, label]) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={stage === k}
+            className={stage === k ? "on" : ""}
+            disabled={!outputs[k]}
+            onClick={() => onSelect(k)}
+          >
+            {label}
+            {!outputs[k] ? " · belum tersedia" : ""}
+          </button>
+        ))}
+      </div>
+      {m ? (
+        <>
+          <video
+            key={url}
+            className={`reels-player ${stage === "VIDEO_KALIMAT_H" ? "wide" : "tall"}`}
+            controls
+            preload="metadata"
+            src={url}
+          />
+          {metrics.length > 0 && (
+            <p className="muted small">{metrics.join(" · ")}</p>
+          )}
+          <a
+            className="btn btn-sec btn-sm"
+            href={url}
+            download={`berita-${article.id}-${stage === "VIDEO_KALIMAT_H" ? "video-h" : "video-v"}.mp4`}
+          >
+            Download video
+          </a>
+        </>
+      ) : (
+        <p className="muted">Video belum tersedia.</p>
       )}
     </div>
   );

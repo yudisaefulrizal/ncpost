@@ -52,6 +52,13 @@ export const emptyNewsProduction = (): NewsProductionData => ({
   jobs: [],
   stock: [],
 });
+export function newsSentences(paragraph: string) {
+  return paragraph
+    .replace(/[*_`]/g, "")
+    .trim()
+    .split(/(?<=[.!?])\s+|(?<=[.!?]["'”’)])\s+/)
+    .filter(Boolean);
+}
 export function newsContent(article: string) {
   const lines = article.replace(/\r\n/g, "\n").trim().split("\n");
   const title = (lines.shift() ?? "").replace(/^#+\s*/, "");
@@ -69,11 +76,7 @@ export function newsContent(article: string) {
     .map((t) => t.trim())
     .filter(Boolean);
   const sentences = paragraphs.flatMap((p, i) =>
-    p
-      .replace(/[*_`]/g, "")
-      .split(/(?<=[.!?])\s+/)
-      .filter(Boolean)
-      .map((text) => ({ text, paragraph: i + 1 })),
+    newsSentences(p).map((text) => ({ text, paragraph: i + 1 })),
   );
   return { title, paragraphs, tags, sentences };
 }

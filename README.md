@@ -141,8 +141,9 @@ memakai komponen gambar, audio, render, dan Instagram yang sama dengan buku.
 
 Artikel, tiga kandidat, alasan pemilihan, sumber, dan laporan validasi bisa
 dibuka dari daftar produksi. Hasil dapat diunduh sebagai Markdown. Aplikasi
-memeriksa judul teks biasa dan empat paragraf tanpa header, 20–25 kata per paragraf, total 80–100 kata,
-maksimal 1.400 karakter isi, satu sumber terpilih, dan maksimal lima tag.
+memeriksa judul teks biasa dan empat paragraf tanpa header, masing-masing tepat
+dua kalimat lengkap, satu sumber terpilih, dan maksimal lima tag. Jumlah kata
+dan karakter artikel tidak dibatasi.
 Laporan fakta mengikuti riset model; selesai membuat artikel bukan status
 lolos editor produksi buku. URL sumber yang sudah digunakan ditolak untuk
 mencegah artikel duplikat. Kegagalan/lease kedaluwarsa perlu dicoba ulang
@@ -171,8 +172,23 @@ gambar hanya membuat lajur yang belum lengkap. Regenerate gambar membuat
 aset baru tanpa menghapus kolam stok atau render yang tidak bergantung padanya.
 
 Panel berita berisi empat paragraf tanpa header dan satu slide penutup.
-Audio memakai ElevenLabs `eleven_v3` per kalimat; aktifkan kredensial dan
-`LIVE_TTS` sebelum membuat audio. Video V/H memakai gambar per kalimat,
+Audio berita memakai Edge TTS per kalimat, default suara Indonesia
+`id-ID-ArdiNeural`, tanpa memakai kredensial atau kuota ElevenLabs buku.
+Pasang dependensi lokal sekali dengan:
+
+```bash
+python3 -m venv data/edge-tts
+data/edge-tts/bin/python -m pip install -r requirements-tts.txt
+```
+
+`NEWS_EDGE_TTS=false` menonaktifkan audio berita. Suara dan kecepatan dapat diatur
+melalui `NEWS_EDGE_TTS_VOICE` dan `NEWS_EDGE_TTS_RATE` (default `+0%`).
+`EDGE_TTS_EXECUTABLE` dapat menunjuk executable absolut lain. Edge TTS memerlukan
+koneksi internet; kegagalan layanan membuat job gagal tanpa beralih ke ElevenLabs.
+Audio lama tetap tersedia; buat ulang Audio untuk menggantinya dengan Edge TTS,
+lalu buat ulang Video V/H. Audio buku tetap mengikuti `LIVE_TTS` dan ElevenLabs.
+
+ Video V/H memakai gambar per kalimat,
 audio yang sama, subtitle, visualizer, dan CTA produksi buku. Hasil tersimpan
 secara terpisah di `output/berita/media/<id>/<revisi>/<job>-<percobaan>/`.
 

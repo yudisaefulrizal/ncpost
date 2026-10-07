@@ -1,4 +1,5 @@
 import { NewsCronStore } from "./news-cron";
+import { newsTtsConfig } from "./edge-tts";
 import { newsKinds, NEWS_MEDIA_STAGES } from "./news-production-domain";
 import { NewsMediaStore } from "./news-media-store";
 import { NewsStore } from "./news-store";
@@ -450,6 +451,13 @@ app.get("/api/settings", async (_, res) => {
         : "Live TTS diblokir (LIVE_TTS=false)",
       model: "eleven_v3",
     },
+    newsTts: (({ enabled, provider, voice, rate, reason }) => ({
+      enabled,
+      provider,
+      voice,
+      rate,
+      reason,
+    }))(newsTtsConfig()),
     ncwa: await accounts(),
     reels: "Reels aktif melalui NC-WA (videoUrl publik)",
   });

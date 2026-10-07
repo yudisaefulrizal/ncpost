@@ -3,7 +3,7 @@
   "properties": {
     "article": {
       "type": "string",
-      "description": "Artikel final: judul teks biasa, empat paragraf tanpa header/subjudul, blok Sumber dengan satu tautan Markdown, lalu Tag paling akhir. Gaya bahasa dan riset mengikuti prompt Hermes; format mengikuti instruksi runtime ncpost."
+      "description": "Artikel final: judul teks biasa, empat paragraf tanpa header/subjudul dengan tepat dua kalimat lengkap per paragraf, tanpa batas jumlah kata atau karakter, blok Sumber dengan satu tautan Markdown, lalu Tag paling akhir. Gaya bahasa dan riset mengikuti prompt Hermes; format mengikuti instruksi runtime ncpost."
     },
     "candidate_topics": {
       "type": "array",
