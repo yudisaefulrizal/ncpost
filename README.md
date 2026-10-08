@@ -1,5 +1,7 @@
 # NC Post Web
 
+<!-- Uji auto-deploy GitHub: 2026-10-08. -->
+
 Aplikasi lokal Node.js 22.23+ untuk antrean buku, editor artikel, worker persisten, stok gambar Codex CLI, dan preview template asli. UI berbahasa Indonesia; satu tujuan publikasi: Instagram Reels melalui NC-WA. Belum merupakan pipeline produksi video lengkap.
 
 ## Menjalankan
