@@ -78,7 +78,7 @@ output/how-to-win-friends-and-influence-people/02-ganti-kritik-dengan-empati/
 └─ quote.jpg
 ```
 
-Nama folder mengikuti nomor bagian: mengubah atau mengurutkan ulang nomor mengganti nama foldernya (panel dan video dibuang karena memuat nomor lama), dan menghapus bagian menghapus foldernya. Kolam stok gambar (`output/stock`), salinan publik (`output/public`), `cache/`, dan `work/` tetap di tempatnya, dan namanya tidak dipakai sebagai nama folder buku. Hasil render lama per id dipindahkan dengan `npx tsx scripts/migrate-output.ts`. Template dan CTA sumber dibaca saja. Semua prompt (artikel, review, quote, gambar quote, stok gambar, pembungkus Codex) dan lexicon editor ada di folder `prompts/`, satu file per prompt; lihat `prompts/README.md`.
+Nama folder mengikuti nomor bagian: mengubah atau mengurutkan ulang nomor mengganti nama foldernya (panel dan video dibuang karena memuat nomor lama), dan menghapus bagian menghapus foldernya. Kolam stok gambar (`output/stock`), salinan publik (`output/public`), `cache/`, dan `work/` tetap di tempatnya, dan namanya tidak dipakai sebagai nama folder buku. Hasil render lama per id dipindahkan dengan `npx tsx scripts/migrate-output.ts`. Template dan CTA disimpan di `asset/templates` dan `asset/closing-slide` dalam repository ini dan dibaca saja saat runtime. Semua prompt (artikel, review, quote, gambar quote, stok gambar, pembungkus Codex) dan lexicon editor ada di folder `prompts/`, satu file per prompt; lihat `prompts/README.md`.
 
 ## Status implementasi
 

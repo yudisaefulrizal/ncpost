@@ -1,6 +1,6 @@
 import path from "node:path";
 import { realpathSync } from "node:fs";
-export const SOURCE = path.resolve(process.cwd(), "../ncpost-hermes");
+export const SOURCE = process.cwd();
 export const TEMPLATE_ROOT = path.join(SOURCE, "asset/templates");
 export const CTA_ROOT = path.join(SOURCE, "asset/closing-slide");
 export const templates = [
