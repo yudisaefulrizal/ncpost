@@ -12,6 +12,7 @@
     "worker": "tsx src/worker/main.ts",
     "probe": "tsx scripts/probe.ts",
     "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=./data/playwright playwright test",
+    "migrate": "tsx scripts/db-migrate.ts",
     "db:setup": "tsx scripts/db-setup.ts"
   },
   "dependencies": {

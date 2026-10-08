@@ -1,12 +1,12 @@
 // Membuat database, user aplikasi terbatas, tabel dan akun admin default.
 // Password root hanya dibaca dari env saat dijalankan, tidak disimpan:
 //   MYSQL_ROOT_PASSWORD=... npm run db:setup
-import { readFileSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import dotenv from "dotenv";
 import { ROOT } from "../src/server/config";
+import { migrateDatabase } from "../src/server/migrations";
 import { writeEnvValue } from "../src/server/credentials";
 import { hashPassword } from "../src/server/auth";
 dotenv.config({
@@ -33,7 +33,6 @@ const root = await mysql.createConnection({
   password: rootPassword,
   multipleStatements: true,
 });
-const schema = readFileSync(path.join(ROOT, "src/server/schema.sql"), "utf8");
 try {
   for (const h of ["localhost", "127.0.0.1"]) {
     await root.query("CREATE USER IF NOT EXISTS ?@? IDENTIFIED BY ?", [
@@ -48,35 +47,10 @@ try {
       `CREATE DATABASE IF NOT EXISTS \`${db}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
     );
     await root.query(`USE \`${db}\``);
-    await root.query(schema);
-    const [newsOutputIndexes] = (await root.query(
-      "SHOW INDEX FROM news_media_outputs WHERE Key_name='PRIMARY'",
-    )) as any;
-    if (
-      !newsOutputIndexes.some((index: any) => index.Column_name === "revision")
-    )
-      await root.query(
-        "ALTER TABLE news_media_outputs DROP PRIMARY KEY, ADD PRIMARY KEY(news_id,revision,kind)",
-      );
-    const [cronColumns] = (await root.query(
-      "SHOW COLUMNS FROM book_cron",
-    )) as any;
-    const hasCronColumn = (name: string) =>
-      cronColumns.some((c: any) => c.Field === name);
-    if (!hasCronColumn("interval_hours"))
-      await root.query(
-        "ALTER TABLE book_cron ADD COLUMN interval_hours INT NOT NULL DEFAULT 24",
-      );
-    if (!hasCronColumn("next_run")) {
-      await root.query("ALTER TABLE book_cron ADD COLUMN next_run BIGINT NULL");
-      await root.query(
-        "UPDATE book_cron SET next_run=? + interval_hours*3600000 WHERE enabled=1",
-        [Date.now()],
-      );
-    }
+    await migrateDatabase(root);
     for (const h of ["localhost", "127.0.0.1"])
       await root.query(
-        `GRANT SELECT, INSERT, UPDATE, DELETE ON \`${db}\`.* TO ?@?`,
+        `GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES ON \`${db}\`.* TO ?@?`,
         [user, h],
       );
     const [users] = (await root.query(

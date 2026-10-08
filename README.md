@@ -23,7 +23,11 @@ npm run worker
 
 Login memakai akun di tabel `users` (password hash scrypt). Akun default: `admin@gmail.com` / `admin123`. Cookie sesi ditandatangani `SESSION_SECRET` di `.env` (dibuat otomatis bila `.env` belum ada; minimal 16 karakter).
 
-Setup database (sekali, password root hanya lewat env dan tidak disimpan): `MYSQL_ROOT_PASSWORD=... npm run db:setup`. Skrip membuat database, tabel (`src/server/schema.sql`), akun admin, dan user MySQL `ncpost` yang hanya punya SELECT/INSERT/UPDATE/DELETE; password-nya ditulis ke `DB_PASSWORD` di `.env`.
+Setup database (sekali, password root hanya lewat env dan tidak disimpan): `MYSQL_ROOT_PASSWORD=... npm run db:setup`. Skrip membuat database, tabel (`src/server/schema.sql`), akun admin, dan user MySQL `ncpost` dengan hak SELECT/INSERT/UPDATE/DELETE serta CREATE/ALTER/INDEX/REFERENCES untuk migrasi; password-nya ditulis ke `DB_PASSWORD` di `.env`.
+
+Update struktur database: `npm run migrate`. Koneksi memakai `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, dan `DB_PASSWORD` dari `.env`, hanya untuk `DB_NAME`; tidak membuat database/user atau akun admin. Perubahan tabel lama ditulis sebagai migrasi eksplisit di `src/server/migrations.ts`; mengedit `schema.sql` saja tidak mengubah tabel lama. Migrasi yang tersedia aman dijalankan ulang.
+
+User database dari setup versi lama hanya memiliki hak CRUD. Administrator database perlu memberikan hak CREATE, ALTER, INDEX, REFERENCES pada database tersebut sekali sebelum migrasi dapat berjalan. Migrasi sendiri tidak membutuhkan kredensial root.
 
 Untuk deployment HTTPS yang nanti diatur pengguna, set `PUBLIC_HTTPS=true` agar cookie memakai Secure. Origin publik yang diizinkan adalah `https://ncpost.nuscode.id`; origin lokal `http://127.0.0.1:8072`. Session HMAC HttpOnly SameSite=Strict kedaluwarsa 8 jam, mutasi membutuhkan Origin tepat, login dibatasi. API, template, CTA, dan preview media membutuhkan sesi. Shell login/frontend tersedia tanpa sesi tetapi tidak membawa data antrean atau key. Jangan mengekspose folder proyek lewat web server lain.
 
