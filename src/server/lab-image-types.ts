@@ -1,6 +1,7 @@
 export type LabImageType = {
   kind: string;
   name: string;
+  imageType?: "illustration" | "ready_post";
   orientation: "horizontal" | "vertikal" | "bebas";
 };
 export type LabImageCatalog = { stock: LabImageType[]; quote: LabImageType[] };
@@ -21,11 +22,19 @@ export function labImageKind(value: unknown) {
   } as const;
 }
 export function labImageCatalog(
-  rows: { id: number; name: string; reference_key?: string | null }[],
+  rows: {
+    id: number;
+    name: string;
+    reference_key?: string | null;
+    image_type?: string;
+  }[],
 ): LabImageCatalog {
   const stock: LabImageType[] = [],
     quote: LabImageType[] = [];
   for (const row of rows) {
+    const imageType: "ready_post" | "illustration" =
+      row.image_type === "ready_post" ? "ready_post" : "illustration";
+    const typeMetadata = row.image_type ? { imageType } : {};
     const key = row.reference_key || "";
     const stockOnly = key.startsWith("IMAGE_");
     const horizontal = [
@@ -35,18 +44,21 @@ export function labImageCatalog(
     {
       if (!stockOnly || horizontal)
         stock.push({
+          ...typeMetadata,
           kind: `IMAGE_LAB_${row.id}_H`,
           name: `${row.name} · horizontal`,
           orientation: "horizontal",
         });
       if (!stockOnly || !horizontal)
         stock.push({
+          ...typeMetadata,
           kind: `IMAGE_LAB_${row.id}_V`,
           name: `${row.name} · vertikal`,
           orientation: "vertikal",
         });
     }
     quote.push({
+      ...typeMetadata,
       kind: `QUOTE_LAB_${row.id}`,
       name: row.name,
       orientation: "bebas",

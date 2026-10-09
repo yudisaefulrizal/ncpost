@@ -9,6 +9,11 @@ export function labKind(value: unknown): LabKind {
 }
 export function labInput(input: any) {
   const kind = labKind(input?.kind);
+  const imageType = input.imageType ?? "illustration";
+  if (!["illustration", "ready_post"].includes(imageType))
+    throw Error("Jenis gambar Lab tidak valid");
+  if (kind !== "image" && imageType !== "illustration")
+    throw Error("Label siap posting hanya untuk Lab Gambar");
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
   const context = typeof input.input === "string" ? input.input.trim() : "";
@@ -34,6 +39,7 @@ export function labInput(input: any) {
     throw Error("Referensi gambar hanya untuk Lab Gambar");
   return {
     kind,
+    imageType,
     name,
     prompt,
     input: context,
@@ -48,6 +54,7 @@ export function labFinalPrompt(prompt: string, input: string) {
   return input ? `${prompt}\n\nInput uji:\n${input}` : prompt;
 }
 export interface LabRun {
+  image_type?: string;
   reference_images?: string | null;
   reference_image?: string | null;
   logo_image?: string | null;
@@ -90,7 +97,7 @@ export class LabStore {
     await Promise.all(draft.referenceImages.map(labImageFile));
     if (id !== undefined) {
       const [r]: any = await this.db.query(
-        "UPDATE lab_prompts SET name=?,prompt=?,reference_key=?,reference_image=?,logo_image=?,reference_images=? WHERE id=? AND kind=?",
+        "UPDATE lab_prompts SET name=?,prompt=?,reference_key=?,reference_image=?,logo_image=?,reference_images=?,image_type=? WHERE id=? AND kind=?",
         [
           draft.name,
           draft.prompt,
@@ -98,6 +105,7 @@ export class LabStore {
           draft.referenceImage,
           draft.logoImage,
           JSON.stringify(draft.referenceImages),
+          draft.imageType,
           id,
           draft.kind,
         ],
@@ -106,7 +114,7 @@ export class LabStore {
       return id;
     }
     const [r]: any = await this.db.query(
-      "INSERT INTO lab_prompts(kind,name,prompt,reference_key,reference_image,logo_image,reference_images) VALUES(?,?,?,?,?,?,?)",
+      "INSERT INTO lab_prompts(kind,name,prompt,reference_key,reference_image,logo_image,reference_images,image_type) VALUES(?,?,?,?,?,?,?,?)",
       [
         draft.kind,
         draft.name,
@@ -115,6 +123,7 @@ export class LabStore {
         draft.referenceImage,
         draft.logoImage,
         JSON.stringify(draft.referenceImages),
+        draft.imageType,
       ],
     );
     return r.insertId as number;
@@ -123,7 +132,7 @@ export class LabStore {
     const draft = labInput(input);
     await Promise.all(draft.referenceImages.map(labImageFile));
     const [r]: any = await this.db.query(
-      "INSERT INTO lab_runs(kind,name,prompt,input,orientation,reference_key,resolved_prompt,reference_image,logo_image,reference_images) VALUES(?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO lab_runs(kind,name,prompt,input,orientation,reference_key,resolved_prompt,reference_image,logo_image,reference_images,image_type) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
       [
         draft.kind,
         draft.name,
@@ -138,13 +147,14 @@ export class LabStore {
         draft.referenceImage,
         draft.logoImage,
         JSON.stringify(draft.referenceImages),
+        draft.imageType,
       ],
     );
     return r.insertId as number;
   }
   async list(kind: LabKind) {
     const [rows] = await this.db.query(
-      "SELECT id,kind,name,prompt,reference_key,reference_image,logo_image,reference_images,state,error,orientation,created_at,started_at,finished_at FROM lab_runs WHERE kind=? ORDER BY id DESC LIMIT 100",
+      "SELECT id,kind,name,prompt,image_type,reference_key,reference_image,logo_image,reference_images,state,error,orientation,created_at,started_at,finished_at FROM lab_runs WHERE kind=? ORDER BY id DESC LIMIT 100",
       [kind],
     );
     return rows;

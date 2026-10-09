@@ -1576,3 +1576,38 @@ dialog.app-dialog::backdrop {
   outline: 2px solid var(--brand-ink);
   outline-offset: 2px;
 }
+
+.output-targets {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.output-targets legend {
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.output-target-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.output-target-options .check-row {
+  border: 1px solid var(--line, #dce4df);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+.output-target-options .check-row:has(input:checked) {
+  background: #e3f1ea;
+  border-color: #16805e;
+}
+.output-target-options input:disabled {
+  opacity: 1;
+}
+@media (max-width: 800px) {
+  .output-target-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

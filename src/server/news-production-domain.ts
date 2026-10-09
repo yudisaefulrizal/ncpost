@@ -114,6 +114,7 @@ export function newsPrerequisite(
     kind === "POST_IMAGE"
   )
     return null;
+  if (kind === "PANEL" && s.carouselMode === "direct") return null;
   if (kind === "PANEL")
     return (s.panelHorizontal || s.panelVertical) &&
       [s.panelHorizontal, s.panelVertical]
@@ -161,6 +162,7 @@ export function newsStageDone(
   if (stage === "PANEL")
     return (
       !!p.outputs.PANEL &&
+      (p.outputs.PANEL.mode || "template") === (s.carouselMode || "template") &&
       p.outputs.PANEL.sources?.panelHorizontal === s.panelHorizontal &&
       p.outputs.PANEL.sources?.panelVertical === s.panelVertical
     );

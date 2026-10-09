@@ -46,6 +46,11 @@ const orderKinds = (kinds: string[]) => [
 ];
 export interface BookSettings {
   labPromptIds?: number[];
+  managed?: boolean;
+  autoProcess?: boolean;
+  wholeTextImageKind?: string | null;
+  singleImageMode?: "template" | "direct";
+  carouselMode?: "template" | "direct";
   instagramAccountId: string | null;
   youtubeAccountId: string | null;
   tiktokAccountId: string | null;
@@ -123,7 +128,9 @@ export function normalizeBookSettings(input: any): BookSettings {
   // Sumber panel selalu ikut dibuat; urutan mengikuti STOCK_KINDS.
   const needed = new Set<string>([
     ...chosen,
-    ...[panelHorizontal, panelVertical].filter((k): k is string => !!k),
+    ...(input?.carouselMode === "direct"
+      ? []
+      : [panelHorizontal, panelVertical].filter((k): k is string => !!k)),
   ]);
   const sentence = Array.isArray(input?.sentenceKinds)
     ? [...input.sentenceKinds]
@@ -156,7 +163,36 @@ export function normalizeBookSettings(input: any): BookSettings {
       labIds.some((id: unknown) => !Number.isSafeInteger(id) || Number(id) < 1))
   )
     throw Error("Pilihan prompt Lab tidak valid");
+  for (const key of ["managed", "autoProcess"]) {
+    if (input?.[key] !== undefined && typeof input[key] !== "boolean")
+      throw Error("Status produksi otomatis tidak valid");
+  }
+  if (
+    input?.wholeTextImageKind != null &&
+    !isStockKind(input.wholeTextImageKind)
+  )
+    throw Error("Gaya gambar tunggal tidak dikenal");
+  for (const key of ["singleImageMode", "carouselMode"]) {
+    if (
+      input?.[key] !== undefined &&
+      !["template", "direct"].includes(input[key])
+    )
+      throw Error("Cara pembuatan gambar tidak dikenal");
+  }
   return {
+    ...(input?.singleImageMode !== undefined
+      ? { singleImageMode: input.singleImageMode }
+      : {}),
+    ...(input?.carouselMode !== undefined
+      ? { carouselMode: input.carouselMode }
+      : {}),
+    ...(input?.managed !== undefined ? { managed: input.managed } : {}),
+    ...(input?.autoProcess !== undefined
+      ? { autoProcess: input.autoProcess }
+      : {}),
+    ...(input?.wholeTextImageKind !== undefined
+      ? { wholeTextImageKind: input.wholeTextImageKind || null }
+      : {}),
     ...(labIds !== undefined
       ? { labPromptIds: [...new Set<number>(labIds)] }
       : {}),

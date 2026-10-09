@@ -1,8 +1,13 @@
+import { resolveImageSettings } from "./lab-image-settings";
 import { validateLabSettings } from "./lab-production";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type mysql from "mysql2/promise";
 import { normalizeBookSettings } from "./book-settings";
-import { contentTypeUpdate, type ContentType } from "./content-type-domain";
+import {
+  contentTypeUpdate,
+  normalizeContentType,
+  type ContentType,
+} from "./content-type-domain";
 export * from "./content-type-domain";
 const context = new AsyncLocalStorage<ContentType>();
 export const currentContentType = () => context.getStore();
@@ -28,7 +33,7 @@ export class ContentTypeStore {
     const [rows]: any = await this.db.query(
       "SELECT * FROM content_types ORDER BY id",
     );
-    return rows.map(decode) as ContentType[];
+    return Promise.all(rows.map((row: any) => this.resolve(decode(row))));
   }
   async get(id: number) {
     const [rows]: any = await this.db.query(
@@ -36,11 +41,23 @@ export class ContentTypeStore {
       [id],
     );
     if (!rows[0]) throw Error("Jenis konten tidak ditemukan");
-    return decode(rows[0]);
+    return this.resolve(decode(rows[0]));
+  }
+  private async resolve(type: ContentType): Promise<ContentType> {
+    if (!type.settings?.managed) return type;
+    const settings = await resolveImageSettings(this.db, type.settings);
+    return { ...type, ...normalizeContentType({ ...type, settings }) };
   }
   async save(input: unknown, id?: number) {
     const existing = id ? await this.get(id) : undefined;
-    const value = contentTypeUpdate(input, existing);
+    const submitted: any = input;
+    const configured = submitted?.settings?.managed
+      ? {
+          ...submitted,
+          settings: await resolveImageSettings(this.db, submitted.settings),
+        }
+      : input;
+    const value = contentTypeUpdate(configured, existing);
     await validateLabSettings(this.db, value.settings, value.engine);
     if (id && existing) {
       if (existing.engine !== value.engine)

@@ -68,6 +68,7 @@ export interface Chapter {
   panels: string | null;
   created_at: string;
   stock_counts?: Record<string, number>;
+  production_jobs?: { kind: string; state: string; error: string | null }[];
 }
 export interface Job {
   id: number;
@@ -411,6 +412,16 @@ export class Store {
           .filter((x) => x.chapter_id === c.id)
           .map((x) => [x.kind, Number(x.n)]),
       );
+    const latest = await rows<any>(
+      this.db,
+      `SELECT j.chapter_id,j.kind,j.state,j.error FROM jobs j JOIN (
+        SELECT MAX(j.id) id FROM jobs j JOIN chapters c ON c.id=j.chapter_id AND c.revision=j.revision
+        ${currentContentType() ? "WHERE c.content_type_id=?" : ""} GROUP BY j.chapter_id,j.kind
+      ) last ON last.id=j.id ORDER BY j.id DESC`,
+      currentContentType() ? [currentContentType()!.id] : [],
+    );
+    for (const c of chapters)
+      c.production_jobs = latest.filter((j) => j.chapter_id === c.id);
     return chapters;
   }
   // Pengaturan konten per buku; buku tanpa baris memakai bawaan.
@@ -419,6 +430,8 @@ export class Store {
     db: Db = this.db,
     typeId = currentContentType()?.id ?? 1,
   ): Promise<BookSettings> {
+    const parentType = await new ContentTypeStore(this.db).get(typeId);
+    if (parentType.settings?.managed) return parentType.settings;
     const row = (
       await rows<{ settings: string }>(
         db,
@@ -526,6 +539,14 @@ export class Store {
     );
     for (const cron of due) {
       try {
+        const type = await new ContentTypeStore(this.db).get(
+          cron.content_type_id ?? 1,
+        );
+        if (
+          type.settings?.managed &&
+          !["POST_IG", "REELS_IG"].includes(cron.kind)
+        )
+          continue;
         if (
           Number(cron.last_tick) >= tick ||
           !intervalDue(
@@ -709,7 +730,11 @@ export class Store {
       );
       if (!panelSources(settings).length)
         throw Error("Pilih sumber gambar panel");
-      for (const source of panelSources(settings))
+      if (c.article_status !== "siap" || !validateArticle(c.article).ok)
+        throw Error("Carousel butuh artikel lolos editor");
+      for (const source of settings.carouselMode === "direct"
+        ? []
+        : panelSources(settings))
         if ((await this.stock(id, source, connection)).length < PANEL_COUNT)
           throw Error("Render panel butuh enam stok gambar " + source);
     }

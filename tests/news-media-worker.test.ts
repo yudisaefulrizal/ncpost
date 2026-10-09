@@ -367,3 +367,74 @@ it("gambar post menghasilkan satu infografis dari seluruh paragraf tanpa prasyar
   expect(h.spies.complete).not.toHaveBeenCalled();
   expect(h.spies.fail).toHaveBeenCalledWith(expect.anything(), "Gambar gagal");
 });
+
+it("direct carousel generates final slides without stocks or template rendering", async () => {
+  const h = harness(),
+    j = job("PANEL");
+  j.settings = JSON.stringify(
+    normalizeBookSettings({
+      ...JSON.parse(j.settings),
+      carouselMode: "direct",
+      stockKinds: [],
+    }),
+  );
+  vi.mocked(generateCodexImage).mockImplementation(
+    async (_prompt, _work, file) => {
+      writeFileSync(
+        file,
+        await sharp({
+          create: { width: 100, height: 150, channels: 3, background: "white" },
+        })
+          .png()
+          .toBuffer(),
+      );
+      return { width: 100, height: 150, thread: "test", output: file };
+    },
+  );
+  await runNewsMediaJob(h.store, h.assets, j);
+  expect(h.spies.fail).not.toHaveBeenCalled();
+  expect(generateStock).not.toHaveBeenCalled();
+  expect(renderPanel).not.toHaveBeenCalled();
+  expect(h.p.outputs.PANEL).toMatchObject({
+    mode: "direct",
+    panels: expect.any(Array),
+    closing: expect.stringContaining("05-slide-penutup.jpg"),
+  });
+  expect(h.p.outputs.PANEL.panels).toHaveLength(4);
+  expect(generateCodexImage).toHaveBeenCalledTimes(5);
+  expect(
+    await sharp(
+      path.join(process.cwd(), h.p.outputs.PANEL.panels[0].file),
+    ).metadata(),
+  ).toMatchObject({ width: 1080, height: 1350 });
+});
+it("direct single image is saved as a posting-ready JPEG with its final prompt", async () => {
+  const h = harness(),
+    j = job("POST_IMAGE");
+  j.settings = JSON.stringify({
+    ...JSON.parse(j.settings),
+    singleImageMode: "direct",
+  });
+  vi.mocked(generateCodexImage).mockImplementation(
+    async (_prompt, _work, file) => {
+      writeFileSync(
+        file,
+        await sharp({
+          create: { width: 100, height: 150, channels: 3, background: "white" },
+        })
+          .png()
+          .toBuffer(),
+      );
+      return { width: 100, height: 150, thread: "test", output: file };
+    },
+  );
+  await runNewsMediaJob(h.store, h.assets, j);
+  expect(h.spies.fail).not.toHaveBeenCalled();
+  expect(h.p.outputs.POST_IMAGE).toMatchObject({
+    mode: "direct",
+    width: 1080,
+    height: 1350,
+    prompt: expect.stringContaining("gambar final siap posting"),
+  });
+  expect(generateCodexImage).toHaveBeenCalledTimes(1);
+});

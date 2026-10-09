@@ -1,9 +1,8 @@
+import { ContentPlanFields, finalTargets, planSettings } from "./content-plan";
+import type { BookSettings } from "../server/book-settings";
 import { Modal } from "./modal";
 import React, { useState, createContext, useContext } from "react";
-import {
-  CONTENT_OUTPUTS,
-  type ContentType,
-} from "../server/content-type-domain";
+import { FINAL_OUTPUTS, type ContentType } from "../server/content-type-domain";
 import { api } from "./api";
 export const ContentTypeContext = createContext<ContentType | null>(null);
 export const useContentType = () => useContext(ContentTypeContext);
@@ -19,14 +18,25 @@ export function ContentTypes({
   const [editing, setEditing] = useState<ContentType | "new" | null>(null);
   const [name, setName] = useState("");
   const [engine, setEngine] = useState<"book" | "news">("book");
-  const [outputs, setOutputs] = useState<string[]>(["ARTICLE"]);
+  const [outputs, setOutputs] = useState<string[]>(["VIDEO_KALIMAT"]);
+  const [settings, setSettings] = useState<BookSettings>(() => ({
+    ...planSettings(["VIDEO_KALIMAT"], null),
+    autoProcess: true,
+  }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const edit = (type: ContentType | "new") => {
     setEditing(type);
     setName(type === "new" ? "" : type.name);
     setEngine(type === "new" ? "book" : type.engine);
-    setOutputs(type === "new" ? ["ARTICLE"] : type.outputs);
+    const next =
+      type === "new" ? ["VIDEO_KALIMAT"] : finalTargets(type.outputs);
+    setOutputs(next);
+    setSettings(
+      type === "new"
+        ? { ...planSettings(next, null), autoProcess: true }
+        : planSettings(next, type.settings),
+    );
     setError("");
   };
   const save = async (event: React.FormEvent) => {
@@ -39,7 +49,7 @@ export function ContentTypes({
           ? "/content-types"
           : `/content-types/${(editing as ContentType).id}`,
         editing === "new" ? "POST" : "PUT",
-        { name, engine, outputs },
+        { name, engine, outputs, settings },
       );
       await onSaved();
       setEditing(null);
@@ -62,7 +72,7 @@ export function ContentTypes({
           <thead>
             <tr>
               <th>Nama</th>
-              <th>Keluaran</th>
+              <th>Target output</th>
               <th>Aksi</th>
             </tr>
           </thead>
@@ -75,9 +85,9 @@ export function ContentTypes({
                   </button>
                 </td>
                 <td>
-                  {CONTENT_OUTPUTS.filter(([key]) => type.outputs.includes(key))
+                  {FINAL_OUTPUTS.filter(([key]) => type.outputs.includes(key))
                     .map(([, label]) => label)
-                    .join(", ")}
+                    .join(", ") || "Belum diatur"}
                 </td>
                 <td>
                   <div className="toolbar">
@@ -127,35 +137,20 @@ export function ContentTypes({
                 disabled={editing !== "new"}
                 onChange={(e) => {
                   setEngine(e.target.value as "book" | "news");
-                  setOutputs(["ARTICLE"]);
                 }}
               >
                 <option value="book">Buku</option>
                 <option value="news">Berita teknologi</option>
               </select>
             </label>
-            <div className="stack-sm">
-              <b>Keluaran</b>
-              {CONTENT_OUTPUTS.filter(
-                ([key]) =>
-                  engine === "book" || !["QUOTE", "QUOTE_IMAGE"].includes(key),
-              ).map(([key, label]) => (
-                <label key={key} className="check-row">
-                  <input
-                    type="checkbox"
-                    checked={outputs.includes(key)}
-                    onChange={(e) =>
-                      setOutputs((values) =>
-                        e.target.checked
-                          ? [...values, key]
-                          : values.filter((k) => k !== key),
-                      )
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
+            <ContentPlanFields
+              outputs={outputs}
+              settings={settings}
+              onChange={(next, value) => {
+                setOutputs(next);
+                setSettings(value);
+              }}
+            />
             {error && (
               <p className="warn" role="alert">
                 {error}

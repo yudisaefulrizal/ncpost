@@ -1,3 +1,4 @@
+import { ContentPlanCard } from "./content-plan";
 import { ImageCatalogProvider, useImageCatalog } from "./image-catalog";
 import { LabPromptSettings } from "./lab-prompt-settings";
 import { api, setContentTypeScope } from "./api";
@@ -8,6 +9,7 @@ import {
 } from "./content-types";
 import {
   contentStages,
+  isFinalOutput,
   contentAllows,
   type ContentType,
 } from "../server/content-type-domain";
@@ -193,6 +195,7 @@ function App() {
     ? contentStages(activeType)
     : new Set<string>();
   const uses = (stage: string) => !activeType || activeStages.has(stage);
+  const showsOutput = (stage: string) => uses(stage) && isFinalOutput(stage);
   const contentNav: [string, IconName][] =
     activeType?.engine === "news"
       ? [
@@ -226,7 +229,10 @@ function App() {
     setBookCrons(crons);
   };
   const settingsFor = (book: string): BookSettings =>
-    bookSettings.find((b) => bookKey(b.book) === bookKey(book))?.settings ??
+    (activeType?.settings?.managed
+      ? activeType.settings
+      : bookSettings.find((b) => bookKey(b.book) === bookKey(book))
+          ?.settings) ??
     activeType?.settings ??
     DEFAULT_BOOK_SETTINGS;
   const count = (c: any, kind: string) => Number(c.stock_counts?.[kind] ?? 0);
@@ -265,6 +271,14 @@ function App() {
     loadSettings();
     action(loadContentTypes);
     action(reloadImageCatalog);
+  }, [auth]);
+  useEffect(() => {
+    if (!auth) return;
+    const reload = () => {
+      void action(loadContentTypes);
+    };
+    window.addEventListener("lab-prompts-changed", reload);
+    return () => window.removeEventListener("lab-prompts-changed", reload);
   }, [auth]);
   useEffect(() => {
     if (!auth) return;
@@ -654,14 +668,20 @@ function App() {
           redo: () => runStage(c, ["PANEL"], "Render ulang panel"),
         };
       const sources = panelSources(settingsFor(c.book));
-      const lacking = sources.filter((k) => count(c, k) < PANEL_COUNT);
+      const lacking =
+        settingsFor(c.book).carouselMode === "direct"
+          ? []
+          : sources.filter((k) => count(c, k) < PANEL_COUNT);
       if (c.article_status !== "siap" || lacking.length)
         return {
           title: `Butuh enam stok: ${lacking.map(laneName).join(", ") || "artikel lolos"}`,
         };
       return {
-        title: "Render panel (6 panel + slide penutup)",
-        run: () => runStage(c, ["PANEL"], "Render panel"),
+        title:
+          settingsFor(c.book).carouselMode === "direct"
+            ? "Buat carousel langsung siap posting"
+            : "Render panel (6 panel + slide penutup)",
+        run: () => runStage(c, ["PANEL"], "Buat carousel"),
       };
     }
     const done = (k: string) => String(c[k]).startsWith("tersedia");
@@ -986,23 +1006,24 @@ function App() {
           <thead>
             <tr>
               <th>Bagian</th>
-              <th>Artikel</th>
-              {uses("POST_IMAGE") && <th>Gambar per seluruh teks</th>}
-              {uses("QUOTE") && <th>Quote</th>}
-              {uses("QUOTE_IMAGE") && <th>Gambar Quote</th>}
-              {uses("IMAGES_PANEL") && <th>Gambar Panel</th>}
-              {uses("IMAGES_VIDEO") && <th>Gambar Video</th>}
-              {uses("TTS_KALIMAT") && <th>Audio</th>}
-              {uses("VIDEO_KALIMAT") && <th>Video V</th>}
-              {uses("VIDEO_KALIMAT_H") && <th>Video H</th>}
-              {uses("PANEL") && <th>Panel</th>}
-              {(uses("PANEL") || uses("VIDEO_KALIMAT")) && <th>Instagram</th>}
-              {(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
-                <th>YouTube</th>
+              <th>Status</th>
+              {showsOutput("POST_IMAGE") && <th>1 gambar</th>}
+              {showsOutput("QUOTE") && <th>Quote</th>}
+              {showsOutput("QUOTE_IMAGE") && <th>Gambar Quote</th>}
+              {showsOutput("IMAGES_PANEL") && <th>Gambar Panel</th>}
+              {showsOutput("IMAGES_VIDEO") && <th>Gambar Video</th>}
+              {showsOutput("TTS_KALIMAT") && <th>Audio</th>}
+              {showsOutput("VIDEO_KALIMAT") && <th>Video vertikal</th>}
+              {showsOutput("VIDEO_KALIMAT_H") && <th>Video horizontal</th>}
+              {showsOutput("PANEL") && <th>Carousel</th>}
+              {(showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT")) && (
+                <th>Instagram</th>
               )}
-              {(uses("PANEL") ||
-                uses("VIDEO_KALIMAT") ||
-                uses("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
+              {(showsOutput("VIDEO_KALIMAT") ||
+                showsOutput("VIDEO_KALIMAT_H")) && <th>YouTube</th>}
+              {(showsOutput("PANEL") ||
+                showsOutput("VIDEO_KALIMAT") ||
+                showsOutput("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
               <th>Aksi</th>
             </tr>
           </thead>
@@ -1013,12 +1034,17 @@ function App() {
                   <td
                     colSpan={
                       3 +
-                      Number(uses("PANEL") || uses("VIDEO_KALIMAT")) +
-                      Number(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) +
                       Number(
-                        uses("PANEL") ||
-                          uses("VIDEO_KALIMAT") ||
-                          uses("VIDEO_KALIMAT_H"),
+                        showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT"),
+                      ) +
+                      Number(
+                        showsOutput("VIDEO_KALIMAT") ||
+                          showsOutput("VIDEO_KALIMAT_H"),
+                      ) +
+                      Number(
+                        showsOutput("PANEL") ||
+                          showsOutput("VIDEO_KALIMAT") ||
+                          showsOutput("VIDEO_KALIMAT_H"),
                       ) +
                       [
                         "POST_IMAGE",
@@ -1030,7 +1056,7 @@ function App() {
                         "VIDEO_KALIMAT",
                         "VIDEO_KALIMAT_H",
                         "PANEL",
-                      ].filter(uses).length
+                      ].filter(showsOutput).length
                     }
                   >
                     {g.book}
@@ -1066,63 +1092,92 @@ function App() {
                       </button>
                     </td>
                     <td>
-                      <StageCell play={stagePlay(c, "artikel")} />
+                      <ProductionProgress
+                        outputs={activeType?.outputs || []}
+                        ready={{
+                          POST_IMAGE: !!c.text_image,
+                          PANEL: !!c.panels,
+                          VIDEO_KALIMAT: !!c.sentence_video,
+                          VIDEO_KALIMAT_H: !!c.sentence_video_h,
+                        }}
+                        jobs={
+                          c.production_jobs ||
+                          jobs.filter(
+                            (j) =>
+                              j.chapter_id === c.id &&
+                              j.revision === c.revision,
+                          )
+                        }
+                        needsEdit={
+                          !!c.article &&
+                          ["draft", "revisi"].includes(c.article_status)
+                        }
+                        automatic={!!activeType?.settings?.autoProcess}
+                        onRetry={(kind) =>
+                          action(async () => {
+                            await api(`/chapters/${c.id}/jobs`, "POST", {
+                              kind,
+                            });
+                            await refresh();
+                          })
+                        }
+                      />
                     </td>
-                    {uses("POST_IMAGE") && (
+                    {showsOutput("POST_IMAGE") && (
                       <td>
                         <StageCell play={stagePlay(c, "textImage")} />
                       </td>
                     )}
-                    {uses("QUOTE") && (
+                    {showsOutput("QUOTE") && (
                       <td>
                         <StageCell play={stagePlay(c, "quote")} />
                       </td>
                     )}
-                    {uses("QUOTE_IMAGE") && (
+                    {showsOutput("QUOTE_IMAGE") && (
                       <td>
                         <StageCell play={stagePlay(c, "quoteImage")} />
                       </td>
                     )}
-                    {uses("IMAGES_PANEL") && (
+                    {showsOutput("IMAGES_PANEL") && (
                       <td>
                         <StageCell play={stagePlay(c, "gambar")} />
                       </td>
                     )}
-                    {uses("IMAGES_VIDEO") && (
+                    {showsOutput("IMAGES_VIDEO") && (
                       <td>
                         <StageCell play={stagePlay(c, "kalimat")} />
                       </td>
                     )}
-                    {uses("TTS_KALIMAT") && (
+                    {showsOutput("TTS_KALIMAT") && (
                       <td>
                         <StageCell play={stagePlay(c, "audioKalimat")} />
                       </td>
                     )}
-                    {uses("VIDEO_KALIMAT") && (
+                    {showsOutput("VIDEO_KALIMAT") && (
                       <td>
                         <StageCell play={stagePlay(c, "videoKalimat")} />
                       </td>
                     )}
-                    {uses("VIDEO_KALIMAT_H") && (
+                    {showsOutput("VIDEO_KALIMAT_H") && (
                       <td>
                         <StageCell play={stagePlay(c, "videoKalimatH")} />
                       </td>
                     )}
-                    {uses("PANEL") && (
+                    {showsOutput("PANEL") && (
                       <td>
                         <StageCell play={stagePlay(c, "panel")} />
                       </td>
                     )}
-                    {(uses("PANEL") || uses("VIDEO_KALIMAT")) && (
+                    {(showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT")) && (
                       <td>
                         <div className="stack-sm">
-                          {uses("PANEL") && (
+                          {showsOutput("PANEL") && (
                             <div>
                               <small className="muted">Carousel</small>
                               <StageCell play={stagePlay(c, "post")} />
                             </div>
                           )}
-                          {uses("VIDEO_KALIMAT") && (
+                          {showsOutput("VIDEO_KALIMAT") && (
                             <div>
                               <small className="muted">Reels</small>
                               <StageCell play={stagePlay(c, "reels")} />
@@ -1131,7 +1186,8 @@ function App() {
                         </div>
                       </td>
                     )}
-                    {(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
+                    {(showsOutput("VIDEO_KALIMAT") ||
+                      showsOutput("VIDEO_KALIMAT_H")) && (
                       <td>
                         <ZernioCell
                           source={`book:${c.id}`}
@@ -1142,9 +1198,9 @@ function App() {
                         />
                       </td>
                     )}
-                    {(uses("PANEL") ||
-                      uses("VIDEO_KALIMAT") ||
-                      uses("VIDEO_KALIMAT_H")) && (
+                    {(showsOutput("PANEL") ||
+                      showsOutput("VIDEO_KALIMAT") ||
+                      showsOutput("VIDEO_KALIMAT_H")) && (
                       <td>
                         <ZernioCell
                           source={`book:${c.id}`}
@@ -1400,10 +1456,39 @@ function App() {
       />
     );
   } else if (page === "Pengaturan Berita") {
-    sub =
-      "Sumber gambar, video, dan akun Instagram, YouTube, TikTok per jenis berita.";
-    content = (
-      <NewsContentSettings key={activeType?.id} instagram={instagram} />
+    sub = "";
+    content = activeType && (
+      <ContentPlanCard
+        type={activeType}
+        onSave={async (outputs, settings) => {
+          await api(`/content-types/${activeType.id}`, "PUT", {
+            ...activeType,
+            outputs,
+            settings,
+          });
+          await loadContentTypes();
+          setMsg("Pengaturan konten disimpan");
+        }}
+      >
+        {(draft, set) => (
+          <>
+            <ZernioPanel
+              settings={draft}
+              instagram={instagram}
+              onChange={set}
+            />
+            <details>
+              <summary>Prompt artikel</summary>
+              <LabPromptSettings
+                engine="news"
+                images={false}
+                selected={draft.labPromptIds || []}
+                onChange={(ids) => set({ labPromptIds: ids })}
+              />
+            </details>
+          </>
+        )}
+      </ContentPlanCard>
     );
   } else if (page === "Cronjob Berita") {
     sub =
@@ -1508,51 +1593,86 @@ function App() {
       </div>
     );
   } else if (page === "Cronjob") {
-    sub =
-      "Jadwal otomatis per judul buku dan jenis konten · Asia/Jakarta (WIB).";
-    content = (
-      <CronSettings
-        items={bookCrons}
-        onSave={async (cron) => {
-          await api("/book-crons", "PUT", cron);
-          await refresh();
-          setMsg(`Cronjob "${cron.book}" disimpan`);
-        }}
-      />
-    );
-  } else if (page === "Pengaturan Konten") {
+    sub = "";
     content = activeType && (
-      <div className="stack-lg">
-        <BookSettingsCard
-          book={activeType.name}
-          settings={activeType.settings ?? DEFAULT_BOOK_SETTINGS}
-          instagram={instagram}
-          onSave={(_, settings) =>
-            action(async () => {
-              await api(`/content-types/${activeType.id}`, "PUT", {
-                ...activeType,
-                settings,
-              });
-              await loadContentTypes();
-              await refresh();
-              setMsg("Pengaturan konten disimpan");
-            })
-          }
-        />
-        {activeType.id === 1 && (
-          <ContentSettings
-            items={bookSettings}
-            instagram={instagram}
-            onSave={(book, settings) =>
+      <section className="card pad stack">
+        <h2 className="h3">Produksi otomatis</h2>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            role="switch"
+            checked={!!activeType.settings?.autoProcess}
+            disabled={!activeType.settings?.managed}
+            onChange={(e) =>
               action(async () => {
-                await api("/book-settings", "PUT", { book, settings });
-                await refresh();
-                setMsg(`Pengaturan ${book} disimpan`);
+                await api(`/content-types/${activeType.id}`, "PUT", {
+                  ...activeType,
+                  settings: {
+                    ...activeType.settings,
+                    autoProcess: e.target.checked,
+                  },
+                });
+                await loadContentTypes();
               })
             }
           />
+          Proses semua bahan yang masuk
+        </label>
+        <details>
+          <summary>Jadwal publikasi</summary>
+          <CronSettings
+            items={bookCrons}
+            onSave={async (cron) => {
+              await api("/book-crons", "PUT", cron);
+              await refresh();
+            }}
+          />
+        </details>
+        {!activeType.settings?.managed && (
+          <button
+            className="btn btn-pri"
+            onClick={() => go("Pengaturan Konten")}
+          >
+            Atur target output
+          </button>
         )}
-      </div>
+      </section>
+    );
+  } else if (page === "Pengaturan Konten") {
+    sub = "";
+    content = activeType && (
+      <ContentPlanCard
+        type={activeType}
+        onSave={async (outputs, settings) => {
+          await api(`/content-types/${activeType.id}`, "PUT", {
+            ...activeType,
+            outputs,
+            settings,
+          });
+          await loadContentTypes();
+          await refresh();
+          setMsg("Pengaturan konten disimpan");
+        }}
+      >
+        {(draft, set) => (
+          <>
+            <ZernioPanel
+              settings={draft}
+              instagram={instagram}
+              onChange={set}
+            />
+            <details>
+              <summary>Prompt artikel</summary>
+              <LabPromptSettings
+                engine="book"
+                images={false}
+                selected={draft.labPromptIds || []}
+                onChange={(ids) => set({ labPromptIds: ids })}
+              />
+            </details>
+          </>
+        )}
+      </ContentPlanCard>
     );
   } else if (page === "Stok Konten Panel") {
     sub =
@@ -1951,17 +2071,20 @@ function DetailView(p: any) {
   // Panel hasil render (dengan stok) diutamakan; preview template sebagai cadangan.
   const rendered = parse(detail.panels);
   // Panel siap dirender bila setiap sumber panel buku ini punya stok lengkap.
-  const lacking = panelSources(p.bookSettings as BookSettings).filter(
-    (k) =>
-      (detail.stock ?? []).filter((x: any) => x.kind === k).length <
-      PANEL_COUNT,
-  );
+  const lacking =
+    p.bookSettings.carouselMode === "direct"
+      ? []
+      : panelSources(p.bookSettings as BookSettings).filter(
+          (k) =>
+            (detail.stock ?? []).filter((x: any) => x.kind === k).length <
+            PANEL_COUNT,
+        );
   const thumbs = rendered
     ? [
         ...rendered.panels.map((x: any, i: number) => ({
           label: String(i + 1),
           src: `/api/panels/${detail.id}/${x.file}?v=${rendered.renderedAt}`,
-          alt: `Panel ${i + 1} · template ${x.template}`,
+          alt: `Slide ${i + 1}${rendered.mode === "direct" ? " · siap posting" : ` · template ${x.template}`}`,
         })),
         {
           label: "CTA",
@@ -2175,7 +2298,13 @@ function DetailView(p: any) {
                 s={
                   rendered
                     ? { tone: "ok", label: "Siap dipublikasikan" }
-                    : { tone: "act", label: "Template saja" }
+                    : {
+                        tone: "act",
+                        label:
+                          p.bookSettings.carouselMode === "direct"
+                            ? "Belum dibuat"
+                            : "Template saja",
+                      }
                 }
               />
             </div>
@@ -2228,7 +2357,7 @@ function DetailView(p: any) {
             >
               {rendered ? "Render ulang panel" : "Render panel"}
             </button>
-            {!rendered && (
+            {!rendered && p.bookSettings.carouselMode !== "direct" && (
               <button
                 className="btn btn-sec"
                 disabled={!v.ok}
@@ -2532,31 +2661,14 @@ function CronSettings({
 }) {
   const type = useContentType();
   const stages = CRON_TYPES.filter(
-    ([key]) => !type || contentAllows(type, key),
+    ([key]) =>
+      ["POST_IG", "REELS_IG"].includes(key) &&
+      (!type || contentAllows(type, key)),
   );
 
   const books = [...new Set(items.map((c) => c.book))];
   return (
     <div className="stack-lg">
-      <section className="card pad stack-sm">
-        <b>Cronjob per buku</b>
-        <p>
-          Setiap jadwal memproses satu bagian berikutnya yang belum selesai dan
-          memenuhi prasyarat. Gambar Panel/Video mengikuti lajur di Pengaturan
-          Konten.
-        </p>
-        <p className="muted">
-          Pilih setiap berapa jam masing-masing jenis konten diproses, misalnya
-          2, 6, atau 24 jam. Jadwal pertama berjalan setelah interval sejak
-          disimpan. Worker harus berjalan; jadwal yang terlewat dijalankan
-          sekali saat worker kembali aktif.
-        </p>
-        <p className="muted">
-          Aktifkan Post IG atau Reels IG untuk menerbitkan otomatis saat panel
-          atau video siap. Hasil yang sudah terbit atau statusnya belum pasti
-          tidak dikirim ulang.
-        </p>
-      </section>
       {!books.length && (
         <section className="card pad">
           Belum ada buku. Tambahkan bagian di halaman Produksi.
@@ -2753,7 +2865,11 @@ function NewsProduction({
   const current = items.find((n) => n.id === selected);
   const candidates = current ? parse(current.candidates) : null;
   const artifacts = current ? parse(current.artifacts) : null;
-  const stages = NEWS_MEDIA_STAGES.filter(([key]) => allowed(key));
+  const stages = NEWS_MEDIA_STAGES.filter(
+    ([key]) =>
+      allowed(key) &&
+      (isFinalOutput(key) || ["POST_IG", "REELS_IG"].includes(key)),
+  );
   const mediaUrl = (id: number, stage: string, index = 0) =>
     `/api/news/${id}/media/${stage}/${index}`;
   const mediaCurrent = items.find((n) => n.id === mediaView?.id);
@@ -2902,11 +3018,20 @@ function NewsProduction({
             <thead>
               <tr>
                 <th>Konten</th>
-                <th>Artikel</th>
+                <th>Status</th>
                 {stages
                   .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
                   .map(([key, stage]) => (
-                    <th key={key}>{stage}</th>
+                    <th key={key}>
+                      {(
+                        {
+                          POST_IMAGE: "1 gambar",
+                          PANEL: "Carousel",
+                          VIDEO_KALIMAT: "Video vertikal",
+                          VIDEO_KALIMAT_H: "Video horizontal",
+                        } as Record<string, string>
+                      )[key] || stage}
+                    </th>
                   ))}
                 {(allowed("POST_IG") || allowed("REELS_IG")) && (
                   <th>Instagram</th>
@@ -2947,7 +3072,34 @@ function NewsProduction({
                     </div>
                   </td>
                   <td>
-                    <StageCell play={articlePlay(n)} />
+                    <ProductionProgress
+                      outputs={type?.outputs || []}
+                      ready={Object.fromEntries(
+                        Object.keys(n.production?.outputs || {}).map((k) => [
+                          k,
+                          true,
+                        ]),
+                      )}
+                      jobs={
+                        n.state === "failed"
+                          ? [
+                              {
+                                kind: "ARTICLE",
+                                state: "failed",
+                                error: n.error,
+                              },
+                            ]
+                          : n.state !== "completed"
+                            ? [{ kind: "ARTICLE", state: n.state }]
+                            : n.production?.jobs || []
+                      }
+                      automatic={!!type?.settings?.autoProcess}
+                      onRetry={(kind) =>
+                        kind === "ARTICLE"
+                          ? run(() => api(`/news/${n.id}/retry`, "POST"))
+                          : runMedia(n, kind)
+                      }
+                    />
                   </td>
                   {stages
                     .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
@@ -3013,7 +3165,7 @@ function NewsProduction({
                     </td>
                   )}
                   <td>
-                    <Chip s={status(n.state)} />
+                    <StageCell play={articlePlay(n)} />
                   </td>
                 </tr>
               ))}
@@ -3494,7 +3646,9 @@ function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
 function NewsCronSettings() {
   const type = useContentType();
   const stages = NEWS_CRON_TYPES.filter(
-    ([key]) => !type || contentAllows(type, key),
+    ([key]) =>
+      ["ARTICLE", "POST_IG", "REELS_IG"].includes(key) &&
+      (!type || contentAllows(type, key)),
   );
 
   const [items, setItems] = useState<BookCron<NewsCronKind>[]>([]),
@@ -3507,18 +3661,7 @@ function NewsCronSettings() {
   return (
     <div className="stack-lg">
       <section className="card pad stack">
-        <h2 className="h3">Cronjob berita Teknologi</h2>
-        <p>
-          Setiap jadwal memproses satu berita berikutnya yang belum selesai dan
-          memenuhi prasyarat. Jadwal Artikel mencari berita baru. Gambar
-          mengikuti Pengaturan Konten.
-        </p>
-        <p className="muted">
-          Interval dihitung sejak disimpan. Jadwal terlewat berjalan sekali saat
-          worker kembali aktif. Aktifkan Post IG atau Reels IG untuk publikasi
-          otomatis ke akun yang dipilih; status terbit atau belum pasti tidak
-          dikirim ulang.
-        </p>
+        <h2 className="h3">Jadwal bahan berita</h2>
       </section>
       {error && (
         <p className="warn" role="alert">
@@ -3559,316 +3702,6 @@ function NewsCronSettings() {
   );
 }
 
-function NewsContentSettings({
-  instagram,
-}: {
-  instagram: InstagramConnection;
-}) {
-  const type = useContentType();
-
-  const [settings, setSettings] = useState<BookSettings | null>(null),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
-  useEffect(() => {
-    api("/news-settings")
-      .then((r) => setSettings(r[0].settings))
-      .catch((e) => setError(e.message));
-  }, []);
-  return (
-    <div className="stack">
-      {error && (
-        <p className="warn" role="alert">
-          {error}
-        </p>
-      )}
-      {message && <p role="status">{message}</p>}
-      {settings ? (
-        <BookSettingsCard
-          news
-          book={type?.name || "Berita"}
-          settings={settings}
-          instagram={instagram}
-          onSave={async (_, draft) => {
-            try {
-              const r = await api("/news-settings", "PUT", {
-                category: "teknologi",
-                settings: draft,
-              });
-              setSettings(r.settings);
-              setError("");
-              setMessage("Pengaturan berita tersimpan");
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        />
-      ) : (
-        <p>Memuat pengaturan berita…</p>
-      )}
-    </div>
-  );
-}
-
-function ContentSettings({
-  items,
-  instagram,
-  onSave,
-}: {
-  items: { book: string; settings: BookSettings }[];
-  instagram: InstagramConnection;
-  onSave: (book: string, settings: BookSettings) => void;
-}) {
-  if (!items.length)
-    return (
-      <section className="card pad">
-        <div className="empty">
-          Belum ada buku. Tambahkan bagian di halaman Produksi.
-        </div>
-      </section>
-    );
-  return (
-    <div className="stack-lg">
-      {items.map((x) => (
-        <BookSettingsCard
-          key={x.book}
-          {...x}
-          instagram={instagram}
-          onSave={onSave}
-        />
-      ))}
-    </div>
-  );
-}
-function BookSettingsCard({
-  news = false,
-  book,
-  settings,
-  instagram,
-  onSave,
-}: {
-  news?: boolean;
-  book: string;
-  settings: BookSettings;
-  instagram: InstagramConnection;
-  onSave: (book: string, settings: BookSettings) => void;
-}) {
-  const {
-    lanes: IMAGE_LANES,
-    laneName,
-    quoteStyles: QUOTE_IMAGE_STYLES,
-    horizontalKinds: HORIZONTAL_KINDS,
-    verticalKinds: VERTICAL_KINDS,
-  } = useImageCatalog();
-  const type = useContentType();
-  const stages = type ? contentStages(type) : null;
-  const uses = (stage: string) => !stages || stages.has(stage);
-  const [draft, setDraft] = useState(settings);
-  useEffect(() => setDraft(settings), [JSON.stringify(settings)]);
-  const used = new Set(
-    [draft.panelHorizontal, draft.panelVertical].filter(Boolean),
-  );
-  // Sumber panel selalu ikut dibuat.
-  const set = (patch: Partial<BookSettings>) =>
-    setDraft((d) => {
-      const next = { ...d, ...patch };
-      const needed = [next.panelHorizontal, next.panelVertical];
-      next.stockKinds = [
-        ...new Set([
-          ...next.stockKinds,
-          ...needed.filter((kind): kind is string => !!kind),
-        ]),
-      ];
-      return next;
-    });
-  const toggle = (k: string) =>
-    set({
-      stockKinds: draft.stockKinds.includes(k)
-        ? draft.stockKinds.filter((x) => x !== k)
-        : [...draft.stockKinds, k],
-    });
-  const changed = JSON.stringify(draft) !== JSON.stringify(settings);
-  const select = (
-    label: string,
-    value: string | null,
-    options: string[],
-    onChange: (v: string | null) => void,
-  ) => (
-    <label className="field">
-      {label}
-      <select
-        aria-label={label}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-      >
-        {options.map((k) => (
-          <option key={k} value={k}>
-            {laneName(k)}
-          </option>
-        ))}
-        <option value="">Tidak ada</option>
-      </select>
-    </label>
-  );
-  return (
-    <section className="card pad stack">
-      <div className="card-title">
-        <h2 className="h3">{book}</h2>
-        <button
-          className="btn btn-pri btn-sm"
-          disabled={!changed}
-          onClick={() => onSave(book, draft)}
-        >
-          Simpan
-        </button>
-      </div>
-      {(uses("PANEL") || uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
-        <ZernioPanel settings={draft} instagram={instagram} onChange={set} />
-      )}
-      <LabPromptSettings
-        engine={news ? "news" : "book"}
-        selected={draft.labPromptIds || []}
-        images={false}
-        onChange={(ids) => set({ labPromptIds: ids })}
-      />
-      <div className="settings-grid">
-        {uses("IMAGES_PANEL") && (
-          <div className="stack-sm">
-            <b>Gambar per paragraf</b>
-            {IMAGE_LANES.map(([k, name, size]) => (
-              <label key={k} className="check-row">
-                <input
-                  type="checkbox"
-                  className="lab-prompt-switch"
-                  role="switch"
-                  checked={draft.stockKinds.includes(k)}
-                  disabled={used.has(k)}
-                  onChange={() => toggle(k)}
-                />
-                <span>
-                  {name}
-                  <small className="block muted">
-                    {size}
-                    {used.has(k) ? " · dipakai panel" : ""}
-                  </small>
-                </span>
-              </label>
-            ))}
-          </div>
-        )}
-        {uses("IMAGES_VIDEO") && (
-          <div className="stack-sm">
-            <b>Gambar per kalimat</b>
-            {IMAGE_LANES.map(([k, name, size]) => (
-              <label key={k} className="check-row">
-                <input
-                  type="checkbox"
-                  className="lab-prompt-switch"
-                  role="switch"
-                  checked={draft.sentenceKinds.includes(k)}
-                  disabled={
-                    draft.sentenceVideoKind === k ||
-                    draft.sentenceVideoHKind === k
-                  }
-                  onChange={() =>
-                    set({
-                      sentenceKinds: draft.sentenceKinds.includes(k)
-                        ? draft.sentenceKinds.filter((x) => x !== k)
-                        : IMAGE_LANES.map(([x]) => x).filter(
-                            (x) => x === k || draft.sentenceKinds.includes(x),
-                          ),
-                    })
-                  }
-                />
-                <span>
-                  {name}
-                  <small className="block muted">
-                    {size} · satu per kalimat
-                    {draft.sentenceVideoKind === k ||
-                    draft.sentenceVideoHKind === k
-                      ? " · dipakai video kalimat"
-                      : ""}
-                  </small>
-                </span>
-              </label>
-            ))}
-            {uses("VIDEO_KALIMAT") &&
-              select(
-                "Sumber gambar Video Kalimat (1080×1920)",
-                draft.sentenceVideoKind,
-                VERTICAL_KINDS,
-                (v) =>
-                  set({
-                    sentenceVideoKind: v,
-                    sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
-                      (x) => x === v || draft.sentenceKinds.includes(x),
-                    ),
-                  }),
-              )}
-            {uses("VIDEO_KALIMAT_H") &&
-              select(
-                "Sumber gambar Video Kalimat H (1920×1080)",
-                draft.sentenceVideoHKind,
-                HORIZONTAL_KINDS,
-                (v) =>
-                  set({
-                    sentenceVideoHKind: v,
-                    sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
-                      (x) => x === v || draft.sentenceKinds.includes(x),
-                    ),
-                  }),
-              )}
-          </div>
-        )}
-        {uses("PANEL") && (
-          <div className="stack-sm">
-            <b>Sumber gambar panel</b>
-            {select(
-              "Horizontal (template 1, 2, 6)",
-              draft.panelHorizontal,
-              HORIZONTAL_KINDS,
-              (v) => set({ panelHorizontal: v }),
-            )}
-            {select(
-              "Vertikal (template 4, 4B)",
-              draft.panelVertical,
-              VERTICAL_KINDS,
-              (v) => set({ panelVertical: v }),
-            )}
-            {!draft.panelHorizontal && draft.panelVertical && (
-              <small className="warn">
-                Tanpa sumber horizontal, panel hanya memakai template 4/4B yang
-                kolom teksnya lebih sempit; paragraf panjang bisa tidak muat.
-              </small>
-            )}
-          </div>
-        )}
-        {!news && uses("QUOTE_IMAGE") && (
-          <div className="stack-sm">
-            <b>Gaya gambar quote</b>
-            <label className="field">
-              Gambar quote
-              <select
-                value={draft.quoteImageStyle}
-                onChange={(e) => set({ quoteImageStyle: e.target.value })}
-              >
-                {Object.entries(QUOTE_IMAGE_STYLES).map(([id, s]) => (
-                  <option key={id} value={id}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
-      </div>
-      <small className="muted">
-        Perubahan berlaku untuk pembuatan berikutnya atau saat ↻; gambar dan
-        panel yang sudah ada tidak dihapus.
-      </small>
-    </section>
-  );
-}
-// Stok konten panel: satu kartu per bagian berisi 5 panel + slide penutup.
 function PanelContent({
   rows,
   onOpen,
@@ -4164,8 +3997,11 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
           <figcaption className="muted small">
             {label(i)}
             {i < PANEL_COUNT
-              ? ` · template ${m.panels[i].template}`
-              : ""} · {m.footer}
+              ? m.mode === "direct"
+                ? " · siap posting"
+                : ` · template ${m.panels[i].template}`
+              : ""}{" "}
+            · {m.footer}
           </figcaption>
         </figure>
         <button
@@ -4518,5 +4354,66 @@ function ZernioCell({
         </Modal>
       )}
     </>
+  );
+}
+
+function ProductionProgress({
+  outputs,
+  ready,
+  jobs,
+  automatic,
+  needsEdit = false,
+  onRetry,
+}: {
+  outputs: string[];
+  ready: Record<string, boolean>;
+  jobs: { kind: string; state: string; error?: string | null }[];
+  automatic: boolean;
+  needsEdit?: boolean;
+  onRetry: (kind: string) => void;
+}) {
+  const latest = jobs.filter(
+    (job, i) => jobs.findIndex((j) => j.kind === job.kind) === i,
+  );
+  const active = latest.find((j) => ["queued", "running"].includes(j.state));
+  const failed = latest.find(
+    (j) =>
+      j.state === "failed" &&
+      !["POST_IG", "REELS_IG", "PREVIEW"].includes(j.kind),
+  );
+  const targets = outputs.filter(isFinalOutput);
+  const done = targets.length > 0 && targets.every((kind) => ready[kind]);
+  return (
+    <div className="stack-sm">
+      <Chip
+        s={
+          done
+            ? { tone: "ok", label: "Selesai" }
+            : active
+              ? { tone: "run", label: "Diproses" }
+              : failed
+                ? { tone: "block", label: "Gagal" }
+                : {
+                    tone: "none",
+                    label: needsEdit
+                      ? "Perlu sunting"
+                      : automatic
+                        ? "Menunggu"
+                        : "Otomatis nonaktif",
+                  }
+        }
+      />
+      {!done && failed && !active && (
+        <>
+          <small className="warn">{failed.error}</small>
+          <button
+            className="btn btn-sec btn-sm"
+            onClick={() => onRetry(failed.kind)}
+          >
+            Coba lagi
+          </button>
+        </>
+      )}
+    </div>
   );
 }

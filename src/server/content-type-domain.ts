@@ -15,6 +15,14 @@ export const CONTENT_OUTPUTS = [
   ["VIDEO_KALIMAT_H", "Video H"],
   ["PANEL", "Panel"],
 ] as const;
+export const FINAL_OUTPUTS = [
+  ["VIDEO_KALIMAT", "Video vertikal"],
+  ["VIDEO_KALIMAT_H", "Video horizontal"],
+  ["PANEL", "Carousel"],
+  ["POST_IMAGE", "1 gambar"],
+] as const;
+export const isFinalOutput = (key: string) =>
+  FINAL_OUTPUTS.some(([kind]) => kind === key);
 export interface ContentType {
   id: number;
   name: string;
@@ -22,10 +30,13 @@ export interface ContentType {
   outputs: string[];
   settings: BookSettings | null;
 }
-export function contentStages(type: Pick<ContentType, "outputs">) {
+export function contentStages(
+  type: Pick<ContentType, "outputs"> & Partial<Pick<ContentType, "settings">>,
+) {
   const stages = new Set(["ARTICLE", ...type.outputs]);
   if (stages.has("QUOTE_IMAGE")) stages.add("QUOTE");
-  if (stages.has("PANEL")) stages.add("IMAGES_PANEL");
+  if (stages.has("PANEL") && type.settings?.carouselMode !== "direct")
+    stages.add("IMAGES_PANEL");
   if (stages.has("VIDEO_KALIMAT") || stages.has("VIDEO_KALIMAT_H")) {
     stages.add("IMAGES_VIDEO");
     stages.add("TTS_KALIMAT");
@@ -60,7 +71,9 @@ export function normalizeContentType(input: any) {
   )
     throw Error("Pilih keluaran konten yang valid");
   const outputs = [...new Set<string>(input.outputs)];
-  const stages = contentStages({ outputs });
+  if (input.settings?.managed && outputs.some((key) => !isFinalOutput(key)))
+    throw Error("Pilih target hasil akhir");
+  const stages = contentStages({ outputs, settings: input.settings });
   const defaults = {
     ...DEFAULT_BOOK_SETTINGS,
     stockKinds: stages.has("IMAGES_PANEL") ? ["IMAGE_HORIZONTAL"] : [],
@@ -99,8 +112,10 @@ export function normalizeContentType(input: any) {
     ].filter((k): k is string => !!k);
   if (!stages.has("IMAGES_PANEL")) {
     settings.stockKinds = [];
-    settings.panelHorizontal = null;
-    settings.panelVertical = null;
+    if (!stages.has("PANEL")) {
+      settings.panelHorizontal = null;
+      settings.panelVertical = null;
+    }
   }
   if (!stages.has("VIDEO_KALIMAT")) settings.sentenceVideoKind = null;
   if (!stages.has("VIDEO_KALIMAT_H")) settings.sentenceVideoHKind = null;

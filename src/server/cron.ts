@@ -104,6 +104,7 @@ export function cronJobs(
         : [];
     }
     case "PANEL":
+      if (s.carouselMode === "direct") return c.panels ? [] : [kind];
       return !c.panels &&
         panelSources(s).length > 0 &&
         panelSources(s).every((k) => count(k) >= PANEL_COUNT)

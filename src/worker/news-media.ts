@@ -1,4 +1,12 @@
-import { productionLabPrompt } from "../server/lab-production";
+import {
+  generateReadyPost,
+  generateDirectCarousel,
+  generateTemplatePost,
+} from "./posting-images";
+import {
+  productionLabPrompt,
+  wholeTextProductionPrompt,
+} from "../server/lab-production";
 import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -114,22 +122,50 @@ export async function runNewsMediaJob(
     if (prerequisite) throw Error(prerequisite);
     const renderedAt = new Date().toISOString();
     if (j.kind === "POST_IMAGE") {
-      const lab = await labFor("POST_IMAGE", content.paragraphs.join("\n\n"));
+      const lab = await wholeTextProductionPrompt(store.db, settings, {
+        teks: content.paragraphs.join("\n\n"),
+        artikel: n.article,
+        bab: n.title,
+        buku: "",
+        quote: "",
+      });
       const prompt = lab?.prompt || newsPostImagePrompt(n.article);
       const file = path.join(work, "gambar-post.jpg");
       writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
-      const image = await generateCodexImage(
-        prompt,
-        work,
+      const postingOptions = {
         file,
-        "bebas",
-        ...(lab ? ([lab.images] as [string[]]) : []),
-      );
+        work,
+        title: content.title,
+        text: content.paragraphs.join("\n\n"),
+        footer: `Berita · ${n.title}`,
+        kind: settings.wholeTextImageKind || "IMAGE_HORIZONTAL",
+        lab: await labFor(
+          settings.wholeTextImageKind || "IMAGE_HORIZONTAL",
+          content.paragraphs.join("\n\n"),
+        ),
+      };
+      const image =
+        settings.singleImageMode === "template"
+          ? await generateTemplatePost(postingOptions)
+          : settings.singleImageMode === "direct"
+            ? await generateReadyPost({
+                ...postingOptions,
+                lab,
+                style: "Buat infografis editorial yang mudah dibaca.",
+              })
+            : await generateCodexImage(
+                prompt,
+                work,
+                file,
+                "bebas",
+                ...(lab ? ([lab.images] as [string[]]) : []),
+              );
       await store.complete(j, {
         file: relative(file),
         width: image.width,
         height: image.height,
-        prompt,
+        prompt: "prompt" in image ? image.prompt : prompt,
+        mode: settings.singleImageMode,
         renderedAt,
       });
       return;
@@ -209,6 +245,30 @@ export async function runNewsMediaJob(
       return;
     }
     if (j.kind === "PANEL") {
+      if (settings.carouselMode === "direct") {
+        const manifest = await generateDirectCarousel({
+          dir: work,
+          work,
+          title: content.title,
+          paragraphs: v.paragraphs.map(stripMarkdownEmphasis),
+          footer: `Berita Teknologi · #${n.id}`,
+          kind: settings.panelVertical || settings.panelHorizontal!,
+          labFor,
+        });
+        await store.complete(j, {
+          ...manifest,
+          panels: manifest.panels.map((p) => ({
+            ...p,
+            file: relative(p.file),
+          })),
+          closing: relative(manifest.closing),
+          sources: {
+            panelHorizontal: settings.panelHorizontal,
+            panelVertical: settings.panelVertical,
+          },
+        });
+        return;
+      }
       const panels = [];
       const footer = `Berita Teknologi · #${n.id}`;
       for (const [i, paragraph] of v.paragraphs.entries()) {

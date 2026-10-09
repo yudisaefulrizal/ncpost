@@ -1,0 +1,233 @@
+import React, { useEffect, useState } from "react";
+import {
+  FINAL_OUTPUTS,
+  isFinalOutput,
+  normalizeContentType,
+  type ContentType,
+} from "../server/content-type-domain";
+import {
+  DEFAULT_BOOK_SETTINGS,
+  isHorizontalKind,
+  type BookSettings,
+} from "../server/book-settings";
+import { useImageCatalog } from "./image-catalog";
+
+export function finalTargets(outputs: string[]) {
+  const targets = outputs.filter(isFinalOutput);
+  return targets.length ? targets : ["POST_IMAGE"];
+}
+export function planSettings(
+  outputs: string[],
+  previous: BookSettings | null,
+): BookSettings {
+  const settings = previous ?? DEFAULT_BOOK_SETTINGS;
+  return normalizeContentType({
+    name: "Konten",
+    engine: "book",
+    outputs,
+    settings: {
+      ...settings,
+      managed: true,
+      autoProcess: settings.autoProcess ?? true,
+      singleImageMode: settings.singleImageMode || "direct",
+      carouselMode: settings.carouselMode || "template",
+      wholeTextImageKind: settings.wholeTextImageKind ?? null,
+      stockKinds: [],
+      sentenceKinds: [],
+      panelHorizontal: outputs.includes("PANEL")
+        ? settings.panelHorizontal ||
+          (!settings.panelVertical ? "IMAGE_HORIZONTAL" : null)
+        : null,
+      panelVertical: outputs.includes("PANEL") ? settings.panelVertical : null,
+      sentenceVideoKind: outputs.includes("VIDEO_KALIMAT")
+        ? settings.sentenceVideoKind || "IMAGE_VERTICAL"
+        : null,
+      sentenceVideoHKind: outputs.includes("VIDEO_KALIMAT_H")
+        ? settings.sentenceVideoHKind || "IMAGE_HORIZONTAL"
+        : null,
+    },
+  }).settings;
+}
+export function ContentPlanFields({
+  outputs,
+  settings,
+  onChange,
+}: {
+  outputs: string[];
+  settings: BookSettings;
+  onChange: (outputs: string[], settings: BookSettings) => void;
+}) {
+  const { lanes, horizontalKinds, verticalKinds, laneName, imageType } =
+    useImageCatalog();
+  const set = (patch: Partial<BookSettings>) => {
+    const next = { ...settings, ...patch };
+    next.carouselMode =
+      imageType(next.panelVertical || next.panelHorizontal) === "ready_post"
+        ? "direct"
+        : "template";
+    next.singleImageMode =
+      imageType(next.wholeTextImageKind ?? null) === "ready_post"
+        ? "direct"
+        : "template";
+    onChange(outputs, planSettings(outputs, next));
+  };
+  const select = (
+    label: string,
+    value: string | null,
+    kinds: string[],
+    change: (kind: string) => void,
+    optional = false,
+  ) => (
+    <label className="field">
+      {label}
+      <select
+        aria-label={label}
+        value={value || ""}
+        onChange={(e) => change(e.target.value)}
+      >
+        {optional && <option value="">Infografis</option>}
+        {value && !kinds.includes(value) && (
+          <option value={value}>{laneName(value)} (tidak tersedia)</option>
+        )}
+        {kinds.map((kind) => (
+          <option key={kind} value={kind}>
+            {laneName(kind)}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  return (
+    <div className="stack">
+      <fieldset className="output-targets">
+        <legend>Target output</legend>
+        <div className="output-target-options">
+          {FINAL_OUTPUTS.map(([key, label]) => (
+            <label key={key} className="check-row">
+              <input
+                type="checkbox"
+                checked={outputs.includes(key)}
+                disabled={outputs.length === 1 && outputs.includes(key)}
+                onChange={(e) => {
+                  const next = e.target.checked
+                    ? [...outputs, key]
+                    : outputs.filter((k) => k !== key);
+                  if (next.length) onChange(next, planSettings(next, settings));
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <div className="settings-grid">
+        {outputs.includes("VIDEO_KALIMAT") &&
+          select(
+            "Gaya gambar video vertikal",
+            settings.sentenceVideoKind,
+            verticalKinds,
+            (kind) => set({ sentenceVideoKind: kind }),
+          )}
+        {outputs.includes("VIDEO_KALIMAT_H") &&
+          select(
+            "Gaya gambar video horizontal",
+            settings.sentenceVideoHKind,
+            horizontalKinds,
+            (kind) => set({ sentenceVideoHKind: kind }),
+          )}
+        {outputs.includes("PANEL") &&
+          select(
+            "Gaya gambar carousel",
+            settings.panelVertical || settings.panelHorizontal,
+            lanes.map(([kind]) => kind),
+            (kind) =>
+              set({
+                panelHorizontal: isHorizontalKind(kind) ? kind : null,
+                panelVertical: isHorizontalKind(kind) ? null : kind,
+              }),
+          )}
+        {outputs.includes("POST_IMAGE") &&
+          select(
+            "Gaya 1 gambar",
+            settings.wholeTextImageKind ?? null,
+            lanes.map(([kind]) => kind),
+            (kind) => set({ wholeTextImageKind: kind || null }),
+            true,
+          )}
+      </div>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          role="switch"
+          checked={!!settings.autoProcess}
+          onChange={(e) => set({ autoProcess: e.target.checked })}
+        />
+        Proses otomatis
+      </label>
+    </div>
+  );
+}
+export function ContentPlanCard({
+  type,
+  onSave,
+  children,
+}: {
+  type: ContentType;
+  onSave: (outputs: string[], settings: BookSettings) => Promise<void>;
+  children?: (
+    settings: BookSettings,
+    set: (patch: Partial<BookSettings>) => void,
+  ) => React.ReactNode;
+}) {
+  const [outputs, setOutputs] = useState(() => finalTargets(type.outputs));
+  const [settings, setSettings] = useState(() =>
+    planSettings(finalTargets(type.outputs), type.settings),
+  );
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    const next = finalTargets(type.outputs);
+    setOutputs(next);
+    setSettings(planSettings(next, type.settings));
+  }, [JSON.stringify(type)]);
+  return (
+    <section className="card pad stack">
+      <h2 className="h3">{type.name}</h2>
+      <ContentPlanFields
+        outputs={outputs}
+        settings={settings}
+        onChange={(next, value) => {
+          setOutputs(next);
+          setSettings(value);
+        }}
+      />
+      {children?.(settings, (patch) =>
+        setSettings((s) => ({ ...s, ...patch })),
+      )}
+      {error && (
+        <p role="alert" className="warn">
+          {error}
+        </p>
+      )}
+      <div>
+        <button
+          className="btn btn-pri"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await onSave(outputs, settings);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Menyimpan…" : "Simpan"}
+        </button>
+      </div>
+    </section>
+  );
+}

@@ -504,7 +504,7 @@ app.get("/api/text-image/:id", async (req, res) => {
 chapterFile("/api/quote-image/:id", /^quote\.jpg$/, (c) => quoteImagePath(c));
 chapterFile(
   "/api/panels/:id/:file",
-  /^0[1-7]-(panel|slide-penutup)\.(jpg|png)$/,
+  /^(?:direct-r\d+-j\d+-)?0[1-7]-(panel|slide-penutup)\.(jpg|png)$/,
   (c, file) => path.join(panelDir(c), file),
 );
 app.get("/api/media/:job/:file", (req, res) => {

@@ -81,6 +81,8 @@ export class NewsCronStore {
       media = new NewsMediaStore(this.db);
     for (const cron of await this.list()) {
       if (
+        (type.settings?.managed &&
+          !["ARTICLE", "POST_IG", "REELS_IG"].includes(cron.kind)) ||
         !contentAllows(type, cron.kind) ||
         !cron.enabled ||
         cron.next_run === null ||

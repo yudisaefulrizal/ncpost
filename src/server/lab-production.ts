@@ -2,7 +2,7 @@ import { labImageKind, labImageCatalog } from "./lab-image-types";
 import type mysql from "mysql2/promise";
 import type { BookSettings } from "./book-settings";
 import { labAttachments, labImageFile } from "./lab-images";
-import { fillPrompt } from "./prompts";
+import { fillPrompt, stockPrompt } from "./prompts";
 export type ProductionPromptTarget =
   | "book"
   | "news"
@@ -36,6 +36,7 @@ export async function validateLabSettings(
     settings.sentenceVideoKind,
     settings.sentenceVideoHKind,
     settings.quoteImageStyle,
+    settings.wholeTextImageKind,
   ].filter((key): key is string => !!key && !!labImageKind(key));
   const ids = [
     ...new Set([
@@ -45,10 +46,24 @@ export async function validateLabSettings(
   ];
   if (!ids.length) return;
   const [rows]: any = await db.query(
-    "SELECT id,name,kind,reference_key FROM lab_prompts WHERE id IN (?)",
+    "SELECT id,name,kind,reference_key,image_type FROM lab_prompts WHERE id IN (?)",
     [ids],
   );
   if (rows.length !== ids.length) throw Error("Prompt Lab tidak ditemukan");
+  const illustrationIds = new Set(
+    [...settings.stockKinds, ...settings.sentenceKinds]
+      .map((kind) => labImageKind(kind)?.id)
+      .filter(Boolean),
+  );
+  if (
+    rows.some(
+      (row: any) =>
+        row.image_type === "ready_post" && illustrationIds.has(row.id),
+    )
+  )
+    throw Error(
+      "Gambar siap posting tidak dapat menjadi sumber ilustrasi video atau template",
+    );
   const catalog = labImageCatalog(
     rows.filter((row: SavedPrompt) => row.kind === "image"),
   );
@@ -156,5 +171,28 @@ export async function productionLabPrompt(
     id: row.id,
     prompt: productionLabText(row, target, vars),
     images: await Promise.all(labAttachments(row).map(labImageFile)),
+  };
+}
+
+// The single image uses the same selected style and static Lab attachments.
+export async function wholeTextProductionPrompt(
+  db: mysql.Pool,
+  settings: BookSettings,
+  variables: Record<string, string>,
+): Promise<ProductionLabPrompt | null> {
+  const kind = settings.wholeTextImageKind;
+  if (!kind) return null;
+  const lab = await productionLabPrompt(db, settings, kind, variables);
+  const text = variables.teks || variables.artikel || "";
+  const orientation =
+    kind.endsWith("_H") ||
+    kind === "IMAGE_HORIZONTAL" ||
+    kind === "IMAGE_PAPERCUT_HORIZONTAL"
+      ? "horizontal 16:9"
+      : "vertikal 9:16";
+  return {
+    id: lab?.id ?? 0,
+    prompt: `${lab?.prompt || stockPrompt(kind, variables.bab || "", text)}\n\nBuat satu gambar yang merangkum seluruh teks berikut. Orientasi: ${orientation}.\n\n${text}`,
+    images: lab?.images || [],
   };
 }

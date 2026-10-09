@@ -2,7 +2,7 @@
 
 <!-- Uji auto-deploy GitHub: 2026-10-08. -->
 
-Aplikasi lokal Node.js 22.23+ untuk antrean buku, editor artikel, worker persisten, stok gambar Codex CLI, dan preview template asli. UI berbahasa Indonesia; publikasi Instagram melalui NC-WA serta YouTube dan TikTok melalui Zernio. Belum merupakan pipeline produksi video lengkap.
+Aplikasi lokal Node.js 22.23+ untuk antrean buku, editor artikel, worker persisten, stok gambar Codex CLI, dan preview template asli. UI berbahasa Indonesia; publikasi Instagram melalui NC-WA serta YouTube dan TikTok melalui Zernio. Target produksi dapat berupa video vertikal, video horizontal, carousel, atau satu gambar.
 
 ## Menjalankan
 
@@ -122,17 +122,15 @@ npm start        # produksi: build frontend lalu jalankan server + worker
 
 Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `Ctrl+C` menghentikan keduanya. Perubahan skema database: `MYSQL_ROOT_PASSWORD=... npm run db:setup` (idempoten). Contoh service systemd (opsional, gaya nc-wa) ada di `deploy/`.
 
-## Cronjob per judul buku
+## Produksi otomatis dan cronjob
 
-Halaman **Cronjob** menyediakan 11 jadwal independen per buku: Artikel, Quote, Gambar Quote, Gambar Panel, Gambar Video, Audio, Video V, Video H, Panel, Post IG, dan Reels IG. Isi **setiap berapa jam** (angka bulat 1–8760), aktifkan, lalu simpan tiap jenis secara terpisah. Bawaan 24 jam dan nonaktif. Jadwal pertama berjalan setelah interval sejak disimpan; mengubah interval atau status lalu menyimpan memulai hitungan baru. Waktu berikutnya dan pemeriksaan terakhir tampil dalam WIB.
+Jenis konten menentukan target akhir dan gaya gambar. **Proses otomatis** mengantrekan semua bahan di jenis tersebut dan melanjutkan prasyarat hingga hasil selesai; tidak perlu jadwal terpisah untuk artikel, gambar, audio, dan render. Halaman **Cronjob** dapat menjeda antrean baru dan mengatur jadwal publikasi Instagram per buku. Cronjob berita mengatur pencarian bahan baru serta publikasi. Interval publikasi tetap 1–8760 jam, bawaan 24 jam dan nonaktif.
 
-Worker mengantrekan satu bagian berikutnya yang belum selesai dan memenuhi prasyarat. Gambar mengikuti lajur Pengaturan Konten. Tidak membuat ulang hasil, menimpa draf, atau menggandakan job aktif. Post/Reels hanya mengirim status awal `belum`. Ketika worker mati melewati jadwal, satu pemeriksaan dilakukan saat worker kembali, lalu hitungan interval dilanjutkan dari pemeriksaan tersebut; tidak merapel semua interval yang terlewat. Penguncian MySQL menjaga eksekusi lintas worker.
-
-Jalankan ulang `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk menambahkan kolom interval tanpa menghapus data. Jadwal lama memakai interval 24 jam; jadwal yang aktif mulai dihitung sejak migrasi.
+Hasil yang sudah ada dipakai kembali. Job aktif tidak digandakan. Langkah gagal menunggu tombol **Coba lagi**; otomatisasi tidak mengulang panggilan penyedia yang gagal terus-menerus. Mematikan proses otomatis menghentikan penambahan job berikutnya, sementara job yang sudah antre/berjalan tetap diselesaikan. Publikasi hanya lewat aksi atau jadwal publikasi yang diaktifkan pengguna.
 
 ## Akun Instagram per buku
 
-Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada masing-masing buku, lalu Simpan. Pilihan tersimpan dalam pengaturan buku dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Daftar akun tujuan diperbarui otomatis saat halaman pengaturan dibuka. Konfirmasi publikasi manual menampilkan akun tujuan.
+Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada jenis konten, lalu Simpan. Pilihan berlaku untuk semua buku dalam jenis tersebut dan tersimpan dalam pengaturan jenis dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Daftar akun tujuan diperbarui otomatis saat halaman pengaturan dibuka. Konfirmasi publikasi manual menampilkan akun tujuan.
 
 Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa akun tersedia, pilih tujuan per buku. Akun pilihan yang hilang tidak dialihkan ke akun lain. Perubahan tujuan berlaku pada job yang diproses berikutnya; hasil yang sudah terbit tetap tercatat dan tidak dikirim ulang. Pengaturan ini menggunakan kolom JSON yang sudah ada sehingga tidak membutuhkan migrasi database.
 
@@ -175,8 +173,7 @@ dengan prompt `buat menjadi infografis` diikuti semua paragraf isi (tanpa judul,
 Sumber, dan Tag). Hasil bisa dilihat, diunduh, dan dibuat ulang; tahap ini juga
 tersedia di Cronjob berita. Ukuran asli gambar dipertahankan.
 
-**Pengaturan Konten** berita menyediakan lajur gambar panel/per kalimat, sumber
-panel/video menurut orientasi, dan akun Instagram tujuan untuk Teknologi.
+**Pengaturan Konten** berita menentukan target output, gaya gambar dan akun tujuan untuk jenis berita tersebut.
 Gambar diikat ke artikel berita tetapi file/asetnya masuk ke kolam bersama
 `assets` / `output/stock`; stok yang cocok dapat dipakai ulang. Menambah jenis
 gambar hanya membuat lajur yang belum lengkap. Regenerate gambar membuat
@@ -234,16 +231,29 @@ Bagian **Lab** menyediakan **Lab Prompt Artikel** dan **Lab Prompt Gambar** dala
 
 Lab Prompt Gambar cukup memakai prompt dan unggah gambar opsional (hingga delapan lampiran). Semua gambar, termasuk logo jika diunggah, dilampirkan bersama prompt; model mengikuti instruksi prompt tanpa pengaturan peran gambar, orientasi, atau posisi logo. Jika kosong, uji hanya mengirim prompt. Lampiran disimpan pada jenis prompt dan disalin ke setiap uji agar tetap statis meskipun jenis prompt kemudian diedit. Berkas PNG privat disimpan di `output/lab-references/`. Referensi dan logo yang tersimpan sebelumnya tetap dapat digunakan sebagai lampiran.
 
-Jenis gambar yang disimpan di Lab menjadi pilihan tersendiri dalam daftar **Gambar per Paragraf**, **Gambar per Kalimat**, **Gaya Gambar Quote**, dan sumber panel/Video V/H di **Pengaturan Konten**. Toggle tiap lajur mengatur gambar yang dibuat; sumber panel/video terpilih otomatis ikut aktif. Jenis kustom tanpa acuan menyediakan varian horizontal dan vertikal; jenis dengan acuan stok mengikuti orientasi acuannya. Nama dan lampiran diambil dari Lab, sedangkan aset masing-masing jenis/orientasi memiliki lajur sendiri sehingga tidak bercampur dengan gaya bawaan. Produksi dan cron memakai jenis yang dipilih beserta lampirannya. Prompt artikel Lab tetap dipilih melalui toggle Prompt Artikel sesuai sumber Buku/Berita; semua nonaktif memakai prompt bawaan.
+Jenis gambar yang disimpan di Lab menjadi pilihan **Gaya gambar** sejak tambah jenis konten dan bisa diubah di **Pengaturan Konten**. Video vertikal/horizontal memilih gaya sesuai orientasi; carousel memilih satu gaya horizontal atau vertikal; satu gambar memakai infografis bawaan atau gaya pilihan. Lampiran Lab tetap statis dan dikirim bersama prompt produksi. Aset tiap gaya/orientasi memiliki lajur sendiri. Pilihan prompt artikel berada di bagian **Prompt artikel**; semua nonaktif memakai prompt bawaan.
 
 Tab **Status dan riwayat** menampilkan Menunggu, Berjalan, Selesai, atau Gagal, dengan pembaruan otomatis selama ada pengujian aktif. Hasil artikel/gambar bisa dilihat dan diunduh; prompt serta input asli tiap pengujian ikut tersimpan. Pengujian lama dapat dipakai sebagai draf baru. Tabel `lab_prompts` dan `lab_runs` dibuat oleh `npm run migrate`; berkas hasil berada di `output/lab/<id>/` dan hanya diakses melalui sesi aplikasi. Worker yang terhenti menandai uji sebagai gagal setelah lease kedaluwarsa; mencoba ulang dilakukan melalui uji baru.
 
 
 ## Kreat Konten
 
-**Kreat Konten** menjadi halaman utama daftar jenis konten. Buku dan Berita merupakan jenis awal; **Tambah jenis** menyimpan nama sendiri, sumber artikel (Buku atau Berita teknologi), dan keluaran yang diperlukan. Setiap jenis memiliki halaman Produksi, Pengaturan Konten, dan Cronjob. Kolom produksi dan jadwal mengikuti keluaran beserta prasyaratnya: Video V hanya membutuhkan artikel, gambar video, audio, dan render vertikal; gambar panel saja tidak mewajibkan render panel, audio, atau video. Publikasi tetap melalui aksi atau jadwal yang diaktifkan pengguna.
+**Kreat Konten** menjadi halaman utama daftar jenis konten. **Tambah jenis** cukup menentukan nama, sumber Buku/Berita teknologi, target output (**Video vertikal**, **Video horizontal**, **Carousel**, atau **1 gambar**), dan gaya gambar. Beberapa target dapat dipilih bersamaan. Jenis baru mengaktifkan **Proses otomatis** secara bawaan.
 
-Jenis disimpan di `content_types`. Migrasi memberi data lama jenis Buku/Berita tanpa menghapusnya. Daftar, impor, nomor bagian, pengaturan, dan jadwal jenis baru dipisahkan menggunakan ID jenis; hasil buku jenis baru memakai awalan folder `jenis-<id>-` agar nama buku/bagian yang sama tidak bertabrakan. Jenis awal tetap memakai lokasi hasil dan pengaturan lama. Jalankan `npm run migrate` sebelum menggunakan revisi ini.
+Semua buku dan bagian yang ditambahkan atau diimpor ke jenis tersebut mengikuti pengaturan yang sama. Langkah internal diturunkan dari target: video membutuhkan artikel, gambar per kalimat, audio dan render; carousel membutuhkan artikel, gambar per paragraf dan render; satu gambar hanya membutuhkan artikel dan satu permintaan gambar. Produksi menampilkan status dan hasil akhir; detail artikel dan aksi lanjutan tetap dapat dibuka.
+
+Pengaturan tersimpan dalam JSON `content_types.settings`, tanpa kolom database baru untuk perubahan alur ini. Data lama tetap tersimpan. Buka **Pengaturan Konten**, pilih target dan gaya gambar lalu simpan untuk memakai alur baru; pengaturan per buku lama tidak lagi menimpa pengaturan jenis setelah konversi. Jenis lama tetap memakai jadwal lama hingga dikonversi. `npm run migrate` tetap diperlukan bila skema server belum mengikuti revisi proyek.
+
+**1 gambar** membuat ringkasan visual dari seluruh teks dalam satu permintaan. Hasil dapat dilihat, diunduh dan dibuat ulang. Hasil buku disimpan dalam manifest `chapters.text_image` dan nama berkas per revisi/job. Perubahan artikel membatalkan manifest lama.
 
 
-**Gambar per seluruh teks** tersedia sebagai keluaran Buku dan Berita. Satu permintaan gambar menggunakan keseluruhan artikel sebagai bahan infografis, terpisah dari gambar per paragraf dan per kalimat. Produksi menyediakan buat, lihat, unduh, dan regenerate; cron dapat dijadwalkan terpisah. Hasil buku disimpan dalam manifest `chapters.text_image` dan nama berkas per revisi/job. Perubahan artikel membatalkan manifest lama. Migrasikan database dengan `npm run migrate` sebelum menjalankan revisi ini.
+Di **Lab Prompt Gambar**, label **Jenis gambar** menentukan penggunaan prompt:
+
+- **Ilustrasi** menghasilkan bahan gambar. Untuk 1 gambar/carousel, teks ditambahkan melalui template; jenis ini juga dapat menjadi sumber gambar video.
+- **Siap posting** menghasilkan gambar final dengan teks, desain dan logo dari prompt/lampiran. Untuk carousel, satu slide dibuat per paragraf dan satu slide penutup, tanpa stok panel atau render template.
+
+Label terlihat di list Lab dan pilihan gaya gambar. Pengaturan konten cukup memilih jenis gambar; cara pembuatan diturunkan dari label Lab pada server, termasuk setelah label diedit. Tidak ada pilihan mode terpisah pada konten. Infografis bawaan untuk 1 gambar tetap tersedia.
+
+Hasil posting memakai JPEG 1080 × 1350. Prompt dan lampiran Lab dibekukan untuk seluruh carousel. Preview, unduh dan publikasi carousel memakai manifest yang sama; penamaan berkas per revisi/job menjaga hasil lama saat regenerate gagal. Publikasi tetap lewat aksi/jadwal yang tersedia.
+
+Jalankan **npm run migrate** untuk menambahkan `image_type` pada `lab_prompts` dan snapshot `lab_runs`. Jenis lama mendapat label Ilustrasi; ubah label di Lab bila prompt tersebut memang membuat gambar final siap posting.

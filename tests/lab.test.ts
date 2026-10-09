@@ -25,6 +25,7 @@ const draft = {
 it("validates kinds, prompt lengths and image orientations", () => {
   expect(labInput(draft)).toEqual({
     ...draft,
+    imageType: "illustration",
     referenceKey: null,
     referenceImage: null,
     logoImage: null,
@@ -59,6 +60,7 @@ it("queues a snapshot without modifying the saved production prompts", async () 
       null,
       null,
       "[]",
+      "illustration",
     ],
   );
   expect(query).toHaveBeenCalledTimes(1);

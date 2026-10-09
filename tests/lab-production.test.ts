@@ -7,6 +7,7 @@ import {
 } from "../src/server/book-settings";
 import {
   productionLabPrompt,
+  wholeTextProductionPrompt,
   productionLabText,
   selectLabPrompt,
   validateLabSettings,
@@ -173,4 +174,20 @@ it("passes the saved static attachment and tuned prompt to a real production ima
   } finally {
     await rm(chapterDir(chapter), { recursive: true, force: true });
   }
+});
+
+it("single-image styles include the full text even when the built-in style usually uses only a heading", async () => {
+  const db = { query: vi.fn() } as any;
+  const result = await wholeTextProductionPrompt(
+    db,
+    { ...DEFAULT_BOOK_SETTINGS, wholeTextImageKind: "IMAGE_PAPERCUT" },
+    vars,
+  );
+  expect(result?.prompt).toContain(vars.teks);
+  expect(result?.prompt).toContain("vertikal 9:16");
+  expect(result?.images).toEqual([]);
+  expect(db.query).not.toHaveBeenCalled();
+  expect(
+    await wholeTextProductionPrompt(db, DEFAULT_BOOK_SETTINGS, vars),
+  ).toBeNull();
 });

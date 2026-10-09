@@ -24,8 +24,12 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
     ...builtins,
     ...lab.stock.map((type) => [
       type.kind,
-      type.name,
-      type.orientation === "horizontal" ? "1920 × 1080" : "1080 × 1920",
+      `${type.name}${type.imageType === "ready_post" ? " · siap posting" : ""}`,
+      type.imageType === "ready_post"
+        ? "1080 × 1350"
+        : type.orientation === "horizontal"
+          ? "1920 × 1080"
+          : "1080 × 1920",
     ]),
   ];
   const quoteStyles = {
@@ -36,17 +40,29 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
   };
   return {
     lanes,
+    imageType: (key: string | null) =>
+      key
+        ? lab.stock.find((type) => type.kind === key)?.imageType ||
+          "illustration"
+        : "ready_post",
     quoteStyles,
     horizontalKinds: [
       ...HORIZONTAL_KINDS,
       ...lab.stock
-        .filter((type) => type.orientation === "horizontal")
+        .filter(
+          (type) =>
+            type.orientation === "horizontal" &&
+            type.imageType !== "ready_post",
+        )
         .map((type) => type.kind),
     ],
     verticalKinds: [
       ...VERTICAL_KINDS,
       ...lab.stock
-        .filter((type) => type.orientation === "vertikal")
+        .filter(
+          (type) =>
+            type.orientation === "vertikal" && type.imageType !== "ready_post",
+        )
         .map((type) => type.kind),
     ],
     laneName: (key: string | null) =>

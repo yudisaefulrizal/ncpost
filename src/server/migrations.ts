@@ -40,6 +40,12 @@ export async function migrateDatabase(connection: Connection) {
     ["news_articles", "content_type_id", "INT NOT NULL DEFAULT 2"],
     ["book_settings", "content_type_id", "INT NOT NULL DEFAULT 1"],
     ["book_cron", "content_type_id", "INT NOT NULL DEFAULT 1"],
+    [
+      "lab_prompts",
+      "image_type",
+      "VARCHAR(16) NOT NULL DEFAULT 'illustration'",
+    ],
+    ["lab_runs", "image_type", "VARCHAR(16) NOT NULL DEFAULT 'illustration'"],
     ["lab_prompts", "reference_images", "TEXT NULL"],
     ["lab_runs", "reference_images", "TEXT NULL"],
     ["lab_prompts", "logo_image", "VARCHAR(40) NULL"],

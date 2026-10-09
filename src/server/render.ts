@@ -365,3 +365,61 @@ ${opening ? openingSvg(opening, spec) : `<rect x="0" y="${height - scrim.height}
     .png()
     .toBuffer();
 }
+
+// One reusable card for a whole article; text remains selectable in the SVG
+// until it is rasterized, so fitting never relies on AI spelling.
+export async function renderSinglePost(
+  heading: string,
+  body: string,
+  footer: string,
+  image: string,
+) {
+  const width = 920;
+  let headingSize = 44;
+  let headings = wrap(heading, bold, headingSize, width);
+  while (headings.length > 3 && headingSize > 28)
+    headings = wrap(heading, bold, --headingSize, width);
+  const bodyTop = 445 + headings.length * (headingSize + 10) + 24;
+  let size = 32,
+    lines = wrap(body, regular, size, width);
+  while (bodyTop + lines.length * (size * 1.35) > 1230 && size > 20)
+    lines = wrap(body, regular, --size, width);
+  if (bodyTop + lines.length * (size * 1.35) > 1230)
+    throw Error(
+      "Teks terlalu panjang untuk 1 gambar dengan template; pilih langsung siap posting atau carousel",
+    );
+  let paths = "",
+    y = 445;
+  for (const line of headings) {
+    paths += textPath(bold, line, 80, y, headingSize, COLORS.heading);
+    y += headingSize + 10;
+  }
+  y = bodyTop;
+  for (const line of lines) {
+    paths += textPath(regular, line, 80, y, size, COLORS.body);
+    y += size * 1.35;
+  }
+  const foot = wrap(footer, regular, 22, width).slice(0, 2);
+  foot.forEach((line, i) => {
+    paths += textPath(regular, line, 80, 1280 + i * 26, 22, COLORS.footer);
+  });
+  const photo = await sharp(image)
+    .rotate()
+    .resize(920, 330, { fit: "cover" })
+    .toBuffer();
+  return sharp({
+    create: { width: 1080, height: 1350, channels: 3, background: "#ffffff" },
+  })
+    .composite([
+      { input: photo, left: 80, top: 50 },
+      {
+        input: Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350"><rect x="80" y="400" width="100" height="6" rx="3" fill="#116c50"/>${paths}</svg>`,
+        ),
+        left: 0,
+        top: 0,
+      },
+    ])
+    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+    .toBuffer();
+}

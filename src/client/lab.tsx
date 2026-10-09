@@ -9,6 +9,7 @@ type Reference = {
   orientation: string;
 };
 type Draft = {
+  image_type?: string;
   id: number;
   name: string;
   prompt: string;
@@ -18,6 +19,7 @@ type Draft = {
   reference_images?: string | null;
 };
 type Run = {
+  image_type?: string;
   id: number;
   name: string;
   state: string;
@@ -76,6 +78,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [name, setName] = useState(`Eksperimen ${label.toLowerCase()}`);
+  const [imageType, setImageType] = useState("illustration");
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
   const [orientation, setOrientation] = useState("bebas");
@@ -94,6 +97,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     orientation,
     referenceKey,
     referenceImages: attachments,
+    imageType,
   };
   useEffect(() => {
     setEditing(false);
@@ -190,6 +194,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     });
   }
   function useReference(ref: Reference) {
+    setImageType(ref.id.startsWith("QUOTE_") ? "ready_post" : "illustration");
     setDraftId(null);
     setAttachments([]);
     setReferenceKey(ref.id);
@@ -199,6 +204,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     setMessage("");
   }
   function newDraft() {
+    setImageType("illustration");
     setDraftId(null);
     setAttachments([]);
     setReferenceKey("");
@@ -254,7 +260,8 @@ export function PromptLab({ kind }: { kind: Kind }) {
             <table>
               <thead>
                 <tr>
-                  <th>Jenis</th>
+                  <th>{kind === "image" ? "Nama" : "Jenis"}</th>
+                  {kind === "image" && <th>Jenis gambar</th>}
                   <th>Acuan</th>
                   <th>Status</th>
                   <th>Contoh hasil</th>
@@ -265,6 +272,9 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 {[
                   ...references.map((ref) => ({
                     key: `ref-${ref.id}`,
+                    imageType: ref.id.startsWith("QUOTE_")
+                      ? "ready_post"
+                      : "illustration",
                     name: ref.name,
                     prompt: ref.prompt,
                     reference: ref.id,
@@ -272,6 +282,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                   })),
                   ...drafts.map((d) => ({
                     key: `draft-${d.id}`,
+                    imageType: d.image_type || "illustration",
                     name: d.name,
                     prompt: d.prompt,
                     reference: d.reference_key || "",
@@ -280,6 +291,8 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 ].map((row) => {
                   const matching = runs.filter(
                     (r) =>
+                      (kind !== "image" ||
+                        (r.image_type || "illustration") === row.imageType) &&
                       r.reference_key === (row.reference || null) &&
                       r.prompt === row.prompt &&
                       JSON.stringify(imageAttachments(r)) ===
@@ -293,6 +306,15 @@ export function PromptLab({ kind }: { kind: Kind }) {
                   return (
                     <tr key={row.key}>
                       <td>{row.name}</td>
+                      {kind === "image" && (
+                        <td>
+                          <span className="chip">
+                            {row.imageType === "ready_post"
+                              ? "Siap posting"
+                              : "Ilustrasi"}
+                          </span>
+                        </td>
+                      )}
                       <td>
                         {references.find((r) => r.id === row.reference)?.name ||
                           "Kustom"}
@@ -333,6 +355,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                                 await api("/runs", "POST", {
                                   kind,
                                   name: row.name,
+                                  imageType: row.imageType,
                                   prompt: row.prompt,
                                   referenceKey: row.reference,
                                   input: "",
@@ -358,6 +381,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                             onClick={() => {
                               if (row.draft) {
                                 setDraftId(row.draft.id);
+                                setImageType(row.imageType);
                                 setAttachments(imageAttachments(row.draft));
                                 setName(row.name);
                                 setPrompt(row.prompt);
@@ -411,6 +435,19 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
+            {kind === "image" && (
+              <label className="field">
+                Jenis gambar
+                <select
+                  aria-label="Jenis gambar"
+                  value={imageType}
+                  onChange={(e) => setImageType(e.target.value)}
+                >
+                  <option value="illustration">Ilustrasi</option>
+                  <option value="ready_post">Siap posting</option>
+                </select>
+              </label>
+            )}
             {kind === "article" && (
               <label className="field">
                 Ambil acuan (opsional)
@@ -627,6 +664,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 onClick={() => {
                   setDraftId(null);
                   setName(selected.name);
+                  setImageType(selected.image_type || "illustration");
                   setAttachments(imageAttachments(selected));
                   setReferenceKey(selected.reference_key || "");
                   setPrompt(selected.prompt || "");

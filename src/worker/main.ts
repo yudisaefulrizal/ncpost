@@ -1,5 +1,14 @@
+import {
+  generateReadyPost,
+  generateDirectCarousel,
+  generateTemplatePost,
+} from "./posting-images";
+import { scheduleProduction } from "../server/auto-production";
 import { labImageKind } from "../server/lab-image-types";
-import { productionLabPrompt } from "../server/lab-production";
+import {
+  productionLabPrompt,
+  wholeTextProductionPrompt,
+} from "../server/lab-production";
 import { generateWholeTextImage } from "./text-image";
 import { LabStore } from "../server/lab";
 import { runLabJob } from "./lab";
@@ -394,16 +403,68 @@ async function runJob(job: Job) {
     } else if (job.kind === "POST_IMAGE") {
       if (c.article_status !== "siap" || !validateArticle(c.article).ok)
         throw Error("Gambar per seluruh teks butuh artikel lolos editor");
-      const image = await generateWholeTextImage(
-        c,
-        c.article,
-        work,
-        job.revision,
-        job.id,
-        generateCodexImage,
-        await labFor("POST_IMAGE", c.article),
+      const settings = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
       );
-      await store.complete(job.id, { textImage: JSON.stringify(image) });
+      const style = settings.wholeTextImageKind || "IMAGE_HORIZONTAL";
+      const lab = await labFor(style, c.article);
+      const postingOptions = {
+        file: path.join(
+          chapterDir(c),
+          `gambar-teks-r${job.revision}-j${job.id}.jpg`,
+        ),
+        work,
+        title: validateArticle(c.article).heading,
+        text: validateArticle(c.article).paragraphs.join("\n\n"),
+        footer: `${c.book} · Bagian ${partNumber(await store.list(), c)}`,
+        kind: style,
+        lab,
+      };
+      const image =
+        settings.singleImageMode === "template"
+          ? await generateTemplatePost(postingOptions)
+          : settings.singleImageMode === "direct"
+            ? await generateReadyPost({
+                ...postingOptions,
+                lab: await wholeTextProductionPrompt(store.db, settings, {
+                  teks: c.article,
+                  artikel: c.article,
+                  bab: c.title,
+                  buku: c.book,
+                  quote: "",
+                }),
+              })
+            : await generateWholeTextImage(
+                c,
+                c.article,
+                work,
+                job.revision,
+                job.id,
+                generateCodexImage,
+                await wholeTextProductionPrompt(
+                  store.db,
+                  await store.bookSettings(
+                    c.book,
+                    store.db,
+                    c.content_type_id ?? 1,
+                  ),
+                  {
+                    teks: c.article,
+                    artikel: c.article,
+                    bab: c.title,
+                    buku: c.book,
+                    quote: "",
+                  },
+                ),
+              );
+      await store.complete(job.id, {
+        textImage: JSON.stringify({
+          ...image,
+          file: path.basename(image.file),
+        }),
+      });
     } else if (job.kind === "QUOTE_IMAGE") {
       // Gaya mengikuti Pengaturan Konten; orientasi bebas (ukuran asli Codex).
       if (!c.quote) throw Error("Gambar quote butuh quote");
@@ -512,6 +573,31 @@ async function runJob(job: Job) {
         store.db,
         c.content_type_id ?? 1,
       );
+      if (settings.carouselMode === "direct") {
+        const dir = panelDir(c);
+        mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const manifest = await generateDirectCarousel({
+          dir,
+          work,
+          filePrefix: `direct-r${job.revision}-j${job.id}-`,
+          title: stripMarkdownEmphasis(v.heading),
+          paragraphs: v.paragraphs.map(stripMarkdownEmphasis),
+          footer: `${c.book} - Bagian ${partNumber(await store.list(), c)}`,
+          kind: settings.panelVertical || settings.panelHorizontal!,
+          labFor,
+        });
+        await store.complete(job.id, {
+          panels: JSON.stringify({
+            ...manifest,
+            panels: manifest.panels.map((p) => ({
+              ...p,
+              file: path.relative(panelDir(c), p.file),
+            })),
+            closing: path.relative(panelDir(c), manifest.closing),
+          }),
+        });
+        return;
+      }
       const horizontal = settings.panelHorizontal
         ? await store.stock(c.id, settings.panelHorizontal)
         : [];
@@ -705,10 +791,19 @@ async function runJob(job: Job) {
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
 const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
+let lastProductionTick = 0;
 let newsRunning = false;
 while (!stop) {
   await store.recover();
   await pollPosts();
+  if (Date.now() - lastProductionTick >= 3000) {
+    lastProductionTick = Date.now();
+    try {
+      await scheduleProduction(store);
+    } catch (e) {
+      console.error("Produksi otomatis gagal:", (e as Error).message);
+    }
+  }
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastCronMinute) {
     try {

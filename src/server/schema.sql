@@ -193,6 +193,7 @@ CREATE TABLE IF NOT EXISTS lab_prompts (
   logo_image VARCHAR(40) NULL,
   reference_images TEXT NULL,
   kind VARCHAR(16) NOT NULL,
+  image_type VARCHAR(16) NOT NULL DEFAULT 'illustration',
   name VARCHAR(190) NOT NULL,
   prompt MEDIUMTEXT NOT NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -206,6 +207,7 @@ CREATE TABLE IF NOT EXISTS lab_runs (
   reference_images TEXT NULL,
   resolved_prompt MEDIUMTEXT NULL,
   kind VARCHAR(16) NOT NULL,
+  image_type VARCHAR(16) NOT NULL DEFAULT 'illustration',
   name VARCHAR(190) NOT NULL,
   prompt MEDIUMTEXT NOT NULL,
   input TEXT NOT NULL,
