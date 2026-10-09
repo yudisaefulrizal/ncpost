@@ -1,3 +1,4 @@
+import { tiktokPublishInput } from "./tiktok-publish";
 import { writeEnvValue } from "./credentials";
 import { NewsMediaStore } from "./news-media-store";
 import { Router } from "express";
@@ -98,6 +99,158 @@ async function mediaLibrary(store: Store) {
   }
   return videos;
 }
+export async function publishZernio(store: Store, input: any) {
+  if (input?.quickTikTok === true) {
+    const source = String(input.source);
+    if (!/^(book|news):[1-9]\d*$/.test(source))
+      throw Error("Konten TikTok tidak valid");
+    const [engine, rawId] = source.split(":");
+    const id = Number(rawId);
+    const item =
+      engine === "book"
+        ? await store.chapter(id)
+        : (
+            await store.db.query<any[]>(
+              "SELECT * FROM news_articles WHERE id=?",
+              [id],
+            )
+          )[0][0];
+    if (!item) throw Error("Konten tidak ditemukan");
+    const saved =
+      engine === "book"
+        ? await store.bookSettings(
+            item.book,
+            store.db,
+            item.content_type_id ?? 1,
+          )
+        : await new NewsMediaStore(store.db).settings(
+            item.category,
+            store.db,
+            item.content_type_id ?? 2,
+          );
+    input = tiktokPublishInput(source, item.article, item.title, saved);
+  }
+  const id = zernioId(input?.accountId);
+  const connection = await zernioAccounts();
+  const account = connection.accounts.find((a) => a.id === id);
+  if (!account) throw Error("Pilih akun YouTube/TikTok yang aktif");
+  const video = (await mediaLibrary(store)).find(
+    (v) => v.key === (input.mediaKey || input.videoKey),
+  );
+  if (!video) throw Error("Konten hasil produksi tidak ditemukan");
+  const [sourceType, sourceId] = video.key.split(":");
+  const chapter =
+    sourceType === "book" ? await store.chapter(Number(sourceId)) : null;
+  const [newsRows]: any =
+    sourceType === "news"
+      ? await store.db.query(
+          "SELECT content_type_id FROM news_articles WHERE id=?",
+          [Number(sourceId)],
+        )
+      : [[]];
+  const settings =
+    sourceType === "book" && chapter
+      ? await store.bookSettings(
+          chapter.book,
+          store.db,
+          chapter.content_type_id ?? 1,
+        )
+      : await new NewsMediaStore(store.db).settings(
+          "teknologi",
+          store.db,
+          newsRows[0]?.content_type_id ?? 2,
+        );
+  if (
+    settings.socialTargets !== undefined &&
+    !settings.socialTargets.includes(account.platform)
+  )
+    throw Error("Target sosmed tidak aktif di Pengaturan Konten");
+  const targetId =
+    account.platform === "youtube"
+      ? settings.youtubeAccountId
+      : settings.tiktokAccountId;
+  if (targetId !== account.id)
+    throw Error("Akun tujuan harus sesuai Pengaturan Konten yang tersimpan");
+  if (video.mediaType === "photo" && account.platform !== "tiktok")
+    throw Error("YouTube hanya mendukung video");
+  const sources = video.files.map((file) => safeFile(outputRoot(), file));
+  const names = sources.map(
+    () =>
+      randomBytes(16).toString("hex") +
+      (video.mediaType === "photo" ? ".jpg" : ".mp4"),
+  );
+  const origin = process.env.PUBLIC_ORIGIN || "https://ncpost.nuscode.id";
+  const urls = names.map((name) => new URL(`/pub/${name}`, origin));
+  if (urls.some((url) => url.protocol !== "https:"))
+    throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
+  const body = await zernioPostBody(
+    input,
+    video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
+    account,
+  );
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify([video.key, video.version, account.id]))
+    .digest("hex");
+  mkdirSync(path.join(ROOT, "output/public"), {
+    recursive: true,
+    mode: 0o700,
+  });
+  let publicationId: number;
+  try {
+    const [insert]: any = await store.db.query(
+      "INSERT INTO zernio_publications(fingerprint,source_key,title,platform,account_id) VALUES(?,?,?,?,?)",
+      [
+        fingerprint,
+        video.key,
+        video.title.slice(0, 500),
+        account.platform,
+        account.id,
+      ],
+    );
+    publicationId = insert.insertId;
+  } catch (error: any) {
+    if (error.code === "ER_DUP_ENTRY")
+      throw Error(
+        "Konten ini sudah dikirim ke akun tersebut. Periksa riwayat dan status posting.",
+      );
+    throw error;
+  }
+  try {
+    sources.forEach((source, i) =>
+      copyFileSync(source, path.join(ROOT, "output/public", names[i])),
+    );
+  } catch (error) {
+    names.forEach((name) =>
+      rmSync(path.join(ROOT, "output/public", name), { force: true }),
+    );
+    await store.db.query("DELETE FROM zernio_publications WHERE id=?", [
+      publicationId,
+    ]);
+    throw error;
+  }
+  try {
+    const data = await zernioRequest("/posts", {
+      method: "POST",
+      headers: { "x-request-id": fingerprint },
+      body: JSON.stringify(body),
+    });
+    const result = zernioPostSummary(data);
+    await store.db.query(
+      "UPDATE zernio_publications SET post_id=?,status=?,result=? WHERE id=?",
+      [result.id, result.status, JSON.stringify(result), publicationId],
+    );
+    return result;
+  } catch {
+    await store.db.query(
+      "UPDATE zernio_publications SET status='unknown' WHERE id=?",
+      [publicationId],
+    );
+    throw Error(
+      "Hasil pengiriman belum dapat dipastikan. Periksa dashboard Zernio sebelum mengirim ulang; riwayat tersimpan.",
+    );
+  }
+}
+
 export function zernioRouter(getStore: () => Store) {
   const router = Router();
   router.get("/accounts", async (_, res) => res.json(await zernioAccounts()));
@@ -182,127 +335,7 @@ export function zernioRouter(getStore: () => Store) {
     );
   });
   router.post("/posts", async (req, res) => {
-    const store = getStore();
-    const input = req.body;
-    const id = zernioId(input?.accountId);
-    const connection = await zernioAccounts();
-    const account = connection.accounts.find((a) => a.id === id);
-    if (!account) throw Error("Pilih akun YouTube/TikTok yang aktif");
-    const video = (await mediaLibrary(store)).find(
-      (v) => v.key === (input.mediaKey || input.videoKey),
-    );
-    if (!video) throw Error("Konten hasil produksi tidak ditemukan");
-    const [sourceType, sourceId] = video.key.split(":");
-    const chapter =
-      sourceType === "book" ? await store.chapter(Number(sourceId)) : null;
-    const [newsRows]: any =
-      sourceType === "news"
-        ? await store.db.query(
-            "SELECT content_type_id FROM news_articles WHERE id=?",
-            [Number(sourceId)],
-          )
-        : [[]];
-    const settings =
-      sourceType === "book" && chapter
-        ? await store.bookSettings(
-            chapter.book,
-            store.db,
-            chapter.content_type_id ?? 1,
-          )
-        : await new NewsMediaStore(store.db).settings(
-            "teknologi",
-            store.db,
-            newsRows[0]?.content_type_id ?? 2,
-          );
-    if (
-      settings.socialTargets !== undefined &&
-      !settings.socialTargets.includes(account.platform)
-    )
-      throw Error("Target sosmed tidak aktif di Pengaturan Konten");
-    const targetId =
-      account.platform === "youtube"
-        ? settings.youtubeAccountId
-        : settings.tiktokAccountId;
-    if (targetId !== account.id)
-      throw Error("Akun tujuan harus sesuai Pengaturan Konten yang tersimpan");
-    if (video.mediaType === "photo" && account.platform !== "tiktok")
-      throw Error("YouTube hanya mendukung video");
-    const sources = video.files.map((file) => safeFile(outputRoot(), file));
-    const names = sources.map(
-      () =>
-        randomBytes(16).toString("hex") +
-        (video.mediaType === "photo" ? ".jpg" : ".mp4"),
-    );
-    const origin = process.env.PUBLIC_ORIGIN || "https://ncpost.nuscode.id";
-    const urls = names.map((name) => new URL(`/pub/${name}`, origin));
-    if (urls.some((url) => url.protocol !== "https:"))
-      throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
-    const body = await zernioPostBody(
-      input,
-      video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
-      account,
-    );
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify([video.key, video.version, account.id]))
-      .digest("hex");
-    mkdirSync(path.join(ROOT, "output/public"), {
-      recursive: true,
-      mode: 0o700,
-    });
-    let publicationId: number;
-    try {
-      const [insert]: any = await store.db.query(
-        "INSERT INTO zernio_publications(fingerprint,source_key,title,platform,account_id) VALUES(?,?,?,?,?)",
-        [
-          fingerprint,
-          video.key,
-          video.title.slice(0, 500),
-          account.platform,
-          account.id,
-        ],
-      );
-      publicationId = insert.insertId;
-    } catch (error: any) {
-      if (error.code === "ER_DUP_ENTRY")
-        throw Error(
-          "Konten ini sudah dikirim ke akun tersebut. Periksa riwayat dan status posting.",
-        );
-      throw error;
-    }
-    try {
-      sources.forEach((source, i) =>
-        copyFileSync(source, path.join(ROOT, "output/public", names[i])),
-      );
-    } catch (error) {
-      names.forEach((name) =>
-        rmSync(path.join(ROOT, "output/public", name), { force: true }),
-      );
-      await store.db.query("DELETE FROM zernio_publications WHERE id=?", [
-        publicationId,
-      ]);
-      throw error;
-    }
-    try {
-      const data = await zernioRequest("/posts", {
-        method: "POST",
-        headers: { "x-request-id": fingerprint },
-        body: JSON.stringify(body),
-      });
-      const result = zernioPostSummary(data);
-      await store.db.query(
-        "UPDATE zernio_publications SET post_id=?,status=?,result=? WHERE id=?",
-        [result.id, result.status, JSON.stringify(result), publicationId],
-      );
-      res.status(201).json(result);
-    } catch {
-      await store.db.query(
-        "UPDATE zernio_publications SET status='unknown' WHERE id=?",
-        [publicationId],
-      );
-      throw Error(
-        "Hasil pengiriman belum dapat dipastikan. Periksa dashboard Zernio sebelum mengirim ulang; riwayat tersimpan.",
-      );
-    }
+    res.status(201).json(await publishZernio(getStore(), req.body));
   });
   router.post("/posts/:id/refresh", async (req, res) => {
     const id = Number(req.params.id);

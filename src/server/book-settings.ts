@@ -1,3 +1,7 @@
+import {
+  normalizeTikTokSettings,
+  type TikTokSettings,
+} from "./tiktok-settings";
 import { labImageKind } from "./lab-image-types";
 // Pengaturan konten per judul buku: lajur stok yang dibuat dan sumber gambar
 // panel (horizontal untuk template 1/2/6, vertikal untuk 4/4B); video memakai
@@ -70,6 +74,7 @@ export function socialColumns(targets: SocialTarget[]) {
   };
 }
 export interface BookSettings {
+  tiktok?: TikTokSettings;
   socialTargets?: SocialTarget[];
   labPromptIds?: number[];
   managed?: boolean;
@@ -214,6 +219,9 @@ export function normalizeBookSettings(input: any): BookSettings {
       throw Error("Cara pembuatan gambar tidak dikenal");
   }
   return {
+    ...(input?.tiktok !== undefined
+      ? { tiktok: normalizeTikTokSettings(input.tiktok) }
+      : {}),
     ...(input?.socialTargets !== undefined
       ? { socialTargets: [...new Set<SocialTarget>(input.socialTargets)] }
       : {}),

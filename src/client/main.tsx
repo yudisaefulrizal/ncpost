@@ -1299,11 +1299,11 @@ function App() {
                           platform="tiktok"
                           accountId={settingsFor(c.book).tiktokAccountId}
                           ready={
-                            !!(
-                              c.sentence_video ||
-                              c.sentence_video_h ||
-                              c.panels
-                            )
+                            !!(settingsFor(c.book).tiktok?.media === "photo"
+                              ? c.panels
+                              : settingsFor(c.book).tiktok?.media === "h"
+                                ? c.sentence_video_h
+                                : c.sentence_video)
                           }
                         />
                       </td>
@@ -3342,11 +3342,11 @@ function NewsProduction({
                         platform="tiktok"
                         accountId={n.settings?.tiktokAccountId || null}
                         ready={
-                          !!(
-                            n.production?.outputs.VIDEO_KALIMAT ||
-                            n.production?.outputs.VIDEO_KALIMAT_H ||
-                            n.production?.outputs.PANEL
-                          )
+                          !!(n.settings?.tiktok?.media === "photo"
+                            ? n.production?.outputs.PANEL
+                            : n.settings?.tiktok?.media === "h"
+                              ? n.production?.outputs.VIDEO_KALIMAT_H
+                              : n.production?.outputs.VIDEO_KALIMAT)
                         }
                       />
                     </td>
@@ -4640,6 +4640,7 @@ function ZernioCell({
   ready: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [latest, setLatest] = useState<any>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -4669,12 +4670,35 @@ function ZernioCell({
       window.removeEventListener("zernio-publication", refresh);
     };
   }, [source, platform, accountId]);
+  const publishTikTok = async () => {
+    if (publishing) return;
+    setPublishing(true);
+    setError("");
+    try {
+      const result = await api("/zernio/posts", "POST", {
+        quickTikTok: true,
+        source,
+      });
+      setLatest(result);
+      zernioHistory = null;
+      window.dispatchEvent(new Event("zernio-publication"));
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setPublishing(false);
+    }
+  };
   return (
     <>
       <div className="stage-cell">
         <button
           className="play"
-          disabled={!latest && (!ready || !accountId)}
+          disabled={
+            publishing ||
+            (platform === "tiktok"
+              ? !!latest || !ready || !accountId
+              : !latest && (!ready || !accountId))
+          }
           aria-label={`Publikasi ${platform} ${title}`}
           title={
             !accountId
@@ -4683,9 +4707,11 @@ function ZernioCell({
                 ? "Butuh video atau panel selesai"
                 : `Publikasi ${platform}`
           }
-          onClick={() => setOpen(true)}
+          onClick={() =>
+            platform === "tiktok" ? void publishTikTok() : setOpen(true)
+          }
         >
-          {latest ? "◉" : "▶"}
+          {publishing ? <span className="spinner" /> : latest ? "◉" : "▶"}
         </button>
         <small>
           {error

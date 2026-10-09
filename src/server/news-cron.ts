@@ -1,3 +1,5 @@
+import { normalizeTikTokSettings } from "./tiktok-settings";
+import { tiktokPublishInput } from "./tiktok-publish";
 import {
   ContentTypeStore,
   currentContentType,
@@ -20,6 +22,7 @@ export class NewsCronStore {
   constructor(
     readonly db: mysql.Pool,
     readonly typeId = currentContentType()?.id,
+    readonly publishTikTok?: (source: string) => Promise<{ status: string }>,
   ) {}
   get category() {
     return !this.typeId || this.typeId === 2
@@ -69,7 +72,9 @@ export class NewsCronStore {
       for (const type of await new ContentTypeStore(this.db).list()) {
         if (type.engine === "news")
           await withContentType(type, () =>
-            new NewsCronStore(this.db, type.id).schedule(now),
+            new NewsCronStore(this.db, type.id, this.publishTikTok).schedule(
+              now,
+            ),
           );
       }
       return;
@@ -106,6 +111,45 @@ export class NewsCronStore {
             await news.create();
             message = "Pencarian artikel baru masuk antrean";
           } else message = "Artikel masih dalam proses";
+        } else if (cron.kind === "POST_TIKTOK") {
+          const settings = await media.settings();
+          const options = normalizeTikTokSettings(settings.tiktok);
+          if (!settings.tiktokAccountId || !options.privacy)
+            throw Error(
+              "Lengkapi akun dan privasi TikTok di Pengaturan Konten",
+            );
+          if (!this.publishTikTok)
+            throw Error("Worker publikasi TikTok belum tersedia");
+          const kind =
+            options.media === "photo"
+              ? "PANEL"
+              : options.media === "h"
+                ? "VIDEO_KALIMAT_H"
+                : "VIDEO_KALIMAT";
+          for (const n of [...articles].reverse()) {
+            if (n.state !== "completed") continue;
+            const p = await media.detail(n.id, n.attempts);
+            if (
+              !p.outputs[kind] ||
+              p.jobs.some((j) => ["queued", "running"].includes(j.state))
+            )
+              continue;
+            const source = `news:${n.id}`;
+            const input = tiktokPublishInput(
+              source,
+              n.article,
+              n.title,
+              settings,
+            );
+            const [previous]: any = await this.db.query(
+              "SELECT id FROM zernio_publications WHERE source_key=? AND platform='tiktok' AND account_id=? LIMIT 1",
+              [input.mediaKey, input.accountId],
+            );
+            if (previous.length) continue;
+            const result = await this.publishTikTok(source);
+            message = `Berita #${n.id}: TikTok ${result.status}`;
+            break;
+          }
         } else {
           const settings = await media.settings();
           for (const n of [...articles].reverse()) {

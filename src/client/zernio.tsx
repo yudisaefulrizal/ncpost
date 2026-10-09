@@ -1,3 +1,5 @@
+import { TikTokSettingsFields } from "./tiktok-settings";
+import type { TikTokSettings } from "../server/tiktok-settings";
 import { socialTargets, type SocialTarget } from "../server/book-settings";
 import type { InstagramConnection } from "../server/instagram-account";
 import React, { useEffect, useState } from "react";
@@ -30,12 +32,14 @@ export function ZernioPanel({
   instagram?: InstagramConnection;
   credentials?: boolean;
   settings?: {
+    tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
     instagramAccountId: string | null;
     youtubeAccountId: string | null;
     tiktokAccountId: string | null;
   };
   onChange?: (value: {
+    tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
     instagramAccountId?: string | null;
     youtubeAccountId?: string | null;
@@ -348,6 +352,13 @@ export function ZernioPanel({
                 </label>
               ))}
           </div>
+          {socialTargets(settings).includes("tiktok") && (
+            <TikTokSettingsFields
+              accountId={settings.tiktokAccountId}
+              value={settings.tiktok}
+              onChange={(tiktok) => onChange?.({ tiktok })}
+            />
+          )}
         </section>
       )}
       {!settings && !credentials && connection.state !== "connected" && (

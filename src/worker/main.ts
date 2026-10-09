@@ -1,3 +1,4 @@
+import { publishZernio } from "../server/zernio-routes";
 import {
   generateReadyPost,
   generateDirectCarousel,
@@ -798,7 +799,9 @@ while (!stop) {
   if (minute !== lastCronMinute) {
     try {
       await store.scheduleCrons();
-      await new NewsCronStore(store.db).schedule();
+      await new NewsCronStore(store.db, undefined, (source) =>
+        publishZernio(store, { quickTikTok: true, source }),
+      ).schedule();
       lastCronMinute = minute;
     } catch (e) {
       console.error("Cron gagal:", (e as Error).message);

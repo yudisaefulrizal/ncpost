@@ -19,6 +19,7 @@ export const NEWS_MEDIA_STAGES = [
 export const NEWS_CRON_TYPES = [
   ["ARTICLE", "Artikel"],
   ...NEWS_MEDIA_STAGES,
+  ["POST_TIKTOK", "Publish TikTok"],
 ] as const;
 export type NewsCronKind = (typeof NEWS_CRON_TYPES)[number][0];
 export const NEWS_MEDIA_KINDS = [

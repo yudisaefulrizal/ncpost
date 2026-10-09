@@ -242,6 +242,12 @@ app.get("/api/news-crons", async (_, res) =>
   res.json(await new NewsCronStore(store.db).list()),
 );
 app.put("/api/news-crons", async (req, res) => {
+  if (req.body?.enabled === true && req.body.kind === "POST_TIKTOK") {
+    const saved = await new NewsMediaStore(store.db).settings();
+    if (!saved.tiktokAccountId || !saved.tiktok?.privacy)
+      throw Error("Lengkapi akun dan privasi TikTok di Pengaturan Konten");
+    await validateZernioSettings(saved, { ...saved, tiktokAccountId: null });
+  }
   if (
     req.body?.enabled === true &&
     ["POST_IG", "REELS_IG"].includes(req.body.kind)
