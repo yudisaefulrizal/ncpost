@@ -135,11 +135,20 @@ export function mergeHook(
 export const bookKey = (book: string) =>
   book.replace(/\s+/g, " ").trim().toLowerCase();
 export function partNumber<
-  T extends { id: number; book: string; part_number?: number | null },
+  T extends {
+    id: number;
+    book: string;
+    part_number?: number | null;
+    content_type_id?: number;
+  },
 >(rows: T[], c: T) {
   if (c.part_number != null) return c.part_number;
-  return rows.filter((x) => bookKey(x.book) === bookKey(c.book) && x.id <= c.id)
-    .length;
+  return rows.filter(
+    (x) =>
+      bookKey(x.book) === bookKey(c.book) &&
+      (x.content_type_id ?? 1) === (c.content_type_id ?? 1) &&
+      x.id <= c.id,
+  ).length;
 }
 // Caption Instagram (skill-ncpost-buku-produksi §3): artikel final sebagai teks
 // biasa, memuat #buku dan seluruh tag artikel tanpa duplikat, maks 2.200 karakter.

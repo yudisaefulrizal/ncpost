@@ -1,9 +1,11 @@
+import { currentContentType } from "./content-types";
 import type { NewsProductionData } from "./news-production-domain";
 import type { BookSettings } from "./book-settings";
 import type mysql from "mysql2/promise";
 import { createHash } from "node:crypto";
 import { newsSourceKey, type NewsResult, validateNewsResult } from "./news";
 export interface NewsArticle {
+  content_type_id?: number;
   production?: NewsProductionData;
   settings?: BookSettings;
   id: number;
@@ -23,13 +25,15 @@ export class NewsStore {
   constructor(readonly db: mysql.Pool) {}
   async list() {
     const [rows] = await this.db.query(
-      "SELECT id,category,state,attempts,lease,title,article,source_url,candidates,artifacts,error,created_at FROM news_articles ORDER BY id DESC",
+      `SELECT id,content_type_id,category,state,attempts,lease,title,article,source_url,candidates,artifacts,error,created_at FROM news_articles ${currentContentType() ? "WHERE content_type_id=?" : ""} ORDER BY id DESC`,
+      currentContentType() ? [currentContentType()!.id] : [],
     );
     return rows as NewsArticle[];
   }
   async create() {
     const [result] = await this.db.query<mysql.ResultSetHeader>(
-      "INSERT INTO news_articles(category,state,title,article) VALUES('teknologi','queued','','')",
+      "INSERT INTO news_articles(category,state,title,article,content_type_id) VALUES('teknologi','queued','','',?)",
+      [currentContentType()?.id ?? 2],
     );
     return result.insertId;
   }
@@ -126,7 +130,11 @@ export class NewsStore {
   async complete(j: NewsArticle, result: NewsResult, artifacts: unknown) {
     const v = validateNewsResult(result);
     const hash = createHash("sha256")
-      .update(newsSourceKey(v.sourceUrl!).url)
+      .update(
+        (j.content_type_id && j.content_type_id !== 2
+          ? `${j.content_type_id}:`
+          : "") + newsSourceKey(v.sourceUrl!).url,
+      )
       .digest("hex");
     try {
       const [r] = await this.db.query<mysql.ResultSetHeader>(

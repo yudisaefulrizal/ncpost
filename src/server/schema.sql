@@ -171,3 +171,69 @@ CREATE TABLE IF NOT EXISTS news_cron (
  last_result TEXT NULL,
  PRIMARY KEY(category,kind)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Riwayat publikasi Zernio; fingerprint mencegah pengiriman ganda per video/akun.
+CREATE TABLE IF NOT EXISTS zernio_publications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  fingerprint CHAR(64) NOT NULL UNIQUE,
+  source_key VARCHAR(190) NOT NULL,
+  title VARCHAR(500) NOT NULL,
+  platform VARCHAR(16) NOT NULL,
+  account_id VARCHAR(24) NOT NULL,
+  post_id VARCHAR(24) NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'submitting',
+  result TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS lab_prompts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  reference_key VARCHAR(64) NULL,
+  reference_image VARCHAR(40) NULL,
+  logo_image VARCHAR(40) NULL,
+  reference_images TEXT NULL,
+  kind VARCHAR(16) NOT NULL,
+  name VARCHAR(190) NOT NULL,
+  prompt MEDIUMTEXT NOT NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS lab_runs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  reference_key VARCHAR(64) NULL,
+  reference_image VARCHAR(40) NULL,
+  logo_image VARCHAR(40) NULL,
+  reference_images TEXT NULL,
+  resolved_prompt MEDIUMTEXT NULL,
+  kind VARCHAR(16) NOT NULL,
+  name VARCHAR(190) NOT NULL,
+  prompt MEDIUMTEXT NOT NULL,
+  input TEXT NOT NULL,
+  orientation VARCHAR(16) NOT NULL DEFAULT 'bebas',
+  state VARCHAR(16) NOT NULL DEFAULT 'queued',
+  lease BIGINT NOT NULL DEFAULT 0,
+  result MEDIUMTEXT NULL,
+  error TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  KEY lab_queue(state,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS content_types (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ name VARCHAR(190) NOT NULL,
+ engine VARCHAR(16) NOT NULL,
+ outputs TEXT NOT NULL,
+ settings TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT IGNORE INTO content_types(id,name,engine,outputs) VALUES
+ (1,'Buku','book','["ARTICLE","QUOTE","QUOTE_IMAGE","IMAGES_PANEL","IMAGES_VIDEO","TTS_KALIMAT","VIDEO_KALIMAT","VIDEO_KALIMAT_H","PANEL"]'),
+ (2,'Berita','news','["ARTICLE","POST_IMAGE","IMAGES_PANEL","IMAGES_VIDEO","TTS_KALIMAT","VIDEO_KALIMAT","VIDEO_KALIMAT_H","PANEL"]');
+
+CREATE TABLE IF NOT EXISTS lab_images (
+  id VARCHAR(40) PRIMARY KEY,
+  name VARCHAR(190) NOT NULL,
+  role VARCHAR(16) NOT NULL DEFAULT 'reference',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

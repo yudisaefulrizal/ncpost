@@ -10,6 +10,7 @@ import {
   newsContent,
   newsCaption,
   newsPrerequisite,
+  newsPostImagePrompt,
 } from "../server/news-production-domain";
 import { Store } from "../server/store";
 import type { NewsArticle } from "../server/news-store";
@@ -22,6 +23,7 @@ import {
 import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
 import { stripMarkdownEmphasis } from "../server/stock-prompts";
 import { generateStock } from "./stock-generator";
+import { generateCodexImage } from "../server/codex-image";
 import {
   accounts,
   publish,
@@ -102,6 +104,20 @@ export async function runNewsMediaJob(
     const prerequisite = newsPrerequisite(j.kind, p, settings, n.article);
     if (prerequisite) throw Error(prerequisite);
     const renderedAt = new Date().toISOString();
+    if (j.kind === "POST_IMAGE") {
+      const prompt = newsPostImagePrompt(n.article);
+      const file = path.join(work, "gambar-post.jpg");
+      writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
+      const image = await generateCodexImage(prompt, work, file, "bebas");
+      await store.complete(j, {
+        file: relative(file),
+        width: image.width,
+        height: image.height,
+        prompt,
+        renderedAt,
+      });
+      return;
+    }
     if (j.kind.includes("IMAGE_")) {
       const perSentence = j.kind.startsWith("S_");
       const kind = baseKind(j.kind);

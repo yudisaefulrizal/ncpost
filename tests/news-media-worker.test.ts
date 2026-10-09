@@ -16,6 +16,9 @@ import {
   pollNewsPublications,
 } from "../src/worker/news-media";
 import { generateStock } from "../src/worker/stock-generator";
+import { generateCodexImage } from "../src/server/codex-image";
+import { newsPostImagePrompt } from "../src/server/news-production-domain";
+vi.mock("../src/server/codex-image", () => ({ generateCodexImage: vi.fn() }));
 import {
   tts,
   accounts,
@@ -333,4 +336,34 @@ it("poll publikasi hanya memeriksa request tersimpan dan tidak mengirim ulang", 
     expect.objectContaining({ status: "published" }),
   );
   expect(publish).not.toHaveBeenCalled();
+});
+
+it("gambar post menghasilkan satu infografis dari seluruh paragraf tanpa prasyarat gambar atau audio", async () => {
+  const h = harness();
+  vi.mocked(generateCodexImage).mockImplementation(
+    async (_prompt, _work, file) => {
+      writeFileSync(file, Buffer.alloc(100));
+      return { width: 1024, height: 1536, thread: "test", output: file };
+    },
+  );
+  await runNewsMediaJob(h.store, h.assets, job("POST_IMAGE"));
+  expect(generateCodexImage).toHaveBeenCalledTimes(1);
+  expect(generateCodexImage).toHaveBeenCalledWith(
+    newsPostImagePrompt(newsFixture().article),
+    expect.any(String),
+    expect.stringMatching(/gambar-post\.jpg$/),
+    "bebas",
+  );
+  expect(h.p.outputs.POST_IMAGE).toMatchObject({
+    width: 1024,
+    height: 1536,
+    prompt: newsPostImagePrompt(newsFixture().article),
+  });
+  expect(h.p.outputs.POST_IMAGE.file).toContain("berita/media/");
+  expect(h.spies.fail).not.toHaveBeenCalled();
+  h.spies.complete.mockClear();
+  vi.mocked(generateCodexImage).mockRejectedValueOnce(Error("Gambar gagal"));
+  await runNewsMediaJob(h.store, h.assets, job("POST_IMAGE"));
+  expect(h.spies.complete).not.toHaveBeenCalled();
+  expect(h.spies.fail).toHaveBeenCalledWith(expect.anything(), "Gambar gagal");
 });

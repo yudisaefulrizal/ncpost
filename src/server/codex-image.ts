@@ -103,6 +103,7 @@ export async function generateCodexImage(
   cwd: string,
   output: string,
   orientation: "horizontal" | "vertikal" | "bebas",
+  referenceImages: string[] = [],
 ) {
   const { runCli } = await import("./providers");
   const { codexImagePrompt } = await import("./prompts");
@@ -111,7 +112,9 @@ export async function generateCodexImage(
     process.env.CODEX_EXECUTABLE || "codex",
     [
       ...IMAGE_CLI_ARGS,
+      ...referenceImages.flatMap((file) => ["--image", file]),
       ...(process.env.CODEX_MODEL ? ["--model", process.env.CODEX_MODEL] : []),
+      "--",
       "-",
     ],
     // Pembungkus mekanis (prompts/gambar/pembungkus-codex.md); isi prompt literal.

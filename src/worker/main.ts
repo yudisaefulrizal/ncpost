@@ -1,3 +1,6 @@
+import { generateWholeTextImage } from "./text-image";
+import { LabStore } from "../server/lab";
+import { runLabJob } from "./lab";
 import { NewsCronStore } from "../server/news-cron";
 import { NewsMediaStore } from "../server/news-media-store";
 import { runNewsMediaJob, pollNewsPublications } from "./news-media";
@@ -70,6 +73,7 @@ import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
 initConfig();
 const store = new Store();
 const newsStore = new NewsStore(store.db);
+const labStore = new LabStore(store.db);
 const newsMediaStore = new NewsMediaStore(store.db);
 let stop = false;
 process.on("SIGTERM", () => (stop = true));
@@ -295,7 +299,11 @@ async function runJob(job: Job) {
       // visualizer, versi upload.
       const horizontal = job.kind === "VIDEO_KALIMAT_H";
       const spec = horizontal ? SUBTITLE_LANDSCAPE : SUBTITLE_VERTICAL;
-      const settings = await store.bookSettings(c.book);
+      const settings = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
+      );
       const sentenceVideoKind = horizontal
         ? settings.sentenceVideoHKind
         : settings.sentenceVideoKind;
@@ -368,10 +376,25 @@ async function runJob(job: Job) {
         job.id,
         horizontal ? { sentenceVideoH: manifest } : { sentenceVideo: manifest },
       );
+    } else if (job.kind === "POST_IMAGE") {
+      if (c.article_status !== "siap" || !validateArticle(c.article).ok)
+        throw Error("Gambar per seluruh teks butuh artikel lolos editor");
+      const image = await generateWholeTextImage(
+        c,
+        c.article,
+        work,
+        job.revision,
+        job.id,
+      );
+      await store.complete(job.id, { textImage: JSON.stringify(image) });
     } else if (job.kind === "QUOTE_IMAGE") {
       // Gaya mengikuti Pengaturan Konten; orientasi bebas (ukuran asli Codex).
       if (!c.quote) throw Error("Gambar quote butuh quote");
-      const { quoteImageStyle } = await store.bookSettings(c.book);
+      const { quoteImageStyle } = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
+      );
       const prompt = quoteImagePrompt(quoteImageStyle, c.quote);
       const file = quoteImagePath(c);
       mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -398,7 +421,11 @@ async function runJob(job: Job) {
     } else if (job.kind === "POST_IG") {
       if (c.panel_status !== "tersedia" || !c.panels)
         throw Error("Post IG butuh panel yang sudah dirender");
-      const bookSettings = await store.bookSettings(c.book);
+      const bookSettings = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
+      );
       const igUserId = selectInstagramAccount(
         bookSettings.instagramAccountId,
         await accounts(),
@@ -423,7 +450,11 @@ async function runJob(job: Job) {
     } else if (job.kind === "REELS_IG") {
       if (!c.sentence_video)
         throw Error("Reels IG butuh Video yang sudah dirender");
-      const bookSettings = await store.bookSettings(c.book);
+      const bookSettings = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
+      );
       const igUserId = selectInstagramAccount(
         bookSettings.instagramAccountId,
         await accounts(),
@@ -450,7 +481,11 @@ async function runJob(job: Job) {
         throw Error("Artikel belum lolos editor");
       const v = validateArticle(c.article);
       // Sumber gambar panel mengikuti Pengaturan Konten buku ini.
-      const settings = await store.bookSettings(c.book);
+      const settings = await store.bookSettings(
+        c.book,
+        store.db,
+        c.content_type_id ?? 1,
+      );
       const horizontal = settings.panelHorizontal
         ? await store.stock(c.id, settings.panelHorizontal)
         : [];
@@ -694,6 +729,20 @@ while (!stop) {
     if (!job) break;
     const task: Promise<void> = runJob(job).finally(() => running.delete(task));
     running.add(task);
+  }
+  if (running.size < CONCURRENCY) {
+    try {
+      const job = await labStore.claim();
+      if (job) {
+        const task = runLabJob(labStore, job).finally(() =>
+          running.delete(task),
+        );
+        running.add(task);
+      }
+    } catch (e) {
+      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+        console.error("Lab gagal:", (e as Error).message);
+    }
   }
   await Promise.race([new Promise((r) => setTimeout(r, 1000)), ...running]);
 }

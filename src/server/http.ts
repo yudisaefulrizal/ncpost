@@ -1,3 +1,14 @@
+import {
+  ContentTypeStore,
+  currentContentType,
+  withContentType,
+  contentAllows,
+  contentTypeUpdate,
+} from "./content-types";
+import { labRouter } from "./lab-routes";
+import { LabStore } from "./lab";
+import { validateZernioSettings } from "./zernio";
+import { zernioRouter } from "./zernio-routes";
 import { NewsCronStore } from "./news-cron";
 import { newsTtsConfig } from "./edge-tts";
 import { newsKinds, NEWS_MEDIA_STAGES } from "./news-production-domain";
@@ -34,6 +45,7 @@ app.disable("x-powered-by");
 // Impor JSON boleh lebih besar (maks 500 entri); parser pertama yang membaca
 // body menang, jadi ini harus dipasang sebelum parser umum.
 app.use("/api/chapters/import", express.json({ limit: "512kb" }));
+app.use("/api/lab", express.json({ limit: "256kb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -90,6 +102,95 @@ app.use("/api", (req, res, next) => {
   res.locals.user = user;
   next();
 });
+app.get("/api/content-types", async (_, res) =>
+  res.json(await new ContentTypeStore(store.db).list()),
+);
+app.post("/api/content-types", async (req, res) => {
+  const value = contentTypeUpdate(req.body);
+  await validateZernioSettings(value.settings, {
+    ...value.settings,
+    youtubeAccountId: null,
+    tiktokAccountId: null,
+  });
+  if (value.settings.instagramAccountId)
+    selectInstagramAccount(value.settings.instagramAccountId, await accounts());
+  res.status(201).json(await new ContentTypeStore(store.db).save(value));
+});
+app.put("/api/content-types/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw Error("ID jenis konten tidak valid");
+  const current = await new ContentTypeStore(store.db).get(id);
+  const value = contentTypeUpdate(req.body, current);
+  await validateZernioSettings(
+    value.settings,
+    current.settings ?? {
+      ...value.settings,
+      youtubeAccountId: null,
+      tiktokAccountId: null,
+    },
+  );
+  if (
+    value.settings.instagramAccountId &&
+    value.settings.instagramAccountId !== current.settings?.instagramAccountId
+  )
+    selectInstagramAccount(value.settings.instagramAccountId, await accounts());
+  res.json(await new ContentTypeStore(store.db).save(req.body, id));
+});
+app.use("/api", async (req, res, next) => {
+  if (
+    !/^\/(chapters|books|book-settings|book-crons|jobs|news|news-settings|news-crons)(\/|$)/.test(
+      req.path,
+    )
+  )
+    return next();
+  const header = req.get("X-Content-Type-Id");
+  let id =
+    header === undefined
+      ? req.path.startsWith("/news")
+        ? 2
+        : 1
+      : Number(header);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw Error("ID jenis konten tidak valid");
+  const owner = /^\/(chapters|news)\/(\d+)(?:\/|$)/.exec(req.path);
+  if (owner) {
+    const [rows]: any = await store.db.query(
+      `SELECT content_type_id FROM ${owner[1] === "chapters" ? "chapters" : "news_articles"} WHERE id=?`,
+      [Number(owner[2])],
+    );
+    if (!rows[0])
+      return void res.status(404).json({ error: "Konten tidak ditemukan" });
+    if (header !== undefined && id !== rows[0].content_type_id)
+      return void res
+        .status(404)
+        .json({ error: "Konten tidak ditemukan pada jenis ini" });
+    id = rows[0].content_type_id;
+  }
+  const type = await new ContentTypeStore(store.db).get(id);
+  if (
+    (req.path.startsWith("/news") && type.engine !== "news") ||
+    (/^\/(chapters|books|book-settings|book-crons)/.test(req.path) &&
+      type.engine !== "book")
+  )
+    throw Error("Sumber artikel tidak sesuai jenis konten");
+  if (
+    req.path.endsWith("crons") &&
+    req.method === "PUT" &&
+    req.body?.enabled &&
+    !contentAllows(type, req.body.kind)
+  )
+    throw Error("Tahap tidak digunakan oleh jenis konten ini");
+  withContentType(type, next);
+});
+app.use(
+  "/api/zernio",
+  zernioRouter(() => store),
+);
+app.use(
+  "/api/lab",
+  labRouter(() => new LabStore(store.db)),
+);
 app.get("/api/session", (_, res) =>
   res.json({ authenticated: true, email: res.locals.user.email }),
 );
@@ -108,7 +209,11 @@ app.get("/api/news", async (_, res) => {
       news.map(async (n) => ({
         ...n,
         production: await media.detail(n.id, n.attempts),
-        settings: await media.settings(n.category),
+        settings: await media.settings(
+          n.category,
+          store.db,
+          n.content_type_id ?? 2,
+        ),
       })),
     ),
   );
@@ -168,6 +273,7 @@ app.put("/api/news-settings", async (req, res) => {
   const normalized = normalizeBookSettings(req.body?.settings);
   const media = new NewsMediaStore(store.db);
   const current = await media.settings(category);
+  await validateZernioSettings(normalized, current);
   if (
     normalized.instagramAccountId &&
     normalized.instagramAccountId !== current.instagramAccountId
@@ -199,7 +305,13 @@ app.get("/api/news/:id/media/:kind/:index", async (req, res) => {
     id < 1 ||
     !Number.isSafeInteger(index) ||
     index < 0 ||
-    !["PANEL", "TTS_KALIMAT", "VIDEO_KALIMAT", "VIDEO_KALIMAT_H"].includes(kind)
+    ![
+      "POST_IMAGE",
+      "PANEL",
+      "TTS_KALIMAT",
+      "VIDEO_KALIMAT",
+      "VIDEO_KALIMAT_H",
+    ].includes(kind)
   )
     return void res.sendStatus(404);
   const [news]: any = await store.db.query(
@@ -317,6 +429,7 @@ app.put("/api/book-settings", async (req, res) => {
   if (typeof book !== "string") throw Error("Judul buku wajib diisi");
   const normalized = normalizeBookSettings(settings);
   const current = await store.bookSettings(book);
+  await validateZernioSettings(normalized, current);
   if (
     normalized.instagramAccountId &&
     normalized.instagramAccountId !== current.instagramAccountId
@@ -369,6 +482,21 @@ chapterFile("/api/video-kalimat-h/:id/:file", /^video-h\.mp4$/, (c, file) =>
 chapterFile("/api/video-kalimat/:id/:file", /^video-v\.mp4$/, (c, file) =>
   path.join(chapterDir(c), file),
 );
+app.get("/api/text-image/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  const c = await store.chapter(id);
+  if (!c?.text_image) return void res.sendStatus(404);
+  const image = JSON.parse(c.text_image);
+  if (
+    typeof image.file !== "string" ||
+    !/^gambar-teks-r\d+-j\d+\.jpg$/.test(image.file)
+  )
+    return void res.sendStatus(404);
+  res
+    .type("jpg")
+    .sendFile(safeFile(outputRoot(), path.join(chapterDir(c), image.file)));
+});
 chapterFile("/api/quote-image/:id", /^quote\.jpg$/, (c) => quoteImagePath(c));
 chapterFile(
   "/api/panels/:id/:file",

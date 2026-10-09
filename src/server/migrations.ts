@@ -34,4 +34,46 @@ export async function migrateDatabase(connection: Connection) {
       [Date.now()],
     );
   }
+  for (const [table, column, definition] of [
+    ["chapters", "text_image", "TEXT NULL"],
+    ["chapters", "content_type_id", "INT NOT NULL DEFAULT 1"],
+    ["news_articles", "content_type_id", "INT NOT NULL DEFAULT 2"],
+    ["book_settings", "content_type_id", "INT NOT NULL DEFAULT 1"],
+    ["book_cron", "content_type_id", "INT NOT NULL DEFAULT 1"],
+    ["lab_prompts", "reference_images", "TEXT NULL"],
+    ["lab_runs", "reference_images", "TEXT NULL"],
+    ["lab_prompts", "logo_image", "VARCHAR(40) NULL"],
+    ["lab_runs", "logo_image", "VARCHAR(40) NULL"],
+    ["lab_prompts", "reference_image", "VARCHAR(40) NULL"],
+    ["lab_runs", "reference_image", "VARCHAR(40) NULL"],
+    ["lab_prompts", "reference_key", "VARCHAR(64) NULL"],
+    ["lab_runs", "reference_key", "VARCHAR(64) NULL"],
+    ["lab_runs", "resolved_prompt", "MEDIUMTEXT NULL"],
+  ]) {
+    const [columns]: any = await connection.query(
+      `SHOW COLUMNS FROM ${table} LIKE ?`,
+      [column],
+    );
+    if (!columns.length)
+      await connection.query(
+        `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+      );
+  }
+  for (const [table, keys] of [
+    ["book_settings", "content_type_id,book_key"],
+    ["book_cron", "content_type_id,book_key,kind"],
+  ]) {
+    const [indexes]: any = await connection.query(
+      `SHOW INDEX FROM ${table} WHERE Key_name='PRIMARY'`,
+    );
+    if (!indexes.some((index: any) => index.Column_name === "content_type_id"))
+      await connection.query(
+        `ALTER TABLE ${table} DROP PRIMARY KEY, ADD PRIMARY KEY(${keys})`,
+      );
+  }
+  for (const table of ["lab_prompts", "lab_runs"]) {
+    await connection.query(
+      `INSERT IGNORE INTO lab_images(id,name,role) SELECT DISTINCT reference_image,'Referensi tersimpan','reference' FROM ${table} WHERE reference_image IS NOT NULL`,
+    );
+  }
 }

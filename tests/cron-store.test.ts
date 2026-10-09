@@ -30,6 +30,18 @@ function fixture() {
   ] as Chapter[];
   const active: { chapter_id: number; kind: string; state: string }[] = [];
   const query = vi.fn(async (sql: string, params: any[] = []) => {
+    if (sql.includes("FROM content_types"))
+      return [
+        [
+          {
+            id: 1,
+            name: "Buku",
+            engine: "book",
+            outputs: '["ARTICLE","QUOTE","IMAGES_PANEL"]',
+            settings: null,
+          },
+        ],
+      ];
     if (sql.includes("FROM book_cron WHERE enabled=1"))
       return [scheduled.filter((c) => c.enabled).map((c) => ({ ...c }))];
     if (sql.includes("FROM book_cron") && sql.includes("FOR UPDATE"))
@@ -116,7 +128,7 @@ it("schema lama tetap bisa membaca pengaturan dan menunjukkan kebutuhan migrasi"
     Object.assign(Error("missing table"), { code: "ER_NO_SUCH_TABLE" }),
   );
   const crons = await s.bookCrons();
-  expect(crons).toHaveLength(11);
+  expect(crons).toHaveLength(12);
   expect(crons.every((c) => !c.enabled)).toBe(true);
   expect(crons[0].last_result).toContain("db:setup");
 });
@@ -160,7 +172,7 @@ it("menyimpan interval memulai hitungan sejak disimpan dan nonaktif menghapus wa
   );
   expect(s.db.query).toHaveBeenLastCalledWith(
     expect.stringContaining("INSERT INTO book_cron"),
-    ["buku a", "QUOTE", 1, 25, now + 25 * 3600000],
+    ["buku a", "QUOTE", 1, 25, now + 25 * 3600000, 1],
   );
   await s.saveBookCron(
     "Buku A",
@@ -173,5 +185,6 @@ it("menyimpan interval memulai hitungan sejak disimpan dan nonaktif menghapus wa
     0,
     25,
     null,
+    1,
   ]);
 });

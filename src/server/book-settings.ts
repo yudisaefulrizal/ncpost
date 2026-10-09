@@ -27,6 +27,8 @@ export const VERTICAL_KINDS = [
 ];
 export interface BookSettings {
   instagramAccountId: string | null;
+  youtubeAccountId: string | null;
+  tiktokAccountId: string | null;
   stockKinds: string[];
   sentenceKinds: string[];
   // Lajur vertikal untuk Video Kalimat 1080×1920 (selalu ikut dibuat).
@@ -40,6 +42,8 @@ export interface BookSettings {
 // Sama dengan perilaku sebelum ada pengaturan per buku.
 export const DEFAULT_BOOK_SETTINGS: BookSettings = {
   instagramAccountId: null,
+  youtubeAccountId: null,
+  tiktokAccountId: null,
   stockKinds: [...STOCK_KINDS],
   sentenceKinds: [],
   sentenceVideoKind: null,
@@ -59,6 +63,15 @@ export function normalizeBookSettings(input: any): BookSettings {
       !/^\d{1,64}$/.test(instagramAccountId))
   )
     throw Error("ID akun Instagram tidak valid");
+  const socialId = (key: string) => {
+    const value = input?.[key] || null;
+    if (
+      value !== null &&
+      (typeof value !== "string" || !/^[a-f0-9]{24}$/i.test(value))
+    )
+      throw Error("ID akun YouTube/TikTok tidak valid");
+    return value;
+  };
   const pick = (value: unknown, allowed: string[], label: string) => {
     if (value === null || value === undefined || value === "") return null;
     if (typeof value !== "string" || !allowed.includes(value))
@@ -75,8 +88,6 @@ export function normalizeBookSettings(input: any): BookSettings {
     VERTICAL_KINDS,
     "Sumber panel vertikal",
   );
-  if (!panelHorizontal && !panelVertical)
-    throw Error("Panel butuh minimal satu sumber gambar");
   const chosen = Array.isArray(input?.stockKinds) ? input.stockKinds : [];
   if (chosen.some((k: unknown) => !STOCK_KINDS.includes(k as any)))
     throw Error("Jenis stok tidak dikenal");
@@ -86,7 +97,7 @@ export function normalizeBookSettings(input: any): BookSettings {
     ...[panelHorizontal, panelVertical].filter((k): k is string => !!k),
   ]);
   const sentence = Array.isArray(input?.sentenceKinds)
-    ? input.sentenceKinds
+    ? [...input.sentenceKinds]
     : [];
   if (sentence.some((k: unknown) => !STOCK_KINDS.includes(k as any)))
     throw Error("Jenis gambar kalimat tidak dikenal");
@@ -107,6 +118,8 @@ export function normalizeBookSettings(input: any): BookSettings {
     throw Error("Gaya gambar quote tidak dikenal");
   return {
     instagramAccountId,
+    youtubeAccountId: socialId("youtubeAccountId"),
+    tiktokAccountId: socialId("tiktokAccountId"),
     stockKinds: STOCK_KINDS.filter((k) => needed.has(k)),
     sentenceKinds: STOCK_KINDS.filter((k) => sentence.includes(k)),
     sentenceVideoKind,

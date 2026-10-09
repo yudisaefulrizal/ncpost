@@ -22,6 +22,8 @@ export const outputRoot = () =>
   path.join(ROOT, "output", process.env.NCPOST_TEST === "true" ? ".test" : "");
 const RESERVED = new Set([
   "berita",
+  "lab",
+  "lab-references",
   "stock",
   "public",
   "cache",
@@ -37,6 +39,7 @@ const RESERVED = new Set([
   "quote-images",
 ]);
 export interface ChapterRef {
+  content_type_id?: number;
   id: number;
   book: string;
   title: string;
@@ -63,7 +66,13 @@ export function chapterFolderName(c: ChapterRef) {
   return `${part}-${slug(c.title, "bagian", 60)}`;
 }
 export const chapterDir = (c: ChapterRef) =>
-  path.join(outputRoot(), bookFolderName(c.book), chapterFolderName(c));
+  path.join(
+    outputRoot(),
+    (c.content_type_id && c.content_type_id !== 1
+      ? `jenis-${c.content_type_id}-`
+      : "") + bookFolderName(c.book),
+    chapterFolderName(c),
+  );
 export const panelDir = (c: ChapterRef) => path.join(chapterDir(c), "panel");
 export const audioDir = (c: ChapterRef) => path.join(chapterDir(c), "audio");
 export const quoteImagePath = (c: ChapterRef) =>

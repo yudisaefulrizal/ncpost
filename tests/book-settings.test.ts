@@ -17,6 +17,8 @@ it("bawaan sama dengan perilaku lama", () => {
     sentenceVideoKind: null,
     sentenceVideoHKind: null,
     instagramAccountId: null,
+    youtubeAccountId: null,
+    tiktokAccountId: null,
     quoteImageStyle: "QUOTE_PAPERCUT",
     panelHorizontal: "IMAGE_HORIZONTAL",
     panelVertical: "IMAGE_VERTICAL",
@@ -36,6 +38,8 @@ it("sumber panel otomatis ikut dibuat dan urutan stabil; videoKind lama diabaika
     sentenceVideoKind: null,
     sentenceVideoHKind: null,
     instagramAccountId: null,
+    youtubeAccountId: null,
+    tiktokAccountId: null,
     quoteImageStyle: "QUOTE_PAPERCUT",
     panelHorizontal: null,
     panelVertical: "IMAGE_PAPERCUT",
@@ -44,10 +48,12 @@ it("sumber panel otomatis ikut dibuat dan urutan stabil; videoKind lama diabaika
     panelSources(normalizeBookSettings({ panelVertical: "IMAGE_PAPERCUT" })),
   ).toEqual(["IMAGE_PAPERCUT"]);
 });
-it("validasi: minimal satu sumber panel, sumber harus sesuai orientasi", () => {
-  expect(() => normalizeBookSettings({ stockKinds: [] })).toThrow(
-    /minimal satu/,
-  );
+it("panel opsional; sumber yang dipilih harus sesuai orientasi", () => {
+  expect(normalizeBookSettings({ stockKinds: [] })).toMatchObject({
+    stockKinds: [],
+    panelHorizontal: null,
+    panelVertical: null,
+  });
   expect(() =>
     normalizeBookSettings({ panelHorizontal: "IMAGE_PAPERCUT" }),
   ).toThrow(/horizontal/);
@@ -132,4 +138,21 @@ it("sumber video kalimat (vertikal 9:16) hanya lajur vertikal", () => {
       sentenceVideoKind: "IMAGE_PAPERCUT_HORIZONTAL",
     }),
   ).toThrow(/vertikal/);
+});
+
+it("menyimpan akun YouTube/TikTok per konten dan menolak ID tidak valid", () => {
+  const id = "66b2e19d8c3f5a7e9d0b1c2d";
+  const normalized = normalizeBookSettings({
+    ...DEFAULT_BOOK_SETTINGS,
+    youtubeAccountId: id,
+    tiktokAccountId: id,
+  });
+  expect(normalized.youtubeAccountId).toBe(id);
+  expect(normalized.tiktokAccountId).toBe(id);
+  expect(() =>
+    normalizeBookSettings({
+      ...DEFAULT_BOOK_SETTINGS,
+      youtubeAccountId: "invalid",
+    }),
+  ).toThrow("ID akun");
 });

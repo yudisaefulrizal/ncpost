@@ -1509,3 +1509,13 @@ tr.grp .grp-action {
   max-height: 500px;
   overflow: auto;
 }
+
+dialog.app-dialog {
+  margin: auto;
+  padding: 0;
+  max-width: calc(100vw - 32px);
+  color: inherit;
+}
+dialog.app-dialog::backdrop {
+  background: rgba(21, 32, 26, 0.45);
+}

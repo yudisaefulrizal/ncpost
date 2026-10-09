@@ -2,6 +2,7 @@ import { it, expect } from "vitest";
 import { newsFixture } from "./fixtures/news";
 import {
   newsContent,
+  newsPostImagePrompt,
   newsCaption,
   newsKinds,
   newsStageDone,
@@ -49,5 +50,31 @@ it("artikel kosong tidak ditandai selesai pada gambar per kalimat", () => {
   });
   expect(newsStageDone("IMAGES_VIDEO", emptyNewsProduction(), s, "")).toBe(
     false,
+  );
+});
+
+it("prompt gambar post hanya instruksi sederhana dan semua paragraf artikel", () => {
+  const article = newsFixture().article;
+  const prompt = newsPostImagePrompt(article);
+  expect(prompt).toBe(
+    "buat menjadi infografis\n\n" +
+      newsContent(article).paragraphs.join("\n\n"),
+  );
+  expect(prompt).not.toContain(newsContent(article).title);
+  expect(prompt).not.toContain("Sumber:");
+  expect(prompt).not.toContain("Tag:");
+  const p = emptyNewsProduction();
+  expect(newsKinds("POST_IMAGE", DEFAULT_BOOK_SETTINGS)).toEqual([
+    "POST_IMAGE",
+  ]);
+  expect(
+    newsPrerequisite("POST_IMAGE", p, DEFAULT_BOOK_SETTINGS, article),
+  ).toBeNull();
+  expect(newsStageDone("POST_IMAGE", p, DEFAULT_BOOK_SETTINGS, article)).toBe(
+    false,
+  );
+  p.outputs.POST_IMAGE = { file: "infografis.jpg" };
+  expect(newsStageDone("POST_IMAGE", p, DEFAULT_BOOK_SETTINGS, article)).toBe(
+    true,
   );
 });

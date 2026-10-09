@@ -14,9 +14,14 @@ it("validasi nilai", () => {
   expect(validCredential("ab")).toBe(false);
 });
 it("status tidak membocorkan nilai", () => {
-  const s = credentialStatus({ NCWA_API_KEY: "rahasia" } as any);
+  const s = credentialStatus({
+    NCWA_API_KEY: "rahasia",
+    ZERNIO_API_KEY: "zernio-secret",
+  } as any);
   expect(JSON.stringify(s)).not.toContain("rahasia");
   expect(s.NCWA_API_KEY.set).toBe(true);
+  expect(s.ZERNIO_API_KEY.set).toBe(true);
+  expect(JSON.stringify(s)).not.toContain("zernio-secret");
   expect(s.ELEVENLABS_API_KEY.set).toBe(false);
 });
 it("tulis, ganti, hapus tanpa merusak baris lain", () => {

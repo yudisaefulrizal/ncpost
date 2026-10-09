@@ -1,3 +1,8 @@
+import {
+  currentContentType,
+  ContentTypeStore,
+  contentAllows,
+} from "./content-types";
 import type mysql from "mysql2/promise";
 import {
   normalizeBookSettings,
@@ -21,8 +26,11 @@ export class NewsMediaStore {
   async settings(
     category = "teknologi",
     db: Db = this.db,
+    typeId = currentContentType()?.id ?? 2,
   ): Promise<BookSettings> {
     if (category !== "teknologi") throw Error("Jenis berita tidak dikenal");
+    const type = await new ContentTypeStore(this.db).get(typeId);
+    if (type.settings) return type.settings;
     const [rows]: any = await db.query(
       "SELECT settings FROM news_content_settings WHERE category=?",
       [category],
@@ -40,6 +48,15 @@ export class NewsMediaStore {
   async saveSettings(category: string, input: unknown) {
     if (category !== "teknologi") throw Error("Jenis berita tidak dikenal");
     const s = normalizeBookSettings(input);
+    const type = currentContentType();
+    if (type && (type.id !== 2 || type.settings)) {
+      return (
+        await new ContentTypeStore(this.db).save(
+          { ...type, settings: s },
+          type.id,
+        )
+      ).settings!;
+    }
     await this.db.query(
       "INSERT INTO news_content_settings(category,settings) VALUES(?,?) ON DUPLICATE KEY UPDATE settings=VALUES(settings)",
       [category, JSON.stringify(s)],
@@ -99,7 +116,16 @@ export class NewsMediaStore {
         throw Error(
           "Tunggu seluruh produksi berita ini selesai sebelum regenerate",
         );
-      const settings = await this.settings(n.category, c);
+      const settings = await this.settings(
+        n.category,
+        c,
+        n.content_type_id ?? 2,
+      );
+      const type = await new ContentTypeStore(this.db).get(
+        n.content_type_id ?? 2,
+      );
+      if (kinds.some((kind) => !contentAllows(type, kind)))
+        throw Error("Tahap tidak digunakan oleh jenis konten ini");
       const p = await this.detail(id, n.attempts, c);
       const ids: number[] = [];
       for (const kind of kinds) {

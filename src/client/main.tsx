@@ -1,6 +1,20 @@
+import { api, setContentTypeScope } from "./api";
+import {
+  ContentTypes,
+  ContentTypeContext,
+  useContentType,
+} from "./content-types";
+import {
+  contentStages,
+  contentAllows,
+  type ContentType,
+} from "../server/content-type-domain";
+import { PromptLab } from "./lab";
+import { ZernioPanel } from "./zernio";
 import {
   NEWS_MEDIA_STAGES,
   NEWS_CRON_TYPES,
+  type NewsCronKind,
   emptyNewsProduction,
   newsKinds,
   newsContent,
@@ -12,7 +26,7 @@ import {
   selectInstagramAccount,
   type InstagramConnection,
 } from "../server/instagram-account";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/plus-jakarta-sans/400.css";
 import "@fontsource/plus-jakarta-sans/500.css";
@@ -52,16 +66,6 @@ import {
   type Filter,
   type Tone,
 } from "./status";
-async function api(url: string, method = "GET", body?: unknown) {
-  const r = await fetch("/api" + url, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await r.json();
-  if (!r.ok) throw Error(data.error || "Operasi gagal");
-  return data;
-}
 const importJsonExample =
   JSON.stringify(
     [
@@ -73,28 +77,20 @@ const importJsonExample =
     2,
   ) + "\n";
 const navGroups: [string, [string, IconName][]][] = [
-  [
-    "Konten Buku",
-    [
-      ["Produksi", "video"],
-      ["Pengaturan Konten", "sliders"],
-      ["Cronjob", "gear"],
-    ],
-  ],
-  [
-    "Konten Berita",
-    [
-      ["Produksi Berita", "doc"],
-      ["Pengaturan Berita", "sliders"],
-      ["Cronjob Berita", "gear"],
-    ],
-  ],
+  ["Konten", [["Kreat Konten", "grid"]]],
   [
     "Aset",
     [
       ["Stok Gambar", "image"],
       ["Stok Konten Panel", "grid"],
       ["Stok Konten Video", "video"],
+    ],
+  ],
+  [
+    "Lab",
+    [
+      ["Lab Prompt Artikel", "doc"],
+      ["Lab Prompt Gambar", "image"],
     ],
   ],
   [
@@ -150,6 +146,7 @@ function App() {
     [bookCrons, setBookCrons] = useState<BookCron[]>([]),
     [viewingQuote, setViewingQuote] = useState<any>(null),
     [viewingQuoteImage, setViewingQuoteImage] = useState<any>(null),
+    [viewingTextImage, setViewingTextImage] = useState<any>(null),
     [watching, setWatching] = useState<{
       c: any;
       horizontal?: boolean;
@@ -157,7 +154,7 @@ function App() {
     [listeningSentence, setListeningSentence] = useState<any>(null),
     [msg, setMsg] = useState(""),
     [rows, setRows] = useState<any[]>([]),
-    [page, setPage] = useState("Produksi"),
+    [page, setPage] = useState("Kreat Konten"),
     [detail, setDetail] = useState<any>(null),
     [text, setText] = useState(""),
     [search, setSearch] = useState(""),
@@ -171,14 +168,75 @@ function App() {
     }),
     [creds, setCreds] = useState<any>(null),
     [credInput, setCredInput] = useState<Record<string, string>>({});
+  const [contentTypes, setContentTypes] = useState<ContentType[]>([]);
+  const [activeType, setActiveType] = useState<ContentType | null>(null);
+  const activeTypeId = useRef<number | null>(null);
+  const loadContentTypes = async () => {
+    const types: ContentType[] = await api("/content-types");
+    setContentTypes(types);
+    setActiveType((current) =>
+      current ? (types.find((t) => t.id === current.id) ?? null) : null,
+    );
+  };
+  const openContentType = (type: ContentType) => {
+    setContentTypeScope(type.id);
+    activeTypeId.current = type.id;
+    setActiveType(type);
+    setRows([]);
+    setJobs([]);
+    setBookSettings([]);
+    setBookCrons([]);
+    setDetail(null);
+    setMsg("");
+    setSearch("");
+    setFilterBook("");
+    setFilter("semua");
+    setPage(type.engine === "book" ? "Produksi" : "Produksi Berita");
+  };
+  const activeStages = activeType
+    ? contentStages(activeType)
+    : new Set<string>();
+  const uses = (stage: string) => !activeType || activeStages.has(stage);
+  const dynamicNav: typeof navGroups = [navGroups[0]];
+  if (activeType)
+    dynamicNav.push([
+      activeType.name,
+      activeType.engine === "book"
+        ? [
+            ["Produksi", "video"],
+            ["Pengaturan Konten", "sliders"],
+            ["Cronjob", "gear"],
+          ]
+        : [
+            ["Produksi Berita", "doc"],
+            ["Pengaturan Berita", "sliders"],
+            ["Cronjob Berita", "gear"],
+          ],
+    ]);
+  dynamicNav.push(...navGroups.slice(1));
+
   const refresh = async () => {
-    setRows(await api("/chapters"));
-    setJobs(await api("/jobs"));
-    setBookSettings(await api("/book-settings"));
-    setBookCrons(await api("/book-crons"));
+    if (
+      !activeType ||
+      activeType.engine !== "book" ||
+      activeTypeId.current !== activeType.id
+    )
+      return;
+    const [chapters, jobs, settings, crons] = await Promise.all([
+      api("/chapters"),
+      api("/jobs"),
+      api("/book-settings"),
+      api("/book-crons"),
+    ]);
+    if (activeTypeId.current !== activeType.id) return;
+    setRows(chapters);
+    setJobs(jobs);
+    setBookSettings(settings);
+    setBookCrons(crons);
   };
   const settingsFor = (book: string): BookSettings =>
     bookSettings.find((b) => bookKey(b.book) === bookKey(book))?.settings ??
+    activeType?.settings ??
     DEFAULT_BOOK_SETTINGS;
   const count = (c: any, kind: string) => Number(c.stock_counts?.[kind] ?? 0);
   const loadSettings = () =>
@@ -214,16 +272,17 @@ function App() {
   useEffect(() => {
     if (!auth) return;
     loadSettings();
+    action(loadContentTypes);
   }, [auth]);
   useEffect(() => {
     if (!auth) return;
-    refresh();
+    action(refresh);
     const timer = setInterval(() => {
-      refresh();
+      action(refresh);
       if (detail) api("/chapters/" + detail.id).then(setDetail);
     }, 3000);
     return () => clearInterval(timer);
-  }, [auth, detail?.id]);
+  }, [auth, detail?.id, activeType?.id]);
   const action = async (fn: () => Promise<any>) => {
     try {
       await fn();
@@ -406,6 +465,25 @@ function App() {
     stage: string,
     busy: (kinds: string[]) => boolean,
   ): PlayProps => {
+    if (stage === "textImage") {
+      if (busy(["POST_IMAGE"]))
+        return { title: "Gambar per seluruh teks sedang dibuat", busy: true };
+      if (c.text_image)
+        return {
+          title: "Gambar per seluruh teks tersedia",
+          done: true,
+          view: () => setViewingTextImage(c),
+          redo: () =>
+            confirm(`Buat ulang gambar dari seluruh teks "${c.title}"?`) &&
+            runStage(c, ["POST_IMAGE"], "Gambar per seluruh teks", true),
+        };
+      if (c.article_status !== "siap")
+        return { title: "Butuh artikel lolos editor" };
+      return {
+        title: "Buat satu gambar dari seluruh teks artikel",
+        run: () => runStage(c, ["POST_IMAGE"], "Gambar per seluruh teks"),
+      };
+    }
     if (stage === "quote") {
       if (busy(["QUOTE"])) return { title: "Quote sedang dibuat", busy: true };
       if (c.quote)
@@ -646,7 +724,8 @@ function App() {
     if (n === "Kredensial")
       action(async () => setCreds(await api("/credentials")));
     if (n === "Pengaturan") loadSettings();
-    if (n === "Pengaturan Konten") refreshInstagram();
+    if (n === "Pengaturan Konten" || n === "Pengaturan Berita")
+      refreshInstagram();
     if (n === "Produksi") setFilter("semua");
   };
   useEffect(() => setQueuePage(1), [search, filter, filterBook]);
@@ -681,7 +760,7 @@ function App() {
           <Brand />
           <h1>Masuk ke ruang kerja</h1>
           <p className="muted">
-            Artikel buku, produksi, dan Instagram Reels dalam satu antrean.
+            Kelola jenis konten dan produksi dalam satu ruang kerja.
           </p>
           <form
             onSubmit={(e) => {
@@ -883,16 +962,22 @@ function App() {
             <tr>
               <th>Bagian</th>
               <th>Artikel</th>
-              <th>Quote</th>
-              <th>Gambar Quote</th>
-              <th>Gambar Panel</th>
-              <th>Gambar Video</th>
-              <th>Audio</th>
-              <th>Video V</th>
-              <th>Video H</th>
-              <th>Panel</th>
-              <th>Post IG</th>
-              <th>Reels IG</th>
+              {uses("POST_IMAGE") && <th>Gambar per seluruh teks</th>}
+              {uses("QUOTE") && <th>Quote</th>}
+              {uses("QUOTE_IMAGE") && <th>Gambar Quote</th>}
+              {uses("IMAGES_PANEL") && <th>Gambar Panel</th>}
+              {uses("IMAGES_VIDEO") && <th>Gambar Video</th>}
+              {uses("TTS_KALIMAT") && <th>Audio</th>}
+              {uses("VIDEO_KALIMAT") && <th>Video V</th>}
+              {uses("VIDEO_KALIMAT_H") && <th>Video H</th>}
+              {uses("PANEL") && <th>Panel</th>}
+              {(uses("PANEL") || uses("VIDEO_KALIMAT")) && <th>Instagram</th>}
+              {(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
+                <th>YouTube</th>
+              )}
+              {(uses("PANEL") ||
+                uses("VIDEO_KALIMAT") ||
+                uses("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
               <th>Aksi</th>
             </tr>
           </thead>
@@ -900,7 +985,29 @@ function App() {
             {groupByBook(queue.items).map((g) => (
               <React.Fragment key={g.book + g.rows[0].id}>
                 <tr className="grp">
-                  <td colSpan={13}>
+                  <td
+                    colSpan={
+                      3 +
+                      Number(uses("PANEL") || uses("VIDEO_KALIMAT")) +
+                      Number(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) +
+                      Number(
+                        uses("PANEL") ||
+                          uses("VIDEO_KALIMAT") ||
+                          uses("VIDEO_KALIMAT_H"),
+                      ) +
+                      [
+                        "POST_IMAGE",
+                        "QUOTE",
+                        "QUOTE_IMAGE",
+                        "IMAGES_PANEL",
+                        "IMAGES_VIDEO",
+                        "TTS_KALIMAT",
+                        "VIDEO_KALIMAT",
+                        "VIDEO_KALIMAT_H",
+                        "PANEL",
+                      ].filter(uses).length
+                    }
+                  >
                     {g.book}
                     <span>
                       {
@@ -936,36 +1043,99 @@ function App() {
                     <td>
                       <StageCell play={stagePlay(c, "artikel")} />
                     </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "quote")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "quoteImage")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "gambar")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "kalimat")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "audioKalimat")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "videoKalimat")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "videoKalimatH")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "panel")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "post")} />
-                    </td>
-                    <td>
-                      <StageCell play={stagePlay(c, "reels")} />
-                    </td>
+                    {uses("POST_IMAGE") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "textImage")} />
+                      </td>
+                    )}
+                    {uses("QUOTE") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "quote")} />
+                      </td>
+                    )}
+                    {uses("QUOTE_IMAGE") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "quoteImage")} />
+                      </td>
+                    )}
+                    {uses("IMAGES_PANEL") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "gambar")} />
+                      </td>
+                    )}
+                    {uses("IMAGES_VIDEO") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "kalimat")} />
+                      </td>
+                    )}
+                    {uses("TTS_KALIMAT") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "audioKalimat")} />
+                      </td>
+                    )}
+                    {uses("VIDEO_KALIMAT") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "videoKalimat")} />
+                      </td>
+                    )}
+                    {uses("VIDEO_KALIMAT_H") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "videoKalimatH")} />
+                      </td>
+                    )}
+                    {uses("PANEL") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "panel")} />
+                      </td>
+                    )}
+                    {(uses("PANEL") || uses("VIDEO_KALIMAT")) && (
+                      <td>
+                        <div className="stack-sm">
+                          {uses("PANEL") && (
+                            <div>
+                              <small className="muted">Carousel</small>
+                              <StageCell play={stagePlay(c, "post")} />
+                            </div>
+                          )}
+                          {uses("VIDEO_KALIMAT") && (
+                            <div>
+                              <small className="muted">Reels</small>
+                              <StageCell play={stagePlay(c, "reels")} />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                    {(uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
+                      <td>
+                        <ZernioCell
+                          source={`book:${c.id}`}
+                          title={c.title}
+                          platform="youtube"
+                          accountId={settingsFor(c.book).youtubeAccountId}
+                          ready={!!(c.sentence_video || c.sentence_video_h)}
+                        />
+                      </td>
+                    )}
+                    {(uses("PANEL") ||
+                      uses("VIDEO_KALIMAT") ||
+                      uses("VIDEO_KALIMAT_H")) && (
+                      <td>
+                        <ZernioCell
+                          source={`book:${c.id}`}
+                          title={c.title}
+                          platform="tiktok"
+                          accountId={settingsFor(c.book).tiktokAccountId}
+                          ready={
+                            !!(
+                              c.sentence_video ||
+                              c.sentence_video_h ||
+                              c.panels
+                            )
+                          }
+                        />
+                      </td>
+                    )}
                     <td>
                       <div className="stage-cell">
                         <button
@@ -1141,20 +1311,11 @@ function App() {
                     : "Struktur lolos; review makna wajib sebelum stok gambar.",
                 run: () => action(() => enqueue("EDITOR")),
               }
-            : !visualOk
-              ? {
-                  label: "Buat stok gambar",
-                  hint: "Artikel lolos editor. Empat lajur stok dibuat terpisah.",
-                  run: () =>
-                    action(async () => {
-                      for (const [k] of IMAGE_LANES) await enqueue(k);
-                      setMsg("Empat job stok gambar masuk antrean");
-                    }),
-                }
-              : {
-                  label: "",
-                  hint: "Audio dan video menunggu ElevenLabs aktif.",
-                };
+            : {
+                label: "Buka produksi",
+                hint: "Artikel siap untuk keluaran yang dipilih.",
+                run: () => setDetail(null),
+              };
     async function saveDraft() {
       await api("/chapters/" + detail.id, "PUT", { article: text });
       await open(detail);
@@ -1171,7 +1332,13 @@ function App() {
           v,
           report,
           preview,
-          steps,
+          steps: steps.filter((step) =>
+            step.name === "Stok gambar"
+              ? uses("IMAGES_PANEL")
+              : step.name === "Video" || step.name === "Instagram Reels"
+                ? uses("VIDEO_KALIMAT")
+                : true,
+          ),
           primary,
           running,
           ttsLive,
@@ -1188,28 +1355,43 @@ function App() {
         }
       />
     );
+  } else if (page === "Kreat Konten") {
+    heading = "Kreat Konten";
+    content = (
+      <ContentTypes
+        items={contentTypes}
+        onOpen={openContentType}
+        onSaved={loadContentTypes}
+      />
+    );
   } else if (page === "Produksi Berita") {
-    sub =
-      "Produksi berita teknologi: artikel, gambar, audio, panel, video, dan Instagram.";
+    sub = "";
     content = (
       <NewsProduction
+        key={activeType?.id}
         instagram={instagram}
         ttsReady={!!settings?.newsTts?.enabled}
         ttsReason={settings?.newsTts?.reason ?? "Memeriksa Edge TTS berita…"}
       />
     );
   } else if (page === "Pengaturan Berita") {
-    sub = "Sumber gambar, video, dan akun Instagram per jenis berita.";
+    sub =
+      "Sumber gambar, video, dan akun Instagram, YouTube, TikTok per jenis berita.";
     content = (
-      <NewsContentSettings
-        instagram={instagram}
-        onRefreshInstagram={refreshInstagram}
-      />
+      <NewsContentSettings key={activeType?.id} instagram={instagram} />
     );
   } else if (page === "Cronjob Berita") {
     sub =
       "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
-    content = <NewsCronSettings />;
+    content = <NewsCronSettings key={activeType?.id} />;
+  } else if (page === "Lab Prompt Artikel" || page === "Lab Prompt Gambar") {
+    sub = "";
+    content = (
+      <PromptLab
+        key={page}
+        kind={page === "Lab Prompt Artikel" ? "article" : "image"}
+      />
+    );
   } else if (page === "Kredensial") {
     sub = "Key khusus aplikasi untuk penyedia eksternal.";
     content = (
@@ -1264,6 +1446,7 @@ function App() {
         ) : (
           <p className="muted">Memuat…</p>
         )}
+        <ZernioPanel credentials key={JSON.stringify(creds)} />
       </section>
     );
   } else if (page === "Pengaturan") {
@@ -1313,21 +1496,38 @@ function App() {
       />
     );
   } else if (page === "Pengaturan Konten") {
-    sub =
-      "Jenis gambar, sumber panel, dan akun Instagram tujuan per judul buku.";
-    content = (
-      <ContentSettings
-        items={bookSettings}
-        instagram={instagram}
-        onRefreshInstagram={refreshInstagram}
-        onSave={(book, settings) =>
-          action(async () => {
-            await api("/book-settings", "PUT", { book, settings });
-            setMsg(`Pengaturan konten "${book}" disimpan`);
-            await refresh();
-          })
-        }
-      />
+    content = activeType && (
+      <div className="stack-lg">
+        <BookSettingsCard
+          book={activeType.name}
+          settings={activeType.settings ?? DEFAULT_BOOK_SETTINGS}
+          instagram={instagram}
+          onSave={(_, settings) =>
+            action(async () => {
+              await api(`/content-types/${activeType.id}`, "PUT", {
+                ...activeType,
+                settings,
+              });
+              await loadContentTypes();
+              await refresh();
+              setMsg("Pengaturan konten disimpan");
+            })
+          }
+        />
+        {activeType.id === 1 && (
+          <ContentSettings
+            items={bookSettings}
+            instagram={instagram}
+            onSave={(book, settings) =>
+              action(async () => {
+                await api("/book-settings", "PUT", { book, settings });
+                await refresh();
+                setMsg(`Pengaturan ${book} disimpan`);
+              })
+            }
+          />
+        )}
+      </div>
     );
   } else if (page === "Stok Konten Panel") {
     sub =
@@ -1341,7 +1541,9 @@ function App() {
     content = (
       <div className="stack-lg">
         {content}
-        <NewsFinishedContent kind="PANEL" />
+        {activeType?.engine === "news" && (
+          <NewsFinishedContent key={activeType.id} kind="PANEL" />
+        )}
       </div>
     );
   } else if (page === "Stok Konten Video") {
@@ -1392,7 +1594,9 @@ function App() {
     content = (
       <div className="stack-lg">
         {content}
-        <NewsFinishedContent kind="VIDEO" />
+        {activeType?.engine === "news" && (
+          <NewsFinishedContent key={activeType.id} kind="VIDEO" />
+        )}
       </div>
     );
   } else if (page === "Stok Gambar") {
@@ -1408,276 +1612,311 @@ function App() {
 
   const nextChapter = rows.find((c) => !c.article);
   return (
-    <div className="shell">
-      <aside className="sidebar">
-        <Brand />
-        <nav aria-label="Navigasi utama">
-          {navGroups.map(([group, items]) => (
-            <div key={group} className="nav-group">
-              <div className="nav-label">{group}</div>
-              {items.map(([n, icon]) => (
-                <button
-                  key={n}
-                  className={"nav-btn" + (page === n && !detail ? " on" : "")}
-                  aria-label={
-                    [
-                      "Produksi Berita",
-                      "Pengaturan Berita",
-                      "Cronjob Berita",
-                    ].includes(n)
-                      ? n
-                      : undefined
-                  }
-                  aria-current={page === n && !detail ? "page" : undefined}
-                  onClick={() => go(n)}
-                >
-                  <Icon name={icon} />
-                  {n === "Produksi Berita"
-                    ? "Produksi"
-                    : n === "Pengaturan Berita"
-                      ? "Pengaturan Konten"
-                      : n === "Cronjob Berita"
-                        ? "Cronjob"
-                        : n}
-                  {n === "Produksi" && (
-                    <span className="mono nav-count">{rows.length}</span>
-                  )}
-                </button>
-              ))}
+    <ContentTypeContext.Provider value={activeType}>
+      <div className="shell">
+        <aside className="sidebar">
+          <Brand />
+          <nav aria-label="Navigasi utama">
+            {dynamicNav.map(([group, items]) => (
+              <div key={group} className="nav-group">
+                <div className="nav-label">{group}</div>
+                {items.map(([n, icon]) => (
+                  <button
+                    key={n}
+                    className={"nav-btn" + (page === n && !detail ? " on" : "")}
+                    aria-label={
+                      [
+                        "Produksi Berita",
+                        "Pengaturan Berita",
+                        "Cronjob Berita",
+                      ].includes(n)
+                        ? n
+                        : undefined
+                    }
+                    aria-current={page === n && !detail ? "page" : undefined}
+                    onClick={() => go(n)}
+                  >
+                    <Icon name={icon} />
+                    {n === "Produksi Berita"
+                      ? "Produksi"
+                      : n === "Pengaturan Berita"
+                        ? "Pengaturan Konten"
+                        : n === "Cronjob Berita"
+                          ? "Cronjob"
+                          : n}
+                    {n === "Produksi" && (
+                      <span className="mono nav-count">{rows.length}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <div className="sidebar-foot">
+            <div className="dot-line">
+              <span
+                className={"dot " + (activeJobs.length ? "dot-run" : "dot-ok")}
+              ></span>
+              {activeJobs.length
+                ? `${activeJobs.length} job berjalan`
+                : "Tidak ada job aktif"}
             </div>
-          ))}
-        </nav>
-        <div className="sidebar-foot">
-          <div className="dot-line">
-            <span
-              className={"dot " + (activeJobs.length ? "dot-run" : "dot-ok")}
-            ></span>
-            {activeJobs.length
-              ? `${activeJobs.length} job berjalan`
-              : "Tidak ada job aktif"}
-          </div>
-          <small className="muted">
-            Instagram{" "}
-            {instagram.state === "connected"
-              ? `${instagram.accounts?.length ?? 0} akun`
-              : "belum terhubung"}{" "}
-            via NC-WA
-          </small>
-          {user && <small className="muted">Masuk sebagai {user}</small>}
-          <button
-            className="btn btn-sec btn-sm"
-            onClick={() =>
-              action(async () => {
-                await api("/logout", "POST");
-                setUser("");
-                setAuth(false);
-              })
-            }
-          >
-            Keluar
-          </button>
-        </div>
-      </aside>
-      <main className="main">
-        {!detail && (
-          <header className="page-head">
-            <div>
-              <h1>{heading}</h1>
-              {sub && <p className="muted">{sub}</p>}
-            </div>
-            <div className="row-gap">
-              <span className="chip t-none chip-lg">
-                <Icon name="link" />
-                ncpost.nuscode.id
-              </span>
-              {page === "Produksi" && nextChapter && (
-                <button
-                  className="btn btn-pri"
-                  onClick={() => action(() => open(nextChapter))}
-                >
-                  <Icon name="plus" />
-                  Buka bagian berikutnya
-                </button>
-              )}
-            </div>
-          </header>
-        )}
-        {msg && (
-          <div className="alert" role="status">
-            <span>{msg}</span>
+            <small className="muted">
+              Instagram{" "}
+              {instagram.state === "connected"
+                ? `${instagram.accounts?.length ?? 0} akun`
+                : "belum terhubung"}{" "}
+              via NC-WA
+            </small>
+            {user && <small className="muted">Masuk sebagai {user}</small>}
             <button
-              className="btn btn-ghost btn-sm"
-              aria-label="Tutup pesan"
-              onClick={() => setMsg("")}
+              className="btn btn-sec btn-sm"
+              onClick={() =>
+                action(async () => {
+                  await api("/logout", "POST");
+                  setUser("");
+                  setAuth(false);
+                })
+              }
             >
-              ×
+              Keluar
             </button>
           </div>
-        )}
-        {content}
-        {!detail && page === "Produksi" && jobsCard}
-        {viewing && (
-          <ArticleModal c={viewing} onClose={() => setViewing(null)} />
-        )}
-        {viewingStock && (
-          <StockModal
-            c={viewingStock}
-            kinds={settingsFor(viewingStock.book).stockKinds}
-            onClose={() => setViewingStock(null)}
-            onCreate={(kind, name) => {
-              const c = viewingStock;
-              setViewingStock(null);
-              runStage(c, [kind], "Stok " + name);
-            }}
-          />
-        )}
-        {viewingSentence && (
-          <StockModal
-            c={viewingSentence}
-            kinds={settingsFor(viewingSentence.book).sentenceKinds}
-            sentences={articleSentences(viewingSentence.article).map(
-              (s) => s.text,
-            )}
-            onClose={() => setViewingSentence(null)}
-            onCreate={(kind, name) => {
-              const c = viewingSentence;
-              setViewingSentence(null);
-              runStage(c, [kind], "Gambar kalimat " + name);
-            }}
-          />
-        )}
-        {viewingPanel && (
-          <PanelModal c={viewingPanel} onClose={() => setViewingPanel(null)} />
-        )}
-        {listeningSentence && (
-          <Modal
-            c={listeningSentence}
-            title="Audio per kalimat"
-            onClose={() => setListeningSentence(null)}
-            wide
-          >
-            {(() => {
-              const m = parse(listeningSentence.sentence_audio);
-              return (
-                <ol className="audio-list">
-                  {m.sentences.map((x: any) => (
-                    <li key={x.file}>
-                      <b>Kalimat {x.sentence}</b>
-                      <audio
-                        controls
-                        preload="none"
-                        src={`/api/audio-kalimat/${listeningSentence.id}/${x.file}?v=${m.renderedAt}`}
-                      />
-                      <p className="muted small">{x.narration_text}</p>
-                    </li>
-                  ))}
-                </ol>
-              );
-            })()}
-          </Modal>
-        )}
-        {watching && (
-          <Modal
-            c={watching.c}
-            title={
-              watching.horizontal ? "Video horizontal (16:9)" : "Video (9:16)"
-            }
-            onClose={() => setWatching(null)}
-            wide
-          >
-            {(() => {
-              const m = parse(
-                watching.horizontal
-                  ? watching.c.sentence_video_h
-                  : watching.c.sentence_video,
-              );
-              const base = `/api/${watching.horizontal ? "video-kalimat-h" : "video-kalimat"}/${watching.c.id}`;
-              return (
-                <div className="stack">
-                  <video
-                    className={
-                      "reels-player " + (watching.horizontal ? "wide" : "tall")
-                    }
-                    controls
-                    autoPlay
-                    src={`${base}/${m.file}?v=${m.renderedAt}`}
-                  />
-                  <p className="muted small">
-                    {Math.round(m.duration)} dtk · {m.frames} frame · {m.fps}{" "}
-                    fps · {m.width}×{m.height} · cek integritas{" "}
-                    {m.integrity_check}
-                  </p>
-                </div>
-              );
-            })()}
-          </Modal>
-        )}
-        {viewingQuoteImage && (
-          <Modal
-            c={viewingQuoteImage}
-            title="Gambar quote"
-            onClose={() => setViewingQuoteImage(null)}
-            wide
-          >
-            {(() => {
-              const m = parse(viewingQuoteImage.quote_image);
-              const src = `/api/quote-image/${viewingQuoteImage.id}?v=${m.renderedAt}`;
-              return (
-                <figure className="quote-image">
-                  <a href={src} target="_blank" rel="noreferrer">
-                    <img src={src} alt={viewingQuoteImage.quote ?? ""} />
-                  </a>
-                  <figcaption className="muted small">
-                    {QUOTE_IMAGE_STYLES[m.style]?.label ?? m.style}
-                  </figcaption>
-                </figure>
-              );
-            })()}
-          </Modal>
-        )}
-        {viewingQuote && (
-          <Modal
-            c={viewingQuote}
-            title="Quote"
-            onClose={() => setViewingQuote(null)}
-          >
-            <blockquote className="quote">{viewingQuote.quote}</blockquote>
-          </Modal>
-        )}
-        {postingReels && (
-          <ReelsModal
-            c={postingReels}
-            target={instagramTarget(postingReels.book)}
-            onClose={() => setPostingReels(null)}
-            onConfirm={() => {
-              const c = postingReels;
-              setPostingReels(null);
-              runStage(c, ["REELS_IG"], "Reels IG");
-            }}
-          />
-        )}
-        {posting && (
-          <PostModal
-            c={posting}
-            target={instagramTarget(posting.book)}
-            onClose={() => setPosting(null)}
-            onConfirm={() => {
-              const c = posting;
-              setPosting(null);
-              runStage(c, ["POST_IG"], "Post IG");
-            }}
-          />
-        )}
-        <footer className="muted small">
-          NC Post Buku · Jadwal otomatis di halaman Cronjob · Preview bukan
-          hasil produksi final
-        </footer>
-      </main>
-    </div>
+        </aside>
+        <main className="main">
+          {!detail && (
+            <header className="page-head">
+              <div>
+                <h1>
+                  {activeType && ["Produksi", "Produksi Berita"].includes(page)
+                    ? activeType.name
+                    : heading}
+                </h1>
+                {sub && <p className="muted">{sub}</p>}
+              </div>
+              <div className="row-gap">
+                <span className="chip t-none chip-lg">
+                  <Icon name="link" />
+                  ncpost.nuscode.id
+                </span>
+                {page === "Produksi" && nextChapter && (
+                  <button
+                    className="btn btn-pri"
+                    onClick={() => action(() => open(nextChapter))}
+                  >
+                    <Icon name="plus" />
+                    Buka bagian berikutnya
+                  </button>
+                )}
+              </div>
+            </header>
+          )}
+          {msg && (
+            <div className="alert" role="status">
+              <span>{msg}</span>
+              <button
+                className="btn btn-ghost btn-sm"
+                aria-label="Tutup pesan"
+                onClick={() => setMsg("")}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {content}
+          {!detail && page === "Produksi" && jobsCard}
+          {viewing && (
+            <ArticleModal c={viewing} onClose={() => setViewing(null)} />
+          )}
+          {viewingStock && (
+            <StockModal
+              c={viewingStock}
+              kinds={settingsFor(viewingStock.book).stockKinds}
+              onClose={() => setViewingStock(null)}
+              onCreate={(kind, name) => {
+                const c = viewingStock;
+                setViewingStock(null);
+                runStage(c, [kind], "Stok " + name);
+              }}
+            />
+          )}
+          {viewingSentence && (
+            <StockModal
+              c={viewingSentence}
+              kinds={settingsFor(viewingSentence.book).sentenceKinds}
+              sentences={articleSentences(viewingSentence.article).map(
+                (s) => s.text,
+              )}
+              onClose={() => setViewingSentence(null)}
+              onCreate={(kind, name) => {
+                const c = viewingSentence;
+                setViewingSentence(null);
+                runStage(c, [kind], "Gambar kalimat " + name);
+              }}
+            />
+          )}
+          {viewingPanel && (
+            <PanelModal
+              c={viewingPanel}
+              onClose={() => setViewingPanel(null)}
+            />
+          )}
+          {listeningSentence && (
+            <Modal
+              c={listeningSentence}
+              title="Audio per kalimat"
+              onClose={() => setListeningSentence(null)}
+              wide
+            >
+              {(() => {
+                const m = parse(listeningSentence.sentence_audio);
+                return (
+                  <ol className="audio-list">
+                    {m.sentences.map((x: any) => (
+                      <li key={x.file}>
+                        <b>Kalimat {x.sentence}</b>
+                        <audio
+                          controls
+                          preload="none"
+                          src={`/api/audio-kalimat/${listeningSentence.id}/${x.file}?v=${m.renderedAt}`}
+                        />
+                        <p className="muted small">{x.narration_text}</p>
+                      </li>
+                    ))}
+                  </ol>
+                );
+              })()}
+            </Modal>
+          )}
+          {watching && (
+            <Modal
+              c={watching.c}
+              title={
+                watching.horizontal ? "Video horizontal (16:9)" : "Video (9:16)"
+              }
+              onClose={() => setWatching(null)}
+              wide
+            >
+              {(() => {
+                const m = parse(
+                  watching.horizontal
+                    ? watching.c.sentence_video_h
+                    : watching.c.sentence_video,
+                );
+                const base = `/api/${watching.horizontal ? "video-kalimat-h" : "video-kalimat"}/${watching.c.id}`;
+                return (
+                  <div className="stack">
+                    <video
+                      className={
+                        "reels-player " +
+                        (watching.horizontal ? "wide" : "tall")
+                      }
+                      controls
+                      autoPlay
+                      src={`${base}/${m.file}?v=${m.renderedAt}`}
+                    />
+                    <p className="muted small">
+                      {Math.round(m.duration)} dtk · {m.frames} frame · {m.fps}{" "}
+                      fps · {m.width}×{m.height} · cek integritas{" "}
+                      {m.integrity_check}
+                    </p>
+                  </div>
+                );
+              })()}
+            </Modal>
+          )}
+          {viewingTextImage && (
+            <Modal
+              c={viewingTextImage}
+              title="Gambar per seluruh teks"
+              onClose={() => setViewingTextImage(null)}
+              wide
+            >
+              <img
+                src={`/api/text-image/${viewingTextImage.id}?v=${parse(viewingTextImage.text_image).renderedAt}`}
+                alt={`Gambar dari seluruh teks ${viewingTextImage.title}`}
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: 700,
+                  objectFit: "contain",
+                }}
+              />
+              <a
+                className="btn btn-sec"
+                href={`/api/text-image/${viewingTextImage.id}`}
+                download={`gambar-seluruh-teks-${viewingTextImage.id}.jpg`}
+              >
+                Unduh gambar
+              </a>
+            </Modal>
+          )}
+          {viewingQuoteImage && (
+            <Modal
+              c={viewingQuoteImage}
+              title="Gambar quote"
+              onClose={() => setViewingQuoteImage(null)}
+              wide
+            >
+              {(() => {
+                const m = parse(viewingQuoteImage.quote_image);
+                const src = `/api/quote-image/${viewingQuoteImage.id}?v=${m.renderedAt}`;
+                return (
+                  <figure className="quote-image">
+                    <a href={src} target="_blank" rel="noreferrer">
+                      <img src={src} alt={viewingQuoteImage.quote ?? ""} />
+                    </a>
+                    <figcaption className="muted small">
+                      {QUOTE_IMAGE_STYLES[m.style]?.label ?? m.style}
+                    </figcaption>
+                  </figure>
+                );
+              })()}
+            </Modal>
+          )}
+          {viewingQuote && (
+            <Modal
+              c={viewingQuote}
+              title="Quote"
+              onClose={() => setViewingQuote(null)}
+            >
+              <blockquote className="quote">{viewingQuote.quote}</blockquote>
+            </Modal>
+          )}
+          {postingReels && (
+            <ReelsModal
+              c={postingReels}
+              target={instagramTarget(postingReels.book)}
+              onClose={() => setPostingReels(null)}
+              onConfirm={() => {
+                const c = postingReels;
+                setPostingReels(null);
+                runStage(c, ["REELS_IG"], "Reels IG");
+              }}
+            />
+          )}
+          {posting && (
+            <PostModal
+              c={posting}
+              target={instagramTarget(posting.book)}
+              onClose={() => setPosting(null)}
+              onConfirm={() => {
+                const c = posting;
+                setPosting(null);
+                runStage(c, ["POST_IG"], "Post IG");
+              }}
+            />
+          )}
+          <footer className="muted small">NC Post · Kreat Konten</footer>
+        </main>
+      </div>
+    </ContentTypeContext.Provider>
   );
 }
 
 function DetailView(p: any) {
+  const type = useContentType();
+  const uses = (stage: string) => !type || contentStages(type).has(stage);
+
   const {
     detail,
     text,
@@ -1914,119 +2153,127 @@ function DetailView(p: any) {
           )}
         </section>
 
-        <section className="card pad stack">
-          <div className="card-title">
-            <h2 className="h3">Panel</h2>
-            <Chip
-              s={
-                rendered
-                  ? { tone: "ok", label: "Siap dipublikasikan" }
-                  : { tone: "act", label: "Template saja" }
-              }
-            />
-          </div>
-          <div className="field-row small muted">
-            <span className="mono">
-              1080 × 1350 · {rendered ? rendered.footer : "Template 1"}
-            </span>
-            {current && (
-              <span className="mono">
-                {current.label === "CTA"
-                  ? "CTA"
-                  : `Panel ${current.label} / ${PANEL_COUNT}`}
-              </span>
-            )}
-          </div>
-          {current ? (
-            <>
-              <figure className="preview">
-                <img src={current.src} alt={current.alt} />
-              </figure>
-              <div className="thumbs">
-                {thumbs.map((t, i) => (
-                  <button
-                    key={t.label}
-                    className={"thumb" + (t === current ? " on" : "")}
-                    aria-label={"Tampilkan " + t.alt}
-                    onClick={() => setPanel(i)}
-                  >
-                    <img src={t.src} alt="" />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="preview empty-preview">
-              <Icon name="image" size={32} />
-              <span>Panel belum dirender</span>
-            </div>
-          )}
-          <button
-            className="btn btn-pri"
-            disabled={detail.article_status !== "siap" || lacking.length > 0}
-            title={
-              lacking.length
-                ? "Butuh lima stok: " + lacking.map(laneName).join(", ")
-                : ""
-            }
-            onClick={() => p.onEnqueue("PANEL")}
-          >
-            {rendered ? "Render ulang panel" : "Render panel"}
-          </button>
-          {!rendered && (
-            <button
-              className="btn btn-sec"
-              disabled={!v.ok}
-              onClick={() => p.onEnqueue("PREVIEW")}
-            >
-              Render preview
-            </button>
-          )}
-          <small className="muted">
-            {rendered
-              ? "Lima panel dengan stok gambar + slide penutup, siap dipublikasikan sebagai postingan gambar."
-              : "Preview memakai template asli tanpa stok foto; render panel memakai stok gambar bagian ini."}
-          </small>
-        </section>
-
-        <aside className="stack-lg">
+        {uses("PANEL") && (
           <section className="card pad stack">
             <div className="card-title">
-              <h2 className="h3">Stok gambar</h2>
-              <Chip s={status(detail.visual_status)} />
+              <h2 className="h3">Panel</h2>
+              <Chip
+                s={
+                  rendered
+                    ? { tone: "ok", label: "Siap dipublikasikan" }
+                    : { tone: "act", label: "Template saja" }
+                }
+              />
             </div>
-            {IMAGE_LANES.map(([k, name, size]) => (
-              <div key={k} className="field-row">
-                <div>
-                  <b>{name}</b>
-                  <small className="block muted">
-                    {size} ·{" "}
-                    {
-                      (detail.stock ?? []).filter((x: any) => x.kind === k)
-                        .length
-                    }
-                    /{PANEL_COUNT} terikat
-                  </small>
+            <div className="field-row small muted">
+              <span className="mono">
+                1080 × 1350 · {rendered ? rendered.footer : "Template 1"}
+              </span>
+              {current && (
+                <span className="mono">
+                  {current.label === "CTA"
+                    ? "CTA"
+                    : `Panel ${current.label} / ${PANEL_COUNT}`}
+                </span>
+              )}
+            </div>
+            {current ? (
+              <>
+                <figure className="preview">
+                  <img src={current.src} alt={current.alt} />
+                </figure>
+                <div className="thumbs">
+                  {thumbs.map((t, i) => (
+                    <button
+                      key={t.label}
+                      className={"thumb" + (t === current ? " on" : "")}
+                      aria-label={"Tampilkan " + t.alt}
+                      onClick={() => setPanel(i)}
+                    >
+                      <img src={t.src} alt="" />
+                      <span>{t.label}</span>
+                    </button>
+                  ))}
                 </div>
-                <button
-                  className="btn btn-sec btn-sm"
-                  disabled={detail.article_status !== "siap"}
-                  title={
-                    detail.article_status !== "siap"
-                      ? "Memerlukan artikel lolos editor"
-                      : ""
-                  }
-                  onClick={() => p.onEnqueue(k)}
-                >
-                  Buat
-                </button>
+              </>
+            ) : (
+              <div className="preview empty-preview">
+                <Icon name="image" size={32} />
+                <span>Panel belum dirender</span>
               </div>
-            ))}
-            {detail.article_status !== "siap" && (
-              <small className="muted">Memerlukan artikel lolos editor.</small>
             )}
+            <button
+              className="btn btn-pri"
+              disabled={detail.article_status !== "siap" || lacking.length > 0}
+              title={
+                lacking.length
+                  ? "Butuh lima stok: " + lacking.map(laneName).join(", ")
+                  : ""
+              }
+              onClick={() => p.onEnqueue("PANEL")}
+            >
+              {rendered ? "Render ulang panel" : "Render panel"}
+            </button>
+            {!rendered && (
+              <button
+                className="btn btn-sec"
+                disabled={!v.ok}
+                onClick={() => p.onEnqueue("PREVIEW")}
+              >
+                Render preview
+              </button>
+            )}
+            <small className="muted">
+              {rendered
+                ? "Lima panel dengan stok gambar + slide penutup, siap dipublikasikan sebagai postingan gambar."
+                : "Preview memakai template asli tanpa stok foto; render panel memakai stok gambar bagian ini."}
+            </small>
           </section>
+        )}
+
+        <aside className="stack-lg">
+          {uses("IMAGES_PANEL") && (
+            <section className="card pad stack">
+              <div className="card-title">
+                <h2 className="h3">Stok gambar</h2>
+                <Chip s={status(detail.visual_status)} />
+              </div>
+              {IMAGE_LANES.filter(([key]) =>
+                p.bookSettings.stockKinds.includes(key),
+              ).map(([k, name, size]) => (
+                <div key={k} className="field-row">
+                  <div>
+                    <b>{name}</b>
+                    <small className="block muted">
+                      {size} ·{" "}
+                      {
+                        (detail.stock ?? []).filter((x: any) => x.kind === k)
+                          .length
+                      }
+                      /{PANEL_COUNT} terikat
+                    </small>
+                  </div>
+                  <button
+                    className="btn btn-sec btn-sm"
+                    disabled={detail.article_status !== "siap"}
+                    title={
+                      detail.article_status !== "siap"
+                        ? "Memerlukan artikel lolos editor"
+                        : ""
+                    }
+                    onClick={() => p.onEnqueue(k)}
+                  >
+                    Buat
+                  </button>
+                </div>
+              ))}
+              {detail.article_status !== "siap" && (
+                <small className="muted">
+                  Memerlukan artikel lolos editor.
+                </small>
+              )}
+            </section>
+          )}
           <section className="card pad stack">
             <div className="card-title">
               <h2 className="h3">Instagram Reels</h2>
@@ -2106,7 +2353,7 @@ function Brand() {
       <span className="brand-mark">NC</span>
       <div>
         <b>NC Post</b>
-        <small>Studio Buku</small>
+        <small>Studio Konten</small>
       </div>
     </div>
   );
@@ -2123,6 +2370,7 @@ const checkNames: Record<string, string> = {
 };
 const checkName = (id: string) => checkNames[id] ?? id;
 const jobLabels: Record<string, string> = {
+  POST_IMAGE: "Gambar per seluruh teks",
   ARTICLE: "Artikel",
   EDITOR: "Review editor",
   PREVIEW: "Preview",
@@ -2268,6 +2516,11 @@ function CronSettings({
   items: BookCron[];
   onSave: (cron: BookCron) => Promise<void>;
 }) {
+  const type = useContentType();
+  const stages = CRON_TYPES.filter(
+    ([key]) => !type || contentAllows(type, key),
+  );
+
   const books = [...new Set(items.map((c) => c.book))];
   return (
     <div className="stack-lg">
@@ -2302,14 +2555,14 @@ function CronSettings({
             <table className="cron-table">
               <thead>
                 <tr>
-                  {CRON_TYPES.map(([kind, label]) => (
+                  {stages.map(([kind, label]) => (
                     <th key={kind}>{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  {CRON_TYPES.map(([kind, label]) => (
+                  {stages.map(([kind, label]) => (
                     <td key={kind}>
                       <CronCell
                         cron={
@@ -2329,14 +2582,14 @@ function CronSettings({
     </div>
   );
 }
-function CronCell({
+function CronCell<K extends string>({
   cron,
   label,
   onSave,
 }: {
-  cron: BookCron;
+  cron: BookCron<K>;
   label: string;
-  onSave: (c: BookCron) => Promise<void>;
+  onSave: (c: BookCron<K>) => Promise<void>;
 }) {
   const [draft, setDraft] = useState(cron);
   const [saving, setSaving] = useState(false);
@@ -2431,6 +2684,8 @@ function NewsProduction({
   ttsReady: boolean;
   ttsReason: string;
 }) {
+  const type = useContentType();
+  const allowed = (stage: string) => !type || contentAllows(type, stage);
   const [mediaView, setMediaView] = useState<{
     id: number;
     stage: string;
@@ -2484,7 +2739,7 @@ function NewsProduction({
   const current = items.find((n) => n.id === selected);
   const candidates = current ? parse(current.candidates) : null;
   const artifacts = current ? parse(current.artifacts) : null;
-  const stages = NEWS_MEDIA_STAGES;
+  const stages = NEWS_MEDIA_STAGES.filter(([key]) => allowed(key));
   const mediaUrl = (id: number, stage: string, index = 0) =>
     `/api/news/${id}/media/${stage}/${index}`;
   const mediaCurrent = items.find((n) => n.id === mediaView?.id);
@@ -2611,24 +2866,9 @@ function NewsProduction({
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <select
-              className="book-filter"
-              aria-label="Filter jenis berita"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="">Semua jenis berita</option>
-              <option value="teknologi">Teknologi</option>
-            </select>
           </div>
         </div>
         <div className="add-chapter">
-          <label className="field">
-            Jenis berita
-            <select aria-label="Jenis berita baru" value="teknologi" disabled>
-              <option value="teknologi">Teknologi</option>
-            </select>
-          </label>
           <button
             className="btn btn-pri"
             disabled={busy || loading}
@@ -2647,12 +2887,23 @@ function NewsProduction({
           <table>
             <thead>
               <tr>
-                <th>Jenis Berita</th>
+                <th>Konten</th>
                 <th>Artikel</th>
-                {stages.map(([key, stage]) => (
-                  <th key={key}>{stage}</th>
-                ))}
-                <th>Status</th>
+                {stages
+                  .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
+                  .map(([key, stage]) => (
+                    <th key={key}>{stage}</th>
+                  ))}
+                {(allowed("POST_IG") || allowed("REELS_IG")) && (
+                  <th>Instagram</th>
+                )}
+                {(allowed("VIDEO_KALIMAT") || allowed("VIDEO_KALIMAT_H")) && (
+                  <th>YouTube</th>
+                )}
+                {(allowed("PANEL") ||
+                  allowed("VIDEO_KALIMAT") ||
+                  allowed("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
+                <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -2663,7 +2914,7 @@ function NewsProduction({
                       {String(n.id).padStart(2, "0")}
                     </span>
                     <div>
-                      <b>Teknologi</b>
+                      <b>{type?.name || "Berita"}</b>
                       <small className="block muted">
                         {n.title || `Artikel berita #${n.id}`}
                       </small>
@@ -2684,17 +2935,69 @@ function NewsProduction({
                   <td>
                     <StageCell play={articlePlay(n)} />
                   </td>
-                  {stages.map(([stage]) => (
-                    <td key={stage}>
-                      <StageCell play={mediaPlay(n, stage)} />
-                      {["POST_IG", "REELS_IG"].includes(stage) &&
-                        n.production?.outputs[stage] && (
-                          <small className="block muted">
-                            {n.production.outputs[stage].status}
-                          </small>
-                        )}
+                  {stages
+                    .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
+                    .map(([stage]) => (
+                      <td key={stage}>
+                        <StageCell play={mediaPlay(n, stage)} />
+                      </td>
+                    ))}
+                  {(allowed("POST_IG") || allowed("REELS_IG")) && (
+                    <td>
+                      <div className="stack-sm">
+                        {["POST_IG", "REELS_IG"]
+                          .filter(allowed)
+                          .map((stage) => (
+                            <div key={stage}>
+                              <small className="muted">
+                                {stage === "POST_IG" ? "Carousel" : "Reels"}
+                              </small>
+                              <StageCell play={mediaPlay(n, stage)} />
+                              {n.production?.outputs[stage] && (
+                                <small className="block muted">
+                                  {n.production.outputs[stage].status}
+                                </small>
+                              )}
+                            </div>
+                          ))}
+                      </div>
                     </td>
-                  ))}
+                  )}
+                  {(allowed("VIDEO_KALIMAT") || allowed("VIDEO_KALIMAT_H")) && (
+                    <td>
+                      <ZernioCell
+                        source={`news:${n.id}`}
+                        title={n.title}
+                        platform="youtube"
+                        accountId={n.settings?.youtubeAccountId || null}
+                        ready={
+                          !!(
+                            n.production?.outputs.VIDEO_KALIMAT ||
+                            n.production?.outputs.VIDEO_KALIMAT_H
+                          )
+                        }
+                      />
+                    </td>
+                  )}
+                  {(allowed("PANEL") ||
+                    allowed("VIDEO_KALIMAT") ||
+                    allowed("VIDEO_KALIMAT_H")) && (
+                    <td>
+                      <ZernioCell
+                        source={`news:${n.id}`}
+                        title={n.title}
+                        platform="tiktok"
+                        accountId={n.settings?.tiktokAccountId || null}
+                        ready={
+                          !!(
+                            n.production?.outputs.VIDEO_KALIMAT ||
+                            n.production?.outputs.VIDEO_KALIMAT_H ||
+                            n.production?.outputs.PANEL
+                          )
+                        }
+                      />
+                    </td>
+                  )}
                   <td>
                     <Chip s={status(n.state)} />
                   </td>
@@ -2749,6 +3052,33 @@ function NewsProduction({
               >
                 Periksa status Instagram
               </button>
+            </div>
+          ) : mediaView.stage === "POST_IMAGE" ? (
+            <div className="stack">
+              <a
+                href={mediaUrl(mediaCurrent.id, "POST_IMAGE")}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "70vh",
+                    objectFit: "contain",
+                    display: "block",
+                    margin: "0 auto",
+                  }}
+                  src={mediaUrl(mediaCurrent.id, "POST_IMAGE")}
+                  alt={`Infografis ${mediaCurrent.title}`}
+                />
+              </a>
+              <a
+                className="btn btn-sec"
+                href={mediaUrl(mediaCurrent.id, "POST_IMAGE")}
+                download={`berita-${mediaCurrent.id}-gambar-post.jpg`}
+              >
+                Unduh gambar per seluruh teks
+              </a>
             </div>
           ) : mediaView.stage === "IMAGES_PANEL" ||
             mediaView.stage === "IMAGES_VIDEO" ? (
@@ -3147,7 +3477,12 @@ function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
 }
 
 function NewsCronSettings() {
-  const [items, setItems] = useState<BookCron[]>([]),
+  const type = useContentType();
+  const stages = NEWS_CRON_TYPES.filter(
+    ([key]) => !type || contentAllows(type, key),
+  );
+
+  const [items, setItems] = useState<BookCron<NewsCronKind>[]>([]),
     [error, setError] = useState("");
   useEffect(() => {
     api("/news-crons")
@@ -3180,14 +3515,14 @@ function NewsCronSettings() {
           <table className="cron-table">
             <thead>
               <tr>
-                {NEWS_CRON_TYPES.map(([k, label]) => (
+                {stages.map(([k, label]) => (
                   <th key={k}>{label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               <tr>
-                {NEWS_CRON_TYPES.map(([k, label]) => (
+                {stages.map(([k, label]) => (
                   <td key={k}>
                     {items.find((c) => c.kind === k) && (
                       <CronCell
@@ -3211,11 +3546,11 @@ function NewsCronSettings() {
 
 function NewsContentSettings({
   instagram,
-  onRefreshInstagram,
 }: {
   instagram: InstagramConnection;
-  onRefreshInstagram: () => void;
 }) {
+  const type = useContentType();
+
   const [settings, setSettings] = useState<BookSettings | null>(null),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
@@ -3235,10 +3570,9 @@ function NewsContentSettings({
       {settings ? (
         <BookSettingsCard
           news
-          book="Teknologi"
+          book={type?.name || "Berita"}
           settings={settings}
           instagram={instagram}
-          onRefreshInstagram={onRefreshInstagram}
           onSave={async (_, draft) => {
             try {
               const r = await api("/news-settings", "PUT", {
@@ -3263,12 +3597,10 @@ function NewsContentSettings({
 function ContentSettings({
   items,
   instagram,
-  onRefreshInstagram,
   onSave,
 }: {
   items: { book: string; settings: BookSettings }[];
   instagram: InstagramConnection;
-  onRefreshInstagram: () => void;
   onSave: (book: string, settings: BookSettings) => void;
 }) {
   if (!items.length)
@@ -3286,7 +3618,6 @@ function ContentSettings({
           key={x.book}
           {...x}
           instagram={instagram}
-          onRefreshInstagram={onRefreshInstagram}
           onSave={onSave}
         />
       ))}
@@ -3298,16 +3629,17 @@ function BookSettingsCard({
   book,
   settings,
   instagram,
-  onRefreshInstagram,
   onSave,
 }: {
   news?: boolean;
   book: string;
   settings: BookSettings;
   instagram: InstagramConnection;
-  onRefreshInstagram: () => void;
   onSave: (book: string, settings: BookSettings) => void;
 }) {
+  const type = useContentType();
+  const stages = type ? contentStages(type) : null;
+  const uses = (stage: string) => !stages || stages.has(stage);
   const [draft, setDraft] = useState(settings);
   useEffect(() => setDraft(settings), [JSON.stringify(settings)]);
   const used = new Set(
@@ -3357,159 +3689,124 @@ function BookSettingsCard({
         <h2 className="h3">{book}</h2>
         <button
           className="btn btn-pri btn-sm"
-          disabled={
-            !changed || (!draft.panelHorizontal && !draft.panelVertical)
-          }
+          disabled={!changed}
           onClick={() => onSave(book, draft)}
         >
           Simpan
         </button>
       </div>
-      <div className="stack-sm">
-        <label className="field">
-          Akun Instagram tujuan
-          <select
-            aria-label={`Akun Instagram tujuan ${book}`}
-            value={draft.instagramAccountId ?? ""}
-            onChange={(e) =>
-              set({ instagramAccountId: e.target.value || null })
-            }
-          >
-            <option value="">Otomatis (jika hanya satu akun)</option>
-            {(instagram.accounts ?? []).map((a) => (
-              <option key={a.id} value={a.id}>
-                @{a.username}
-              </option>
-            ))}
-            {draft.instagramAccountId &&
-              !instagram.accounts?.some(
-                (a) => a.id === draft.instagramAccountId,
-              ) && (
-                <option value={draft.instagramAccountId}>
-                  Akun tersimpan tidak tersedia ({draft.instagramAccountId})
-                </option>
-              )}
-          </select>
-        </label>
-        <div className="row-gap">
-          <button className="btn btn-sec btn-sm" onClick={onRefreshInstagram}>
-            Muat ulang akun Instagram
-          </button>
-          <small className="muted">
-            Tujuan Post IG dan Reels IG, termasuk cronjob. Jika ada beberapa
-            akun, pilih satu untuk {news ? "jenis berita" : "buku"} ini.
-          </small>
-        </div>
-        {instagram.state !== "connected" && (
-          <small className="warn">
-            {instagram.reason ?? "Memuat akun Instagram…"}
-          </small>
-        )}
-      </div>
+      {(uses("PANEL") || uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
+        <ZernioPanel settings={draft} instagram={instagram} onChange={set} />
+      )}
       <div className="settings-grid">
-        <div className="stack-sm">
-          <b>Gambar yang dibuat</b>
-          {IMAGE_LANES.map(([k, name, size]) => (
-            <label key={k} className="check-row">
-              <input
-                type="checkbox"
-                checked={draft.stockKinds.includes(k)}
-                disabled={used.has(k)}
-                onChange={() => toggle(k)}
-              />
-              <span>
-                {name}
-                <small className="block muted">
-                  {size}
-                  {used.has(k) ? " · dipakai panel" : ""}
-                </small>
-              </span>
-            </label>
-          ))}
-        </div>
-        <div className="stack-sm">
-          <b>Gambar per kalimat</b>
-          {IMAGE_LANES.map(([k, name, size]) => (
-            <label key={k} className="check-row">
-              <input
-                type="checkbox"
-                checked={draft.sentenceKinds.includes(k)}
-                disabled={
-                  draft.sentenceVideoKind === k ||
-                  draft.sentenceVideoHKind === k
-                }
-                onChange={() =>
+        {uses("IMAGES_PANEL") && (
+          <div className="stack-sm">
+            <b>Gambar per paragraf</b>
+            {IMAGE_LANES.map(([k, name, size]) => (
+              <label key={k} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={draft.stockKinds.includes(k)}
+                  disabled={used.has(k)}
+                  onChange={() => toggle(k)}
+                />
+                <span>
+                  {name}
+                  <small className="block muted">
+                    {size}
+                    {used.has(k) ? " · dipakai panel" : ""}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+        {uses("IMAGES_VIDEO") && (
+          <div className="stack-sm">
+            <b>Gambar per kalimat</b>
+            {IMAGE_LANES.map(([k, name, size]) => (
+              <label key={k} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={draft.sentenceKinds.includes(k)}
+                  disabled={
+                    draft.sentenceVideoKind === k ||
+                    draft.sentenceVideoHKind === k
+                  }
+                  onChange={() =>
+                    set({
+                      sentenceKinds: draft.sentenceKinds.includes(k)
+                        ? draft.sentenceKinds.filter((x) => x !== k)
+                        : IMAGE_LANES.map(([x]) => x).filter(
+                            (x) => x === k || draft.sentenceKinds.includes(x),
+                          ),
+                    })
+                  }
+                />
+                <span>
+                  {name}
+                  <small className="block muted">
+                    {size} · satu per kalimat
+                    {draft.sentenceVideoKind === k ||
+                    draft.sentenceVideoHKind === k
+                      ? " · dipakai video kalimat"
+                      : ""}
+                  </small>
+                </span>
+              </label>
+            ))}
+            {uses("VIDEO_KALIMAT") &&
+              select(
+                "Sumber gambar Video Kalimat (1080×1920)",
+                draft.sentenceVideoKind,
+                VERTICAL_KINDS,
+                (v) =>
                   set({
-                    sentenceKinds: draft.sentenceKinds.includes(k)
-                      ? draft.sentenceKinds.filter((x) => x !== k)
-                      : IMAGE_LANES.map(([x]) => x).filter(
-                          (x) => x === k || draft.sentenceKinds.includes(x),
-                        ),
-                  })
-                }
-              />
-              <span>
-                {name}
-                <small className="block muted">
-                  {size} · satu per kalimat
-                  {draft.sentenceVideoKind === k ||
-                  draft.sentenceVideoHKind === k
-                    ? " · dipakai video kalimat"
-                    : ""}
-                </small>
-              </span>
-            </label>
-          ))}
-          {select(
-            "Sumber gambar Video Kalimat (1080×1920)",
-            draft.sentenceVideoKind,
-            VERTICAL_KINDS,
-            (v) =>
-              set({
-                sentenceVideoKind: v,
-                sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
-                  (x) => x === v || draft.sentenceKinds.includes(x),
-                ),
-              }),
-          )}
-          {select(
-            "Sumber gambar Video Kalimat H (1920×1080)",
-            draft.sentenceVideoHKind,
-            HORIZONTAL_KINDS,
-            (v) =>
-              set({
-                sentenceVideoHKind: v,
-                sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
-                  (x) => x === v || draft.sentenceKinds.includes(x),
-                ),
-              }),
-          )}
-        </div>
-        <div className="stack-sm">
-          <b>Sumber gambar panel</b>
-          {select(
-            "Horizontal (template 1, 2, 6)",
-            draft.panelHorizontal,
-            HORIZONTAL_KINDS,
-            (v) => set({ panelHorizontal: v }),
-          )}
-          {select(
-            "Vertikal (template 4, 4B)",
-            draft.panelVertical,
-            VERTICAL_KINDS,
-            (v) => set({ panelVertical: v }),
-          )}
-          {!draft.panelHorizontal && draft.panelVertical && (
-            <small className="warn">
-              Tanpa sumber horizontal, panel hanya memakai template 4/4B yang
-              kolom teksnya lebih sempit; paragraf panjang bisa tidak muat.
-            </small>
-          )}
-          {!draft.panelHorizontal && !draft.panelVertical && (
-            <small className="warn">Pilih minimal satu sumber panel.</small>
-          )}
-        </div>
-        {!news && (
+                    sentenceVideoKind: v,
+                    sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
+                      (x) => x === v || draft.sentenceKinds.includes(x),
+                    ),
+                  }),
+              )}
+            {uses("VIDEO_KALIMAT_H") &&
+              select(
+                "Sumber gambar Video Kalimat H (1920×1080)",
+                draft.sentenceVideoHKind,
+                HORIZONTAL_KINDS,
+                (v) =>
+                  set({
+                    sentenceVideoHKind: v,
+                    sentenceKinds: IMAGE_LANES.map(([x]) => x).filter(
+                      (x) => x === v || draft.sentenceKinds.includes(x),
+                    ),
+                  }),
+              )}
+          </div>
+        )}
+        {uses("PANEL") && (
+          <div className="stack-sm">
+            <b>Sumber gambar panel</b>
+            {select(
+              "Horizontal (template 1, 2, 6)",
+              draft.panelHorizontal,
+              HORIZONTAL_KINDS,
+              (v) => set({ panelHorizontal: v }),
+            )}
+            {select(
+              "Vertikal (template 4, 4B)",
+              draft.panelVertical,
+              VERTICAL_KINDS,
+              (v) => set({ panelVertical: v }),
+            )}
+            {!draft.panelHorizontal && draft.panelVertical && (
+              <small className="warn">
+                Tanpa sumber horizontal, panel hanya memakai template 4/4B yang
+                kolom teksnya lebih sempit; paragraf panjang bisa tidak muat.
+              </small>
+            )}
+          </div>
+        )}
+        {!news && uses("QUOTE_IMAGE") && (
           <div className="stack-sm">
             <b>Gaya gambar quote</b>
             <label className="field">
@@ -4086,5 +4383,102 @@ function StockGallery() {
         </div>
       )}
     </section>
+  );
+}
+
+let zernioHistory: { expires: number; data: Promise<any[]> } | null = null;
+function loadZernioHistory() {
+  if (!zernioHistory || zernioHistory.expires < Date.now()) {
+    zernioHistory = { expires: Date.now() + 5000, data: api("/zernio/posts") };
+  }
+  return zernioHistory.data;
+}
+function ZernioCell({
+  source,
+  title,
+  platform,
+  accountId,
+  ready,
+}: {
+  source: string;
+  title: string;
+  platform: "youtube" | "tiktok";
+  accountId: string | null;
+  ready: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [latest, setLatest] = useState<any>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = true;
+    const refresh = () =>
+      loadZernioHistory()
+        .then((rows) => {
+          if (current) {
+            setError("");
+            setLatest(
+              rows.find(
+                (p) =>
+                  p.source_key.startsWith(source + ":") &&
+                  p.platform === platform &&
+                  p.account_id === accountId,
+              ),
+            );
+          }
+        })
+        .catch((e) => {
+          if (current) setError(e.message);
+        });
+    void refresh();
+    window.addEventListener("zernio-publication", refresh);
+    return () => {
+      current = false;
+      window.removeEventListener("zernio-publication", refresh);
+    };
+  }, [source, platform, accountId]);
+  return (
+    <>
+      <div className="stage-cell">
+        <button
+          className="play"
+          disabled={!latest && (!ready || !accountId)}
+          aria-label={`Publikasi ${platform} ${title}`}
+          title={
+            !accountId
+              ? "Pilih akun di Pengaturan Konten"
+              : !ready
+                ? "Butuh video atau panel selesai"
+                : `Publikasi ${platform}`
+          }
+          onClick={() => setOpen(true)}
+        >
+          {latest ? "◉" : "▶"}
+        </button>
+        <small>
+          {error
+            ? "Gagal memuat status"
+            : latest?.status ||
+              (!accountId ? "Pilih akun" : !ready ? "Belum siap" : "Siap")}
+        </small>
+      </div>
+      {error && <small className="warn">{error}</small>}
+      {open && (
+        <Modal
+          c={{ title }}
+          title={`Publikasi ${platform === "youtube" ? "YouTube" : "TikTok"}`}
+          subtitle={title}
+          onClose={() => setOpen(false)}
+          wide
+        >
+          <ZernioPanel
+            publication={{ source, platform, accountId }}
+            onPublished={() => {
+              zernioHistory = null;
+              window.dispatchEvent(new Event("zernio-publication"));
+            }}
+          />
+        </Modal>
+      )}
+    </>
   );
 }

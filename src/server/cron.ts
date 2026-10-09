@@ -6,6 +6,7 @@ export const CRON_TYPES = [
   ["ARTICLE", "Artikel"],
   ["QUOTE", "Quote"],
   ["QUOTE_IMAGE", "Gambar Quote"],
+  ["POST_IMAGE", "Gambar per seluruh teks"],
   ["IMAGES_PANEL", "Gambar Panel"],
   ["IMAGES_VIDEO", "Gambar Video"],
   ["TTS_KALIMAT", "Audio"],
@@ -16,9 +17,9 @@ export const CRON_TYPES = [
   ["REELS_IG", "Reels IG"],
 ] as const;
 export type CronKind = (typeof CRON_TYPES)[number][0];
-export interface BookCron {
+export interface BookCron<K extends string = CronKind> {
   book: string;
-  kind: CronKind;
+  kind: K;
   enabled: boolean;
   intervalHours: number;
   next_run: number | null;
@@ -37,9 +38,20 @@ export function validIntervalHours(value: unknown): value is number {
 export function intervalDue(nextRun: number | null, now: number) {
   return nextRun != null && Number.isFinite(nextRun) && now >= nextRun;
 }
-export function normalizeCron(input: any) {
-  if (!CRON_TYPES.some(([k]) => k === input?.kind))
-    throw Error("Jenis cron tidak dikenal");
+type CronInput<K extends string> = Pick<
+  BookCron<K>,
+  "kind" | "enabled" | "intervalHours"
+>;
+export function normalizeCron(input: any): CronInput<CronKind>;
+export function normalizeCron<K extends string>(
+  input: any,
+  kinds: readonly K[],
+): CronInput<K>;
+export function normalizeCron(
+  input: any,
+  kinds: readonly string[] = CRON_TYPES.map(([k]) => k),
+) {
+  if (!kinds.includes(input?.kind)) throw Error("Jenis cron tidak dikenal");
   if (typeof input.enabled !== "boolean")
     throw Error("Status cron tidak valid");
   if (!validIntervalHours(input.intervalHours))
@@ -47,7 +59,7 @@ export function normalizeCron(input: any) {
       `Interval harus berupa angka bulat 1–${MAX_INTERVAL_HOURS} jam`,
     );
   return {
-    kind: input.kind as CronKind,
+    kind: input.kind as string,
     enabled: input.enabled,
     intervalHours: input.intervalHours,
   };
@@ -70,6 +82,8 @@ export function cronJobs(
       return c.quote ? [] : [kind];
     case "QUOTE_IMAGE":
       return c.quote && !c.quote_image ? [kind] : [];
+    case "POST_IMAGE":
+      return c.text_image ? [] : [kind];
     case "IMAGES_PANEL":
       return missing(s.stockKinds, PANEL_COUNT);
     case "IMAGES_VIDEO":
@@ -90,7 +104,9 @@ export function cronJobs(
         : [];
     }
     case "PANEL":
-      return !c.panels && panelSources(s).every((k) => count(k) >= PANEL_COUNT)
+      return !c.panels &&
+        panelSources(s).length > 0 &&
+        panelSources(s).every((k) => count(k) >= PANEL_COUNT)
         ? [kind]
         : [];
     case "POST_IG":

@@ -1,5 +1,6 @@
 import { type BookSettings, STOCK_KINDS, sentenceJob } from "./book-settings";
 export const NEWS_MEDIA_STAGES = [
+  ["POST_IMAGE", "Gambar per seluruh teks"],
   ["IMAGES_PANEL", "Gambar Panel"],
   ["IMAGES_VIDEO", "Gambar Video"],
   ["TTS_KALIMAT", "Audio"],
@@ -13,7 +14,9 @@ export const NEWS_CRON_TYPES = [
   ["ARTICLE", "Artikel"],
   ...NEWS_MEDIA_STAGES,
 ] as const;
+export type NewsCronKind = (typeof NEWS_CRON_TYPES)[number][0];
 export const NEWS_MEDIA_KINDS = [
+  "POST_IMAGE",
   ...STOCK_KINDS,
   ...STOCK_KINDS.map(sentenceJob),
   "TTS_KALIMAT",
@@ -85,6 +88,11 @@ export function newsKinds(stage: string, s: BookSettings) {
   if (stage === "IMAGES_VIDEO") return s.sentenceKinds.map(sentenceJob);
   return [stage];
 }
+export function newsPostImagePrompt(article: string) {
+  return (
+    "buat menjadi infografis\n\n" + newsContent(article).paragraphs.join("\n\n")
+  );
+}
 export function newsPrerequisite(
   kind: string,
   p: NewsProductionData,
@@ -97,13 +105,15 @@ export function newsPrerequisite(
   if (
     STOCK_KINDS.includes(kind as any) ||
     STOCK_KINDS.map(sentenceJob).includes(kind) ||
-    kind === "TTS_KALIMAT"
+    kind === "TTS_KALIMAT" ||
+    kind === "POST_IMAGE"
   )
     return null;
   if (kind === "PANEL")
-    return [s.panelHorizontal, s.panelVertical]
-      .filter(Boolean)
-      .every((k) => enough(k!, 4))
+    return (s.panelHorizontal || s.panelVertical) &&
+      [s.panelHorizontal, s.panelVertical]
+        .filter(Boolean)
+        .every((k) => enough(k!, 4))
       ? null
       : "Lengkapi gambar sumber panel";
   if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {

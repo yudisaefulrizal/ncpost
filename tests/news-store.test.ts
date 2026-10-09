@@ -210,7 +210,7 @@ it("status publikasi unknown menghalangi kirim ulang dan regenerate artikel; pol
 });
 it("cron berita default nonaktif, interval jam, tanpa quote dan tidak mengejar jadwal terlewat", async () => {
   const cron = new NewsCronStore(db.db);
-  expect(await cron.list()).toHaveLength(9);
+  expect(await cron.list()).toHaveLength(10);
   expect((await cron.list()).every((c) => !c.enabled)).toBe(true);
   await expect(
     cron.save({ kind: "QUOTE", enabled: true, intervalHours: 1 }),
@@ -264,4 +264,37 @@ it("hasil publikasi revisi lama tidak ditandai sebagai publikasi artikel baru da
     [id],
   );
   expect(JSON.parse(history[0].data).requestId).toBe("published-old");
+});
+
+it("gambar post bisa diantrekan, diregenerasi, dan dijadwalkan tanpa mengubah render lain", async () => {
+  const id = await s.create();
+  await s.complete((await s.claim(100))!, newsFixture(), {});
+  const media = new NewsMediaStore(db.db);
+  await media.enqueue(id, "POST_IMAGE");
+  const j = (await media.claim(200))!;
+  expect(j.kind).toBe("POST_IMAGE");
+  await media.complete(j, { file: "infografis.jpg" });
+  await expect(media.enqueue(id, "POST_IMAGE")).rejects.toThrow("regenerate");
+  await db.db.query(
+    "INSERT INTO news_media_outputs(news_id,revision,kind,data) VALUES(?,1,'VIDEO_KALIMAT',?)",
+    [id, JSON.stringify({ file: "video.mp4" })],
+  );
+  await media.enqueue(id, "POST_IMAGE", true);
+  const next = (await media.claim(300))!;
+  await media.complete(next, { file: "infografis-baru.jpg" });
+  expect((await media.detail(id, 1)).outputs.POST_IMAGE.file).toBe(
+    "infografis-baru.jpg",
+  );
+  expect((await media.detail(id, 1)).outputs.VIDEO_KALIMAT.file).toBe(
+    "video.mp4",
+  );
+  const crons = await new NewsCronStore(db.db).save({
+    kind: "POST_IMAGE",
+    enabled: true,
+    intervalHours: 2,
+  });
+  expect(crons.find((c) => c.kind === "POST_IMAGE")).toMatchObject({
+    enabled: true,
+    intervalHours: 2,
+  });
 });

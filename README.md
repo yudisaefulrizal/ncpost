@@ -2,7 +2,7 @@
 
 <!-- Uji auto-deploy GitHub: 2026-10-08. -->
 
-Aplikasi lokal Node.js 22.23+ untuk antrean buku, editor artikel, worker persisten, stok gambar Codex CLI, dan preview template asli. UI berbahasa Indonesia; satu tujuan publikasi: Instagram Reels melalui NC-WA. Belum merupakan pipeline produksi video lengkap.
+Aplikasi lokal Node.js 22.23+ untuk antrean buku, editor artikel, worker persisten, stok gambar Codex CLI, dan preview template asli. UI berbahasa Indonesia; publikasi Instagram melalui NC-WA serta YouTube dan TikTok melalui Zernio. Belum merupakan pipeline produksi video lengkap.
 
 ## Menjalankan
 
@@ -132,7 +132,7 @@ Jalankan ulang `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk menambahkan kolo
 
 ## Akun Instagram per buku
 
-Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada masing-masing buku, lalu Simpan. Pilihan tersimpan dalam pengaturan buku dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Tombol **Muat ulang akun Instagram** mengambil daftar terkini dari NC-WA. Konfirmasi publikasi manual menampilkan akun tujuan.
+Di **Pengaturan Konten**, pilih **Akun Instagram tujuan** pada masing-masing buku, lalu Simpan. Pilihan tersimpan dalam pengaturan buku dan dipakai worker untuk Post IG/carousel serta Reels IG, termasuk cronjob. Daftar akun tujuan diperbarui otomatis saat halaman pengaturan dibuka. Konfirmasi publikasi manual menampilkan akun tujuan.
 
 Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa akun tersedia, pilih tujuan per buku. Akun pilihan yang hilang tidak dialihkan ke akun lain. Perubahan tujuan berlaku pada job yang diproses berikutnya; hasil yang sudah terbit tetap tercatat dan tidak dikirim ulang. Pengaturan ini menggunakan kolom JSON yang sudah ada sehingga tidak membutuhkan migrasi database.
 
@@ -167,8 +167,13 @@ runtime terpisah. Gaya bahasa, urutan gagasan, dan riset dari Hermes tetap berla
 Tabel produksi berita memakai kontrol tahap yang sama dengan buku: centang
 artikel selesai, generate ulang, dan lihat melalui modal. Kolom pertama
 menampilkan Jenis Berita (saat ini Teknologi). Quote dan Gambar Quote tidak
-ditampilkan. Gambar Panel, Gambar Video, Audio, Video V/H, Panel, Post IG,
+ditampilkan. Gambar Post, Gambar Panel, Gambar Video, Audio, Video V/H, Panel, Post IG,
 dan Reels IG tersedia setelah prasyarat masing-masing terpenuhi.
+
+Kolom **Gambar Post** membuat satu gambar infografis dari artikel selesai,
+dengan prompt `buat menjadi infografis` diikuti semua paragraf isi (tanpa judul,
+Sumber, dan Tag). Hasil bisa dilihat, diunduh, dan dibuat ulang; tahap ini juga
+tersedia di Cronjob berita. Ukuran asli gambar dipertahankan.
 
 **Pengaturan Konten** berita menyediakan lajur gambar panel/per kalimat, sumber
 panel/video menurut orientasi, dan akun Instagram tujuan untuk Teknologi.
@@ -209,8 +214,34 @@ unknown yang tidak dikirim ulang. Tombol **Periksa status Instagram** dalam
 modal hanya mengambil status request tersebut. Caption memakai artikel dan
 sumber berita, dengan tag `#berita`.
 
-**Cronjob** berita menyediakan sembilan jadwal interval (1–8760 jam), tanpa
+**Cronjob** berita menyediakan sepuluh jadwal interval (1–8760 jam), tanpa
 Quote/Gambar Quote, nonaktif secara default. Artikel mencari berita baru;
 tahap lain memilih satu berita belum selesai yang memenuhi prasyarat. Jadwal
 terlewat berjalan sekali, tanpa mengejar seluruh interval. Post/Reels otomatis
 hanya berjalan setelah jadwalnya diaktifkan dan akun tujuan tersedia.
+
+## YouTube dan TikTok melalui Zernio
+
+Masukkan `ZERNIO_API_KEY` melalui halaman Kredensial. Di **Kredensial**, pilih atau buat profil Zernio dan hubungkan akun. Profil terpilih disimpan sebagai `ZERNIO_PROFILE_ID` di `.env`. Di **Pengaturan Konten** buku atau **Pengaturan Berita**, cukup pilih dan simpan akun tujuan Instagram, YouTube, dan TikTok; akun Zernio diambil dari profil terpilih. Setelah otorisasi, kembali ke aplikasi dan perbarui daftar akun. Hanya akun YouTube dan TikTok yang ditampilkan untuk Zernio. Instagram tetap melalui NC-WA.
+
+Di tabel **Produksi** buku atau **Produksi Berita**, buka kolom **YouTube** atau **TikTok** untuk memilih video atau carousel panel milik baris tersebut, mengisi caption, meninjau preview, dan mengirim ke akun tujuan yang sudah disimpan. Tidak ada menu publikasi terpisah. Carousel tersedia untuk TikTok, mencakup panel beserta slide penutup sesuai urutan, judul maksimal 90 karakter, caption maksimal 4.000 karakter, dan opsi musik otomatis. Carousel AI dikirim sebagai draft agar penandaan AI dan publikasi diselesaikan di aplikasi TikTok. Tinjau preview dan setujui pengiriman sebelum menekan **Kirim video**. YouTube menyediakan judul, visibilitas, penanda konten anak dan sintetis. TikTok membaca pilihan privasi dan ketersediaan komentar/duet/stitch dari akun. Riwayat posting tersimpan di tabel `zernio_publications` (dibuat oleh `npm run migrate`); **Periksa status** mengambil status terbaru tanpa mengirim ulang. Video yang sama pada revisi/render yang sama diblokir dari pengiriman ulang ke akun yang sama. Jika status tidak pasti, periksa dashboard Zernio.
+
+Video disalin ke URL publik acak di `/pub/` untuk diunduh Zernio. `PUBLIC_ORIGIN` harus menunjuk domain HTTPS aplikasi yang dapat diakses publik. Integrasi mengikuti [dokumentasi resmi Zernio](https://docs.zernio.com/), [YouTube](https://docs.zernio.com/platforms/youtube), dan [TikTok](https://docs.zernio.com/platforms/tiktok).
+
+## Lab Prompt
+
+Bagian **Lab** menyediakan **Lab Prompt Artikel** dan **Lab Prompt Gambar** dalam daftar jenis prompt. **Tambah jenis** membuat nama dan instruksi baru; prompt produksi yang ada dapat dipakai sebagai acuan opsional. Tombol **Uji** di daftar membuat antrean terpisah yang diproses worker. Ikon mata membuka hasil pengujian selesai dalam modal. Draf Lab disimpan di database tanpa mengubah file prompt produksi.
+
+Lab Prompt Gambar cukup memakai prompt dan unggah gambar opsional (hingga delapan lampiran). Semua gambar, termasuk logo jika diunggah, dilampirkan bersama prompt; model mengikuti instruksi prompt tanpa pengaturan peran gambar, orientasi, atau posisi logo. Jika kosong, uji hanya mengirim prompt. Lampiran disimpan pada jenis prompt dan disalin ke setiap uji agar tetap statis meskipun jenis prompt kemudian diedit. Berkas PNG privat disimpan di `output/lab-references/`. Referensi dan logo yang tersimpan sebelumnya tetap dapat digunakan sebagai lampiran.
+
+Tab **Status dan riwayat** menampilkan Menunggu, Berjalan, Selesai, atau Gagal, dengan pembaruan otomatis selama ada pengujian aktif. Hasil artikel/gambar bisa dilihat dan diunduh; prompt serta input asli tiap pengujian ikut tersimpan. Pengujian lama dapat dipakai sebagai draf baru. Tabel `lab_prompts` dan `lab_runs` dibuat oleh `npm run migrate`; berkas hasil berada di `output/lab/<id>/` dan hanya diakses melalui sesi aplikasi. Worker yang terhenti menandai uji sebagai gagal setelah lease kedaluwarsa; mencoba ulang dilakukan melalui uji baru.
+
+
+## Kreat Konten
+
+**Kreat Konten** menjadi halaman utama daftar jenis konten. Buku dan Berita merupakan jenis awal; **Tambah jenis** menyimpan nama sendiri, sumber artikel (Buku atau Berita teknologi), dan keluaran yang diperlukan. Setiap jenis memiliki halaman Produksi, Pengaturan Konten, dan Cronjob. Kolom produksi dan jadwal mengikuti keluaran beserta prasyaratnya: Video V hanya membutuhkan artikel, gambar video, audio, dan render vertikal; gambar panel saja tidak mewajibkan render panel, audio, atau video. Publikasi tetap melalui aksi atau jadwal yang diaktifkan pengguna.
+
+Jenis disimpan di `content_types`. Migrasi memberi data lama jenis Buku/Berita tanpa menghapusnya. Daftar, impor, nomor bagian, pengaturan, dan jadwal jenis baru dipisahkan menggunakan ID jenis; hasil buku jenis baru memakai awalan folder `jenis-<id>-` agar nama buku/bagian yang sama tidak bertabrakan. Jenis awal tetap memakai lokasi hasil dan pengaturan lama. Jalankan `npm run migrate` sebelum menggunakan revisi ini.
+
+
+**Gambar per seluruh teks** tersedia sebagai keluaran Buku dan Berita. Satu permintaan gambar menggunakan keseluruhan artikel sebagai bahan infografis, terpisah dari gambar per paragraf dan per kalimat. Produksi menyediakan buat, lihat, unduh, dan regenerate; cron dapat dijadwalkan terpisah. Hasil buku disimpan dalam manifest `chapters.text_image` dan nama berkas per revisi/job. Perubahan artikel membatalkan manifest lama. Migrasikan database dengan `npm run migrate` sebelum menjalankan revisi ini.

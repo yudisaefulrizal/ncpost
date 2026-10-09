@@ -2,6 +2,11 @@ import { existsSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "./config";
 export const credentialFields = [
+  {
+    name: "ZERNIO_API_KEY",
+    label: "Key Zernio · YouTube / TikTok",
+    secret: true,
+  },
   { name: "NCWA_API_KEY", label: "Key NC-WA", secret: true },
   { name: "ELEVENLABS_API_KEY", label: "Key ElevenLabs", secret: true },
   { name: "ELEVENLABS_VOICE_ID", label: "Voice ID ElevenLabs", secret: false },

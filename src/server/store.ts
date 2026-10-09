@@ -1,3 +1,8 @@
+import {
+  currentContentType,
+  ContentTypeStore,
+  contentAllows,
+} from "./content-types";
 import mysql from "mysql2/promise";
 import {
   CRON_TYPES,
@@ -30,6 +35,7 @@ import {
   type ChapterRef,
 } from "./output-paths";
 export interface Chapter {
+  content_type_id?: number;
   id: number;
   book: string;
   title: string;
@@ -51,6 +57,7 @@ export interface Chapter {
   report: string | null;
   quote: string | null;
   quote_image: string | null;
+  text_image?: string | null;
   sentence_audio: string | null;
   sentence_video: string | null;
   sentence_video_h: string | null;
@@ -143,14 +150,14 @@ export class Store {
     // Nomor bagian berikutnya dalam buku ini (tidak bentrok dengan yang ada).
     const [{ next }] = await rows<{ next: number }>(
       this.db,
-      "SELECT GREATEST(COALESCE(MAX(part_number),0),COUNT(*))+1 AS next FROM chapters WHERE book=?",
-      [book],
+      "SELECT GREATEST(COALESCE(MAX(part_number),0),COUNT(*))+1 AS next FROM chapters WHERE book=? AND content_type_id=?",
+      [book, currentContentType()?.id ?? 1],
     );
     return (
       await run(
         this.db,
-        "INSERT INTO chapters(book,title,part_number,article) VALUES(?,?,?,'')",
-        [book, title, Number(next)],
+        "INSERT INTO chapters(book,title,part_number,article,content_type_id) VALUES(?,?,?,'',?)",
+        [book, title, Number(next), currentContentType()?.id ?? 1],
       )
     ).insertId;
   }
@@ -178,7 +185,8 @@ export class Store {
     return this.tx(async (db) => {
       const existing = await rows<Chapter>(
         db,
-        "SELECT book,title,part_number FROM chapters FOR UPDATE",
+        "SELECT book,title,part_number FROM chapters WHERE content_type_id=? FOR UPDATE",
+        [currentContentType()?.id ?? 1],
       );
       const seen = new Set(
         existing.map((x) => bookKey(x.book) + "\n" + bookKey(x.title)),
@@ -194,7 +202,7 @@ export class Store {
           Math.max((next.get(key) ?? 0) + 1, Number(x.part_number ?? 0) + 1),
         );
       }
-      const fresh: [string, string, number, string][] = [];
+      const fresh: [string, string, number, string, number][] = [];
       let skipped = 0;
       for (const { book, title } of clean) {
         const key = bookKey(book);
@@ -207,12 +215,18 @@ export class Store {
         if (!spelling.has(key)) spelling.set(key, book);
         const part = next.get(key) ?? 1;
         next.set(key, part + 1);
-        fresh.push([spelling.get(key)!, title, part, ""]);
+        fresh.push([
+          spelling.get(key)!,
+          title,
+          part,
+          "",
+          currentContentType()?.id ?? 1,
+        ]);
       }
       if (!dryRun && fresh.length)
         await run(
           db,
-          "INSERT INTO chapters(book,title,part_number,article) VALUES ?",
+          "INSERT INTO chapters(book,title,part_number,article,content_type_id) VALUES ?",
           [fresh],
         );
       return {
@@ -231,7 +245,8 @@ export class Store {
     const done = await this.tx(async (db) => {
       const all = await rows<Chapter>(
         db,
-        "SELECT * FROM chapters ORDER BY id FOR UPDATE",
+        "SELECT * FROM chapters WHERE content_type_id=? ORDER BY id FOR UPDATE",
+        [currentContentType()?.id ?? 1],
       );
       const same = all
         .filter((x) => bookKey(x.book) === bookKey(book))
@@ -304,8 +319,8 @@ export class Store {
       if (!c) throw Error("Bagian tidak ditemukan");
       const same = await rows<Chapter>(
         db,
-        "SELECT * FROM chapters WHERE book=? ORDER BY id FOR UPDATE",
-        [c.book],
+        "SELECT * FROM chapters WHERE book=? AND content_type_id=? ORDER BY id FOR UPDATE",
+        [c.book, c.content_type_id ?? 1],
       );
       const current = partNumber(same, same.find((x) => x.id === id)!);
       if (current === part)
@@ -377,7 +392,10 @@ export class Store {
   async list() {
     const chapters = await rows<Chapter>(
       this.db,
-      "SELECT * FROM chapters ORDER BY id",
+      currentContentType()
+        ? "SELECT * FROM chapters WHERE content_type_id=? ORDER BY id"
+        : "SELECT * FROM chapters ORDER BY id",
+      currentContentType() ? [currentContentType()!.id] : [],
     );
     const counts = await rows<{ chapter_id: number; kind: string; n: number }>(
       this.db,
@@ -392,15 +410,24 @@ export class Store {
     return chapters;
   }
   // Pengaturan konten per buku; buku tanpa baris memakai bawaan.
-  async bookSettings(book: string, db: Db = this.db): Promise<BookSettings> {
+  async bookSettings(
+    book: string,
+    db: Db = this.db,
+    typeId = currentContentType()?.id ?? 1,
+  ): Promise<BookSettings> {
     const row = (
       await rows<{ settings: string }>(
         db,
-        "SELECT settings FROM book_settings WHERE book_key=?",
-        [bookKey(book)],
+        "SELECT settings FROM book_settings WHERE book_key=? AND content_type_id=?",
+        [bookKey(book), typeId],
       )
     )[0];
-    if (!row) return DEFAULT_BOOK_SETTINGS;
+    if (!row) {
+      return (
+        (await new ContentTypeStore(this.db).get(typeId)).settings ??
+        DEFAULT_BOOK_SETTINGS
+      );
+    }
     try {
       return normalizeBookSettings(JSON.parse(row.settings));
     } catch {
@@ -412,8 +439,8 @@ export class Store {
     const settings = normalizeBookSettings(input);
     await run(
       this.db,
-      "REPLACE INTO book_settings(book_key,settings) VALUES(?,?)",
-      [bookKey(book), JSON.stringify(settings)],
+      "REPLACE INTO book_settings(book_key,settings,content_type_id) VALUES(?,?,?)",
+      [bookKey(book), JSON.stringify(settings), currentContentType()?.id ?? 1],
     );
     return settings;
   }
@@ -422,7 +449,11 @@ export class Store {
     let saved: any[];
     let migrationNeeded = false;
     try {
-      saved = await rows<any>(this.db, "SELECT * FROM book_cron");
+      saved = await rows<any>(
+        this.db,
+        "SELECT * FROM book_cron WHERE content_type_id=?",
+        [currentContentType()?.id ?? 1],
+      );
     } catch (e) {
       if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE") throw e;
       saved = [];
@@ -457,7 +488,7 @@ export class Store {
     try {
       await run(
         this.db,
-        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run) VALUES(?,?,?,?,?)
+        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run,content_type_id) VALUES(?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run)`,
         [
           key,
@@ -465,6 +496,7 @@ export class Store {
           c.enabled ? 1 : 0,
           c.intervalHours,
           c.enabled ? now + c.intervalHours * 3600000 : null,
+          currentContentType()?.id ?? 1,
         ],
       );
     } catch (e) {
@@ -496,8 +528,8 @@ export class Store {
           const current = (
             await rows<any>(
               db,
-              "SELECT * FROM book_cron WHERE book_key=? AND kind=? FOR UPDATE",
-              [cron.book_key, cron.kind],
+              "SELECT * FROM book_cron WHERE book_key=? AND kind=? AND content_type_id=? FOR UPDATE",
+              [cron.book_key, cron.kind, cron.content_type_id ?? 1],
             )
           )[0];
           if (
@@ -512,7 +544,8 @@ export class Store {
           const chapters = (
             await rows<Chapter>(
               db,
-              "SELECT * FROM chapters ORDER BY COALESCE(part_number,id),id",
+              "SELECT * FROM chapters WHERE content_type_id=? ORDER BY COALESCE(part_number,id),id",
+              [cron.content_type_id ?? 1],
             )
           ).filter((c) => bookKey(c.book) === cron.book_key);
           let result = "Tidak ada bagian yang siap / belum selesai";
@@ -524,11 +557,19 @@ export class Store {
             );
             if (active.some((j) => ["ARTICLE", "EDITOR"].includes(j.kind)))
               continue;
-            const settings = await this.bookSettings(c.book, db);
+            const settings = await this.bookSettings(
+              c.book,
+              db,
+              c.content_type_id ?? 1,
+            );
             const stock = await this.stock(c.id, undefined, db);
             c.stock_counts = {};
             for (const b of stock)
               c.stock_counts[b.kind] = (c.stock_counts[b.kind] ?? 0) + 1;
+            const type = await new ContentTypeStore(this.db).get(
+              c.content_type_id ?? 1,
+            );
+            if (!contentAllows(type, cron.kind)) continue;
             const kinds = cronJobs(cron.kind, c, settings).filter(
               (k) => !active.some((j) => j.kind === k),
             );
@@ -539,13 +580,14 @@ export class Store {
           }
           await run(
             db,
-            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=? WHERE book_key=? AND kind=?",
+            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=? WHERE book_key=? AND kind=? AND content_type_id=?",
             [
               tick,
               result,
               now + Number(current.interval_hours) * 3600000,
               cron.book_key,
               cron.kind,
+              cron.content_type_id ?? 1,
             ],
           );
         });
@@ -554,13 +596,14 @@ export class Store {
         await run(
           this.db,
           `UPDATE book_cron SET last_tick=?,last_result=?,next_run=?
-          WHERE book_key=? AND kind=? AND (last_tick IS NULL OR last_tick<?)`,
+          WHERE book_key=? AND kind=? AND content_type_id=? AND (last_tick IS NULL OR last_tick<?)`,
           [
             tick,
             `Gagal: ${message}`,
             now + Number(cron.interval_hours) * 3600000,
             cron.book_key,
             cron.kind,
+            cron.content_type_id ?? 1,
             tick,
           ],
         );
@@ -587,7 +630,7 @@ export class Store {
       );
       await run(
         db,
-        "UPDATE chapters SET article=?,article_status=?,revision=revision+1,quote=NULL,quote_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,preview=NULL,report=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
+        "UPDATE chapters SET article=?,article_status=?,revision=revision+1,quote=NULL,quote_image=NULL,text_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,preview=NULL,report=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
         [
           article,
           validateArticle(article).ok ? "menunggu editor" : "draft",
@@ -605,6 +648,11 @@ export class Store {
   ) {
     const c = await this.chapter(id, connection);
     if (!c) throw Error("Bagian tidak ditemukan");
+    const type = await new ContentTypeStore(this.db).get(
+      c.content_type_id ?? 1,
+    );
+    if (!contentAllows(type, kind))
+      throw Error("Tahap tidak digunakan oleh jenis konten ini");
     if (
       ![
         "ARTICLE",
@@ -616,6 +664,7 @@ export class Store {
         "POST_IG",
         "QUOTE",
         "QUOTE_IMAGE",
+        "POST_IMAGE",
         "REELS_IG",
         "TTS_KALIMAT",
         "VIDEO_KALIMAT",
@@ -628,11 +677,24 @@ export class Store {
     if (/^(S_)?IMAGE_/.test(kind) && c.article_status !== "siap")
       throw Error("Review editorial harus lolos sebelum stok gambar");
     if (kind === "PANEL") {
-      const settings = await this.bookSettings(c.book, connection);
+      const settings = await this.bookSettings(
+        c.book,
+        connection,
+        c.content_type_id ?? 1,
+      );
+      if (!panelSources(settings).length)
+        throw Error("Pilih sumber gambar panel");
       for (const source of panelSources(settings))
         if ((await this.stock(id, source, connection)).length < PANEL_COUNT)
           throw Error("Render panel butuh enam stok gambar " + source);
     }
+    if (
+      kind === "POST_IMAGE" &&
+      (c.article_status !== "siap" || !validateArticle(c.article).ok)
+    )
+      throw Error("Gambar per seluruh teks butuh artikel lolos editor");
+    if (kind === "POST_IMAGE" && c.text_image && !replace)
+      throw Error("Gambar sudah tersedia; gunakan regenerate");
     if (kind === "QUOTE_IMAGE" && !c.quote)
       throw Error("Gambar quote butuh quote");
     if (kind === "QUOTE" && !validateArticle(c.article).ok)
@@ -652,7 +714,11 @@ export class Store {
     if (kind === "TTS_KALIMAT" && c.article_status !== "siap")
       throw Error("Audio kalimat butuh artikel lolos editor");
     if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
-      const settings = await this.bookSettings(c.book, connection);
+      const settings = await this.bookSettings(
+        c.book,
+        connection,
+        c.content_type_id ?? 1,
+      );
       const source =
         kind === "VIDEO_KALIMAT"
           ? settings.sentenceVideoKind
@@ -694,7 +760,9 @@ export class Store {
         ).insertId;
         if (
           regenerate &&
-          panelSources(await this.bookSettings(c.book, db)).includes(kind)
+          panelSources(
+            await this.bookSettings(c.book, db, c.content_type_id ?? 1),
+          ).includes(kind)
         ) {
           await run(
             db,
@@ -727,7 +795,8 @@ export class Store {
   jobs() {
     return rows<Job>(
       this.db,
-      `SELECT ${JOB_COLUMNS} FROM jobs ORDER BY id DESC LIMIT 100`,
+      `SELECT ${JOB_COLUMNS} FROM jobs ${currentContentType() ? "WHERE chapter_id IN (SELECT id FROM chapters WHERE content_type_id=?)" : ""} ORDER BY id DESC LIMIT 100`,
+      currentContentType() ? [currentContentType()!.id] : [],
     );
   }
   claim(now = Date.now()) {
@@ -875,6 +944,7 @@ export class Store {
       panels?: string;
       quote?: string;
       quoteImage?: string;
+      textImage?: string;
       sentenceAudio?: string;
       sentenceVideo?: string;
       sentenceVideoH?: string;
@@ -900,7 +970,7 @@ export class Store {
       if (result.article !== undefined) {
         await run(
           db,
-          "UPDATE chapters SET article=?,revision=revision+1,quote=NULL,quote_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,article_status='menunggu editor',report=NULL,preview=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
+          "UPDATE chapters SET article=?,revision=revision+1,quote=NULL,quote_image=NULL,text_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,article_status='menunggu editor',report=NULL,preview=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
           [result.article, c.id],
         );
         await run(db, "DELETE FROM chapter_stock WHERE chapter_id=?", [c.id]);
@@ -919,7 +989,9 @@ export class Store {
       if (result.visual)
         await run(
           db,
-          !panelSources(await this.bookSettings(c.book, db)).includes(j.kind)
+          !panelSources(
+            await this.bookSettings(c.book, db, c.content_type_id ?? 1),
+          ).includes(j.kind)
             ? "UPDATE chapters SET visual_status=? WHERE id=?"
             : "UPDATE chapters SET visual_status=?,panel_status='belum',panels=NULL WHERE id=?",
           [result.visual, c.id],
@@ -945,6 +1017,11 @@ export class Store {
       if (result.sentenceVideoH !== undefined)
         await run(db, "UPDATE chapters SET sentence_video_h=? WHERE id=?", [
           result.sentenceVideoH,
+          c.id,
+        ]);
+      if (result.textImage !== undefined)
+        await run(db, "UPDATE chapters SET text_image=? WHERE id=?", [
+          result.textImage,
           c.id,
         ]);
       if (result.quoteImage !== undefined)
