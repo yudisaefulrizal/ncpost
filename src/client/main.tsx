@@ -1,3 +1,4 @@
+import { LabPromptSettings } from "./lab-prompt-settings";
 import { api, setContentTypeScope } from "./api";
 import {
   ContentTypes,
@@ -197,23 +198,18 @@ function App() {
     ? contentStages(activeType)
     : new Set<string>();
   const uses = (stage: string) => !activeType || activeStages.has(stage);
-  const dynamicNav: typeof navGroups = [navGroups[0]];
-  if (activeType)
-    dynamicNav.push([
-      activeType.name,
-      activeType.engine === "book"
-        ? [
-            ["Produksi", "video"],
-            ["Pengaturan Konten", "sliders"],
-            ["Cronjob", "gear"],
-          ]
-        : [
-            ["Produksi Berita", "doc"],
-            ["Pengaturan Berita", "sliders"],
-            ["Cronjob Berita", "gear"],
-          ],
-    ]);
-  dynamicNav.push(...navGroups.slice(1));
+  const contentNav: [string, IconName][] =
+    activeType?.engine === "news"
+      ? [
+          ["Produksi Berita", "doc"],
+          ["Pengaturan Berita", "sliders"],
+          ["Cronjob Berita", "gear"],
+        ]
+      : [
+          ["Produksi", "video"],
+          ["Pengaturan Konten", "sliders"],
+          ["Cronjob", "gear"],
+        ];
 
   const refresh = async () => {
     if (
@@ -728,6 +724,37 @@ function App() {
       refreshInstagram();
     if (n === "Produksi") setFilter("semua");
   };
+  function navButton(n: string, icon: IconName) {
+    const current = page === n && !detail;
+    const parentActive =
+      n === "Kreat Konten" && contentNav.some(([child]) => child === page);
+    const label =
+      n === "Produksi Berita"
+        ? "Produksi"
+        : n === "Pengaturan Berita"
+          ? "Pengaturan Konten"
+          : n === "Cronjob Berita"
+            ? "Cronjob"
+            : n;
+    return (
+      <button
+        key={n}
+        className={
+          "nav-btn" +
+          (current ? " on" : "") +
+          (parentActive ? " parent-active" : "")
+        }
+        aria-current={current ? "page" : undefined}
+        onClick={() => go(n)}
+      >
+        <Icon name={icon} />
+        {label}
+        {n === "Produksi" && (
+          <span className="mono nav-count">{rows.length}</span>
+        )}
+      </button>
+    );
+  }
   useEffect(() => setQueuePage(1), [search, filter, filterBook]);
   const ttsLive = !!settings?.tts?.enabled;
   // Urut per buku (urutan buku pertama kali diinput), lalu per bagian.
@@ -1617,37 +1644,25 @@ function App() {
         <aside className="sidebar">
           <Brand />
           <nav aria-label="Navigasi utama">
-            {dynamicNav.map(([group, items]) => (
+            {navGroups.map(([group, items]) => (
               <div key={group} className="nav-group">
                 <div className="nav-label">{group}</div>
                 {items.map(([n, icon]) => (
-                  <button
-                    key={n}
-                    className={"nav-btn" + (page === n && !detail ? " on" : "")}
-                    aria-label={
-                      [
-                        "Produksi Berita",
-                        "Pengaturan Berita",
-                        "Cronjob Berita",
-                      ].includes(n)
-                        ? n
-                        : undefined
-                    }
-                    aria-current={page === n && !detail ? "page" : undefined}
-                    onClick={() => go(n)}
-                  >
-                    <Icon name={icon} />
-                    {n === "Produksi Berita"
-                      ? "Produksi"
-                      : n === "Pengaturan Berita"
-                        ? "Pengaturan Konten"
-                        : n === "Cronjob Berita"
-                          ? "Cronjob"
-                          : n}
-                    {n === "Produksi" && (
-                      <span className="mono nav-count">{rows.length}</span>
+                  <React.Fragment key={n}>
+                    {navButton(n, icon)}
+                    {n === "Kreat Konten" && activeType && (
+                      <div
+                        className="nav-submenu"
+                        role="group"
+                        aria-label={`Kreat Konten · ${activeType.name}`}
+                      >
+                        <div className="nav-subtitle">{activeType.name}</div>
+                        {contentNav.map(([child, childIcon]) =>
+                          navButton(child, childIcon),
+                        )}
+                      </div>
                     )}
-                  </button>
+                  </React.Fragment>
                 ))}
               </div>
             ))}
@@ -3698,6 +3713,17 @@ function BookSettingsCard({
       {(uses("PANEL") || uses("VIDEO_KALIMAT") || uses("VIDEO_KALIMAT_H")) && (
         <ZernioPanel settings={draft} instagram={instagram} onChange={set} />
       )}
+      <LabPromptSettings
+        engine={news ? "news" : "book"}
+        selected={draft.labPromptIds || []}
+        images={[
+          "IMAGES_PANEL",
+          "IMAGES_VIDEO",
+          "POST_IMAGE",
+          "QUOTE_IMAGE",
+        ].some(uses)}
+        onChange={(ids) => set({ labPromptIds: ids })}
+      />
       <div className="settings-grid">
         {uses("IMAGES_PANEL") && (
           <div className="stack-sm">

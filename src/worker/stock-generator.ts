@@ -1,3 +1,4 @@
+import type { ProductionLabPrompt } from "../server/lab-production";
 import {
   mkdirSync,
   copyFileSync,
@@ -19,8 +20,9 @@ export async function generateStock(
   paragraph: string,
   work: string,
   panel: number,
+  lab?: ProductionLabPrompt | null,
 ) {
-  const prompt = stockPrompt(kind, heading, paragraph);
+  const prompt = lab?.prompt || stockPrompt(kind, heading, paragraph);
   const tmp = path.join(work, `stock-panel-${panel}.jpg`);
   let failure = "";
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -30,6 +32,7 @@ export async function generateStock(
         work,
         tmp,
         HORIZONTAL_KINDS.includes(kind) ? "horizontal" : "vertikal",
+        ...(lab ? ([lab.images] as [string[]]) : []),
       );
       failure = "";
       break;

@@ -1,3 +1,4 @@
+import { validateLabSettings } from "./lab-production";
 import {
   currentContentType,
   ContentTypeStore,
@@ -48,6 +49,7 @@ export class NewsMediaStore {
   async saveSettings(category: string, input: unknown) {
     if (category !== "teknologi") throw Error("Jenis berita tidak dikenal");
     const s = normalizeBookSettings(input);
+    await validateLabSettings(this.db, s, "news");
     const type = currentContentType();
     if (type && (type.id !== 2 || type.settings)) {
       return (

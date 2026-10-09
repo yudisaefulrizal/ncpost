@@ -1,3 +1,4 @@
+import { productionLabPrompt } from "../server/lab-production";
 import { generateWholeTextImage } from "./text-image";
 import { LabStore } from "../server/lab";
 import { runLabJob } from "./lab";
@@ -223,6 +224,19 @@ async function runJob(job: Job) {
     const c = (await store.chapter(job.chapter_id))!;
     const work = path.join(ROOT, "output/work", String(job.id));
     mkdirSync(work, { recursive: true, mode: 0o700 });
+    const labFor = async (target: string, text = "", quote = "") =>
+      productionLabPrompt(
+        store.db,
+        await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
+        target,
+        {
+          buku: JSON.stringify(c.book),
+          bab: JSON.stringify(c.title),
+          teks: text,
+          artikel: c.article,
+          quote,
+        },
+      );
     if (job.kind === "PREVIEW") {
       const v = validateArticle(c.article);
       if (!v.ok) throw Error(v.errors.join("; "));
@@ -385,6 +399,8 @@ async function runJob(job: Job) {
         work,
         job.revision,
         job.id,
+        generateCodexImage,
+        await labFor("POST_IMAGE", c.article),
       );
       await store.complete(job.id, { textImage: JSON.stringify(image) });
     } else if (job.kind === "QUOTE_IMAGE") {
@@ -395,13 +411,20 @@ async function runJob(job: Job) {
         store.db,
         c.content_type_id ?? 1,
       );
-      const prompt = quoteImagePrompt(quoteImageStyle, c.quote);
+      const lab = await labFor("QUOTE_IMAGE", c.quote, c.quote);
+      const prompt = lab?.prompt || quoteImagePrompt(quoteImageStyle, c.quote);
       const file = quoteImagePath(c);
       mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
       let failure = "";
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          await generateCodexImage(prompt, work, file, "bebas");
+          await generateCodexImage(
+            prompt,
+            work,
+            file,
+            "bebas",
+            ...(lab ? ([lab.images] as [string[]]) : []),
+          );
           failure = "";
           break;
         } catch (e) {
@@ -567,16 +590,18 @@ async function runJob(job: Job) {
         const taken = await store.stock(c.id, job.kind);
         if (taken.some((b) => b.panel === i + 1)) continue;
         const sentence = sentences[i].text;
-        const match = job.force_new
-          ? undefined
-          : bestAsset(
-              tokenize([sentence, ...v.tags].join(" ")),
-              await store.assets(kind),
-              new Set(taken.map((b) => b.asset_id)),
-            );
+        const lab = await labFor(kind, sentence);
+        const match =
+          job.force_new || lab
+            ? undefined
+            : bestAsset(
+                tokenize([sentence, ...v.tags].join(" ")),
+                await store.assets(kind),
+                new Set(taken.map((b) => b.asset_id)),
+              );
         const assetId =
           match?.asset.id ??
-          (await generateStock(store, kind, sentence, "", work, i + 1));
+          (await generateStock(store, kind, sentence, "", work, i + 1, lab));
         bound = await store.bind(job.id, i + 1, assetId);
       }
       await store.complete(job.id, {});
@@ -590,13 +615,15 @@ async function runJob(job: Job) {
         if (taken.some((b) => b.panel === i + 1)) continue;
         const heading = panelHeading(v.heading, v.paragraphs[i], i);
         const paragraph = stripMarkdownEmphasis(v.paragraphs[i]);
-        const match = job.force_new
-          ? undefined
-          : bestAsset(
-              panelTokens(heading, paragraph, v.tags),
-              await store.assets(job.kind),
-              new Set(taken.map((b) => b.asset_id)),
-            );
+        const lab = await labFor(job.kind, `${heading} — ${paragraph}`);
+        const match =
+          job.force_new || lab
+            ? undefined
+            : bestAsset(
+                panelTokens(heading, paragraph, v.tags),
+                await store.assets(job.kind),
+                new Set(taken.map((b) => b.asset_id)),
+              );
         const assetId =
           match?.asset.id ??
           (await generateStock(
@@ -606,6 +633,7 @@ async function runJob(job: Job) {
             paragraph,
             work,
             i + 1,
+            lab,
           ));
         bound = await store.bind(job.id, i + 1, assetId);
       }
@@ -616,7 +644,10 @@ async function runJob(job: Job) {
       );
     } else if (job.kind === "ARTICLE") {
       // Tulis → review → terapkan review → review format → hook → gabung.
-      let article = await codex(articleWritePrompt(c), work);
+      const lab = await labFor("book");
+      const prompt = lab?.prompt || articleWritePrompt(c);
+      writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
+      let article = await codex(prompt, work);
       const report = await review(article, c, work, true);
       const applied = !report.lolos;
       const before = article;

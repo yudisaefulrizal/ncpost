@@ -1,3 +1,5 @@
+import { NewsMediaStore } from "../server/news-media-store";
+import { productionLabPrompt } from "../server/lab-production";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -73,7 +75,19 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
     60000,
   );
   try {
-    const prompt = newsArticlePrompt();
+    const settings = await new NewsMediaStore(store.db).settings(
+      j.category,
+      store.db,
+      j.content_type_id ?? 2,
+    );
+    const lab = await productionLabPrompt(store.db, settings, "news", {
+      buku: "",
+      bab: "",
+      teks: "",
+      artikel: "",
+      quote: "",
+    });
+    const prompt = lab?.prompt || newsArticlePrompt();
     writeFileSync(path.join(dir, "prompt.md"), prompt, { mode: 0o600 });
     const raw = await runCli(
       process.env.CODEX_EXECUTABLE || "codex",

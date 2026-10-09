@@ -1,3 +1,4 @@
+import { validateLabSettings } from "./lab-production";
 import { AsyncLocalStorage } from "node:async_hooks";
 import type mysql from "mysql2/promise";
 import { normalizeBookSettings } from "./book-settings";
@@ -40,6 +41,7 @@ export class ContentTypeStore {
   async save(input: unknown, id?: number) {
     const existing = id ? await this.get(id) : undefined;
     const value = contentTypeUpdate(input, existing);
+    await validateLabSettings(this.db, value.settings, value.engine);
     if (id && existing) {
       if (existing.engine !== value.engine)
         throw Error(

@@ -238,6 +238,20 @@ p {
   color: var(--brand-ink);
   font-weight: 700;
 }
+.nav-btn.parent-active {
+  color: var(--brand-ink);
+  font-weight: 700;
+}
+.nav-submenu {
+  margin: var(--s1) 0 var(--s2) var(--s4);
+  padding-left: var(--s2);
+  border-left: 1px solid var(--line);
+}
+.nav-subtitle {
+  padding: var(--s1) var(--s3);
+  color: var(--muted);
+  font-size: 12px;
+}
 .nav-count,
 .nav-btn .chip {
   margin-left: auto;
@@ -1427,6 +1441,16 @@ tr.row:hover td {
     display: flex;
     gap: var(--s1);
   }
+  .nav-submenu {
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+    margin: 0;
+    padding-left: var(--s1);
+  }
+  .nav-subtitle {
+    display: none;
+  }
   .nav-label,
   .sidebar-foot,
   .nav-btn .chip,
@@ -1518,4 +1542,37 @@ dialog.app-dialog {
 }
 dialog.app-dialog::backdrop {
   background: rgba(21, 32, 26, 0.45);
+}
+
+.check-row input.lab-prompt-switch {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 36px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: #d6ded8;
+  position: relative;
+  cursor: pointer;
+}
+.check-row input.lab-prompt-switch::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 120ms;
+}
+.check-row input.lab-prompt-switch:checked {
+  background: var(--brand);
+}
+.check-row input.lab-prompt-switch:checked::after {
+  transform: translateX(16px);
+}
+.check-row input.lab-prompt-switch:focus-visible {
+  outline: 2px solid var(--brand-ink);
+  outline-offset: 2px;
 }

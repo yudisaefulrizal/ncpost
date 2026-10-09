@@ -1,3 +1,4 @@
+import { productionLabPrompt } from "../server/lab-production";
 import { mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -100,15 +101,30 @@ export async function runNewsMediaJob(
     if (!v.ok) throw Error(v.errors.join("; "));
     const content = newsContent(n.article);
     const settings: BookSettings = JSON.parse(j.settings);
+    const labFor = (target: string, text: string) =>
+      productionLabPrompt(store.db, settings, target, {
+        teks: text,
+        artikel: n.article,
+        bab: JSON.stringify(n.title),
+        buku: "",
+        quote: "",
+      });
     const p = await store.detail(n.id, j.revision);
     const prerequisite = newsPrerequisite(j.kind, p, settings, n.article);
     if (prerequisite) throw Error(prerequisite);
     const renderedAt = new Date().toISOString();
     if (j.kind === "POST_IMAGE") {
-      const prompt = newsPostImagePrompt(n.article);
+      const lab = await labFor("POST_IMAGE", content.paragraphs.join("\n\n"));
+      const prompt = lab?.prompt || newsPostImagePrompt(n.article);
       const file = path.join(work, "gambar-post.jpg");
       writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
-      const image = await generateCodexImage(prompt, work, file, "bebas");
+      const image = await generateCodexImage(
+        prompt,
+        work,
+        file,
+        "bebas",
+        ...(lab ? ([lab.images] as [string[]]) : []),
+      );
       await store.complete(j, {
         file: relative(file),
         width: image.width,
@@ -135,15 +151,20 @@ export async function runNewsMediaJob(
           (b) => b.kind === j.kind,
         );
         if (taken.some((b) => b.panel === i + 1)) continue;
-        const match = j.force_new
-          ? undefined
-          : bestAsset(
-              perSentence
-                ? tokenize([item.heading, ...v.tags].join(" "))
-                : panelTokens(item.heading, item.paragraph, v.tags),
-              await assets.assets(kind),
-              new Set(taken.map((b) => b.asset_id)),
-            );
+        const lab = await labFor(
+          kind,
+          item.paragraph ? `${item.heading} — ${item.paragraph}` : item.heading,
+        );
+        const match =
+          j.force_new || lab
+            ? undefined
+            : bestAsset(
+                perSentence
+                  ? tokenize([item.heading, ...v.tags].join(" "))
+                  : panelTokens(item.heading, item.paragraph, v.tags),
+                await assets.assets(kind),
+                new Set(taken.map((b) => b.asset_id)),
+              );
         const id =
           match?.asset.id ??
           (await generateStock(
@@ -153,6 +174,7 @@ export async function runNewsMediaJob(
             item.paragraph,
             work,
             i + 1,
+            lab,
           ));
         if (!(await store.bind(j, i + 1, id)))
           throw Error("Job gambar sudah tidak aktif");

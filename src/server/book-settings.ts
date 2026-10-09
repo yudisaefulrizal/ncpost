@@ -26,6 +26,7 @@ export const VERTICAL_KINDS = [
   "IMAGE_PAPERCUT",
 ];
 export interface BookSettings {
+  labPromptIds?: number[];
   instagramAccountId: string | null;
   youtubeAccountId: string | null;
   tiktokAccountId: string | null;
@@ -116,7 +117,18 @@ export function normalizeBookSettings(input: any): BookSettings {
   const quoteImageStyle = input?.quoteImageStyle ?? DEFAULT_QUOTE_IMAGE_STYLE;
   if (!(quoteImageStyle in QUOTE_IMAGE_STYLES))
     throw Error("Gaya gambar quote tidak dikenal");
+  const labIds = input?.labPromptIds;
+  if (
+    labIds !== undefined &&
+    (!Array.isArray(labIds) ||
+      labIds.length > 100 ||
+      labIds.some((id: unknown) => !Number.isSafeInteger(id) || Number(id) < 1))
+  )
+    throw Error("Pilihan prompt Lab tidak valid");
   return {
+    ...(labIds !== undefined
+      ? { labPromptIds: [...new Set<number>(labIds)] }
+      : {}),
     instagramAccountId,
     youtubeAccountId: socialId("youtubeAccountId"),
     tiktokAccountId: socialId("tiktokAccountId"),

@@ -1,3 +1,4 @@
+import { validateLabSettings } from "./lab-production";
 import {
   currentContentType,
   ContentTypeStore,
@@ -429,7 +430,12 @@ export class Store {
       );
     }
     try {
-      return normalizeBookSettings(JSON.parse(row.settings));
+      const saved = normalizeBookSettings(JSON.parse(row.settings));
+      if (saved.labPromptIds !== undefined) return saved;
+      const parent = (await new ContentTypeStore(this.db).get(typeId)).settings;
+      return parent?.labPromptIds !== undefined
+        ? { ...saved, labPromptIds: parent.labPromptIds }
+        : saved;
     } catch {
       return DEFAULT_BOOK_SETTINGS;
     }
@@ -437,6 +443,7 @@ export class Store {
   async saveBookSettings(book: string, input: unknown) {
     if (!bookKey(book)) throw Error("Judul buku wajib diisi");
     const settings = normalizeBookSettings(input);
+    await validateLabSettings(this.db, settings, "book");
     await run(
       this.db,
       "REPLACE INTO book_settings(book_key,settings,content_type_id) VALUES(?,?,?)",

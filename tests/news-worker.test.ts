@@ -20,6 +20,21 @@ afterEach(() => {
 });
 const store = () =>
   ({
+    db: {
+      query: vi.fn(async (sql: string) => [
+        sql.includes("content_types")
+          ? [
+              {
+                id: 2,
+                name: "Berita",
+                engine: "news",
+                outputs: ["ARTICLE"],
+                settings: null,
+              },
+            ]
+          : [],
+      ]),
+    },
     heartbeat: vi.fn(),
     complete: vi.fn().mockResolvedValue(true),
     fail: vi.fn(),
@@ -98,4 +113,60 @@ it("provider gagal dilaporkan tanpa retry diam-diam atau hasil artikel palsu", a
   expect(s.fail).toHaveBeenCalledWith(job, "Provider timeout");
   expect(s.complete).not.toHaveBeenCalled();
   expect(runCli).toHaveBeenCalledTimes(1);
+});
+
+it("uses the enabled Lab news prompt while preserving research and output validation", async () => {
+  const result = newsFixture();
+  vi.mocked(runCli).mockResolvedValue(
+    [
+      {
+        type: "item.completed",
+        item: {
+          type: "web_search",
+          action: { type: "search", query: "fixture" },
+        },
+      },
+      {
+        type: "item.completed",
+        item: { type: "agent_message", text: JSON.stringify(result) },
+      },
+    ]
+      .map((item) => JSON.stringify(item))
+      .join("\n"),
+  );
+  const s = store();
+  vi.mocked(s.db.query).mockImplementation(
+    async (sql: any) =>
+      [
+        String(sql).includes("content_types")
+          ? [
+              {
+                id: 2,
+                name: "Berita",
+                engine: "news",
+                outputs: ["ARTICLE"],
+                settings: { stockKinds: [], labPromptIds: [12] },
+              },
+            ]
+          : [
+              {
+                id: 12,
+                kind: "article",
+                reference_key: "news",
+                prompt: "Instruksi berita dari Lab",
+                reference_images: "[]",
+              },
+            ],
+      ] as any,
+  );
+  await runNewsJob(s, job);
+  expect(runCli).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(Array),
+    "Instruksi berita dari Lab",
+    dir,
+    900000,
+  );
+  expect(s.complete).toHaveBeenCalled();
+  expect(s.fail).not.toHaveBeenCalled();
 });
