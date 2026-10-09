@@ -1,3 +1,8 @@
+import {
+  ProductionBatch,
+  useProductionSelection,
+  type BatchAction,
+} from "./production-batch";
 import { ContentPlanCard } from "./content-plan";
 import { ImageCatalogProvider, useImageCatalog } from "./image-catalog";
 import { LabPromptSettings } from "./lab-prompt-settings";
@@ -794,6 +799,8 @@ function App() {
         a.id - b.id,
     );
   const queue = paginateRows(visible, queuePage);
+  const selection = useProductionSelection(visible, activeType?.id || "book");
+  const [batchBusy, setBatchBusy] = useState(false);
   const activeJobs = jobs.filter((x) =>
     ["queued", "running"].includes(x.state),
   );
@@ -893,6 +900,70 @@ function App() {
             : status("queued"),
     },
   ];
+
+  const batchApi = (url: string, method: string, body?: unknown) =>
+    api(url, method, body, activeType?.id || null);
+  const batchStages = [
+    ["ARTICLE", "Artikel", "artikel"],
+    ["POST_IMAGE", "1 gambar", "textImage"],
+    ["PANEL", "Carousel", "panel"],
+    ["VIDEO_KALIMAT", "Video vertikal", "videoKalimat"],
+    ["VIDEO_KALIMAT_H", "Video horizontal", "videoKalimatH"],
+  ].filter(([kind]) => kind === "ARTICLE" || showsOutput(kind));
+  const batchActions: BatchAction<any>[] = batchStages.flatMap(
+    ([kind, label, stage]) => [
+      {
+        id: kind,
+        label: `Buat / lanjutkan ${label.toLowerCase()}`,
+        prepare: (c: any) => {
+          const play = stagePlay(c, stage);
+          if (!play.run || play.busy || play.done) return null;
+          const job = kind === "ARTICLE" && c.article ? "EDITOR" : kind;
+          return () =>
+            batchApi(`/chapters/${c.id}/jobs`, "POST", { kind: job });
+        },
+      },
+      {
+        id: `REPLACE_${kind}`,
+        label: `Buat ulang ${label.toLowerCase()}`,
+        destructive: true,
+        prepare: (c: any) => {
+          const play = stagePlay(c, stage);
+          return play.redo && !play.busy
+            ? () =>
+                batchApi(`/chapters/${c.id}/jobs`, "POST", {
+                  kind,
+                  replace: true,
+                })
+            : null;
+        },
+      },
+    ],
+  );
+  batchActions.push({
+    id: "RETRY",
+    label: "Coba lagi proses gagal",
+    prepare: (c) => {
+      if (activeJobs.some((j) => j.chapter_id === c.id)) return null;
+      const failed = (
+        c.production_jobs ||
+        jobs.filter((j) => j.chapter_id === c.id && j.revision === c.revision)
+      ).find((j: any) => j.state === "failed");
+      return failed
+        ? () =>
+            batchApi(`/chapters/${c.id}/jobs`, "POST", { kind: failed.kind })
+        : null;
+    },
+  });
+  batchActions.push({
+    id: "DELETE",
+    label: "Hapus bagian",
+    destructive: true,
+    prepare: (c) =>
+      activeJobs.some((j) => j.chapter_id === c.id)
+        ? null
+        : () => batchApi(`/chapters/${c.id}`, "DELETE"),
+  });
 
   const queueCard = (
     <section className="card queue">
@@ -1001,10 +1072,21 @@ function App() {
           </a>
         </form>
       }
+      <ProductionBatch
+        key={activeType?.id || "book"}
+        items={selection.selected}
+        actions={batchActions}
+        onRefresh={refresh}
+        onClear={selection.clear}
+        onBusy={setBatchBusy}
+      />
       <div className="table">
         <table>
           <thead>
             <tr>
+              <th className="selection-cell">
+                {selection.all(queue.items, batchBusy)}
+              </th>
               <th>Bagian</th>
               <th>Status</th>
               {showsOutput("POST_IMAGE") && <th>1 gambar</th>}
@@ -1033,7 +1115,7 @@ function App() {
                 <tr className="grp">
                   <td
                     colSpan={
-                      3 +
+                      4 +
                       Number(
                         showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT"),
                       ) +
@@ -1078,6 +1160,9 @@ function App() {
                 </tr>
                 {g.rows.map((c) => (
                   <tr key={c.id} className="row">
+                    <td className="selection-cell">
+                      {selection.checkbox(c, batchBusy)}
+                    </td>
                     <td className="title-cell">
                       <span className="mono num">
                         {String(partNumber(rows, c)).padStart(2, "0")}
@@ -2954,6 +3039,8 @@ function NewsProduction({
         .toLocaleLowerCase("id")
         .includes(search.toLocaleLowerCase("id")),
   );
+  const selection = useProductionSelection(visible, type?.id || "news");
+  const [batchBusy, setBatchBusy] = useState(false);
   const articlePlay = (n: NewsArticle): PlayProps => ({
     title:
       n.state === "completed"
@@ -2981,6 +3068,75 @@ function NewsProduction({
     view: n.article ? () => setSelected(n.id) : undefined,
     viewTitle: `Lihat artikel berita #${n.id}`,
   });
+  const batchApi = (url: string, method: string, body?: unknown) =>
+    api(url, method, body, type?.id || null);
+  const batchActions: BatchAction<NewsArticle>[] = [
+    {
+      id: "ARTICLE",
+      label: "Coba ulang artikel gagal",
+      prepare: (n) =>
+        n.state === "failed"
+          ? () => batchApi(`/news/${n.id}/retry`, "POST")
+          : null,
+    },
+    {
+      id: "REPLACE_ARTICLE",
+      label: "Buat ulang artikel",
+      destructive: true,
+      prepare: (n) =>
+        n.state === "completed"
+          ? () => batchApi(`/news/${n.id}/regenerate`, "POST")
+          : null,
+    },
+    {
+      id: "RETRY",
+      label: "Coba lagi proses gagal",
+      prepare: (n) => {
+        if (n.state === "failed")
+          return () => batchApi(`/news/${n.id}/retry`, "POST");
+        if (
+          n.state !== "completed" ||
+          n.production?.jobs.some((j) =>
+            ["queued", "running"].includes(j.state),
+          )
+        )
+          return null;
+        const failed = n.production?.jobs.find((j) => j.state === "failed");
+        return failed
+          ? () => batchApi(`/news/${n.id}/jobs`, "POST", { kind: failed.kind })
+          : null;
+      },
+    },
+    ...stages
+      .filter(([kind]) => isFinalOutput(kind))
+      .flatMap(([kind, label]) => [
+        {
+          id: kind,
+          label: `Buat / lanjutkan ${label.toLowerCase()}`,
+          prepare: (n: NewsArticle) => {
+            const play = mediaPlay(n, kind);
+            return play.run && !play.busy && !play.done
+              ? () => batchApi(`/news/${n.id}/jobs`, "POST", { kind })
+              : null;
+          },
+        },
+        {
+          id: `REPLACE_${kind}`,
+          label: `Buat ulang ${label.toLowerCase()}`,
+          destructive: true,
+          prepare: (n: NewsArticle) => {
+            const play = mediaPlay(n, kind);
+            return play.redo && !play.busy
+              ? () =>
+                  batchApi(`/news/${n.id}/jobs`, "POST", {
+                    kind,
+                    replace: true,
+                  })
+              : null;
+          },
+        },
+      ]),
+  ];
   return (
     <div className="stack-lg">
       <section className="card queue">
@@ -3013,10 +3169,21 @@ function NewsProduction({
             {error}
           </p>
         )}
+        <ProductionBatch
+          key={type?.id || "news"}
+          items={selection.selected}
+          actions={batchActions}
+          onRefresh={load}
+          onClear={selection.clear}
+          onBusy={setBatchBusy}
+        />
         <div className="table">
           <table>
             <thead>
               <tr>
+                <th className="selection-cell">
+                  {selection.all(visible, batchBusy)}
+                </th>
                 <th>Konten</th>
                 <th>Status</th>
                 {stages
@@ -3048,6 +3215,9 @@ function NewsProduction({
             <tbody>
               {visible.map((n) => (
                 <tr key={n.id} className="row">
+                  <td className="selection-cell">
+                    {selection.checkbox(n, batchBusy)}
+                  </td>
                   <td className="title-cell">
                     <span className="mono num">
                       {String(n.id).padStart(2, "0")}

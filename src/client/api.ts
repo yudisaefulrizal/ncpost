@@ -2,12 +2,17 @@ let contentTypeId: number | null = null;
 export function setContentTypeScope(id: number | null) {
   contentTypeId = id;
 }
-export async function api(url: string, method = "GET", body?: unknown) {
+export async function api(
+  url: string,
+  method = "GET",
+  body?: unknown,
+  scope: number | null = contentTypeId,
+) {
   const response = await fetch("/api" + url, {
     method,
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
-      ...(contentTypeId ? { "X-Content-Type-Id": String(contentTypeId) } : {}),
+      ...(scope ? { "X-Content-Type-Id": String(scope) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });

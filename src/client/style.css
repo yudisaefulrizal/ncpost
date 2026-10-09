@@ -1611,3 +1611,22 @@ dialog.app-dialog::backdrop {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.production-batch {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line, #e5e7eb);
+  display: grid;
+  gap: 10px;
+}
+.production-batch .toolbar {
+  flex-wrap: wrap;
+}
+.selection-cell {
+  width: 42px;
+  text-align: center;
+}
+.selection-cell input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
