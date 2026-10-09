@@ -145,3 +145,39 @@ it("image collection refuses wrong orientation", async () => {
     await rm(home, { recursive: true, force: true });
   }
 });
+
+it("ready-post collection produces 4:5 without cropping source text", async () => {
+  const home = await mkdtemp(
+    path.join(process.cwd(), "data/ncpost-image-test-"),
+  );
+  try {
+    const dir = path.join(home, ".codex/generated_images", thread);
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, "fixture.png"),
+      await sharp({
+        create: { width: 60, height: 40, channels: 3, background: "red" },
+      })
+        .png()
+        .toBuffer(),
+    );
+    const output = path.join(home, "posting.jpg");
+    const result = await collectCodexImage(events(), {
+      home,
+      output,
+      startedAt: Date.now() - 2000,
+      orientation: "posting",
+    });
+    expect(result).toMatchObject({ width: 1080, height: 1350 });
+    expect(await sharp(output).metadata()).toMatchObject({
+      width: 1080,
+      height: 1350,
+    });
+    const { data } = await sharp(output)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect([...data.subarray(0, 3)].every((value) => value > 245)).toBe(true);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

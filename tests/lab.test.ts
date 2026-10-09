@@ -190,3 +190,21 @@ it("stores the resolved reference alongside the editable template", async () => 
   expect(params[5]).toBe("IMAGE_VERTICAL");
   expect(params[6]).toContain("Menghargai sudut pandang");
 });
+
+it("ready-post Lab ignores illustration orientation and requests a 4:5 final image", async () => {
+  const { job, store, providers } = workerSetup("image");
+  job.image_type = "ready_post";
+  job.orientation = "horizontal";
+  providers.generateCodexImage.mockResolvedValue({
+    width: 1080,
+    height: 1350,
+  } as any);
+  await runLabJob(store, job, providers);
+  expect(providers.generateCodexImage.mock.calls[0][0]).toContain("rasio 4:5");
+  expect(providers.generateCodexImage.mock.calls[0][3]).toBe("posting");
+  expect(store.complete).toHaveBeenCalledWith(id, {
+    image: true,
+    width: 1080,
+    height: 1350,
+  });
+});

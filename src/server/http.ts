@@ -1,3 +1,4 @@
+import { labImageKind } from "./lab-image-types";
 import {
   ContentTypeStore,
   currentContentType,
@@ -543,6 +544,17 @@ app.get("/api/media/:job/:file", (req, res) => {
 app.get("/api/stock", async (req, res) => {
   const kind = String(req.query.kind);
   if (!isStockKind(kind)) throw Error("Lajur stok tidak dikenal");
+  const lab = labImageKind(kind);
+  if (lab) {
+    const [prompts]: any = await store.db.query(
+      "SELECT image_type FROM lab_prompts WHERE id=? AND kind='image'",
+      [lab.id],
+    );
+    if (prompts[0]?.image_type === "ready_post")
+      throw Error(
+        "Gambar siap posting tersedia di Stok Konten Gambar, bukan Stok Gambar",
+      );
+  }
   res.json(
     (await store.assets(kind)).map(
       ({ id, description, usage, created_at }) => ({

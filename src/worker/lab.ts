@@ -18,7 +18,12 @@ export async function runLabJob(
   }, 60000);
   try {
     mkdirSync(work, { recursive: true, mode: 0o700 });
-    const prompt = job.resolved_prompt || labFinalPrompt(job.prompt, job.input);
+    const basePrompt =
+      job.resolved_prompt || labFinalPrompt(job.prompt, job.input);
+    const posting = job.kind === "image" && job.image_type === "ready_post";
+    const prompt = posting
+      ? `${basePrompt}\n\nBuat gambar final siap posting dengan teks dan desain sesuai instruksi. Ukuran 1080 × 1350, rasio 4:5. Instruksi rasio ini menggantikan orientasi ilustrasi pada acuan. Sisakan margin aman; jangan memotong teks, referensi, atau logo.`
+      : basePrompt;
     writeFileSync(path.join(work, "prompt.txt"), prompt, { mode: 0o600 });
     if (job.kind === "article") {
       const text =
@@ -41,7 +46,7 @@ export async function runLabJob(
         prompt,
         work,
         path.join(work, "image.jpg"),
-        job.orientation,
+        posting ? "posting" : job.orientation,
         await Promise.all(labAttachments(job).map(labImageFile)),
       );
       await store.complete(job.id, {

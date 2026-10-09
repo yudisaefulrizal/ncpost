@@ -31,7 +31,7 @@ export async function collectCodexImage(
     home: string;
     output: string;
     startedAt: number;
-    orientation: "horizontal" | "vertikal" | "bebas";
+    orientation: "horizontal" | "vertikal" | "bebas" | "posting";
   },
 ) {
   const parsed = events
@@ -69,18 +69,22 @@ export async function collectCodexImage(
     throw Error("Orientasi stok tidak sesuai");
   // Orientasi bebas (gambar quote): ukuran asli Codex dipertahankan.
   const free = opts.orientation === "bebas";
+  const posting = opts.orientation === "posting";
   const width = free
       ? meta.width
       : opts.orientation === "horizontal"
         ? 1920
         : 1080,
-    height = free
-      ? meta.height
-      : opts.orientation === "horizontal"
-        ? 1080
-        : 1920;
+    height = posting
+      ? 1350
+      : free
+        ? meta.height
+        : opts.orientation === "horizontal"
+          ? 1080
+          : 1920;
   if (
     !free &&
+    !posting &&
     (opts.orientation === "horizontal"
       ? meta.width <= meta.height
       : meta.width >= meta.height)
@@ -91,7 +95,11 @@ export async function collectCodexImage(
   await writeFile(
     opts.output,
     await sharp(candidates[0])
-      .resize(width, height, { fit: "cover" })
+      .resize(
+        width,
+        height,
+        posting ? { fit: "contain", background: "#ffffff" } : { fit: "cover" },
+      )
       .jpeg(STOCK_JPEG)
       .toBuffer(),
   );
@@ -102,7 +110,7 @@ export async function generateCodexImage(
   prompt: string,
   cwd: string,
   output: string,
-  orientation: "horizontal" | "vertikal" | "bebas",
+  orientation: "horizontal" | "vertikal" | "bebas" | "posting",
   referenceImages: string[] = [],
 ) {
   const { runCli } = await import("./providers");

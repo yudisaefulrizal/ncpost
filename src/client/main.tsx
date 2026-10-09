@@ -94,6 +94,7 @@ const navGroups: [string, [string, IconName][]][] = [
     "Aset",
     [
       ["Stok Gambar", "image"],
+      ["Stok Konten Gambar", "image"],
       ["Stok Konten Panel", "grid"],
       ["Stok Konten Video", "video"],
     ],
@@ -1732,6 +1733,9 @@ function App() {
         )}
       </ContentPlanCard>
     );
+  } else if (page === "Stok Konten Gambar") {
+    sub = "";
+    content = <FinishedImages key={activeType?.id || "images"} rows={rows} />;
   } else if (page === "Stok Konten Panel") {
     sub =
       "Panel yang sudah dirender, siap dipublikasikan sebagai postingan gambar.";
@@ -4464,8 +4468,99 @@ createRoot(document.getElementById("root")!).render(
   </ImageCatalogProvider>,
 );
 
+function FinishedImages({ rows }: { rows: any[] }) {
+  const [books, setBooks] = useState<any[]>(rows);
+  const [news, setNews] = useState<NewsArticle[]>([]);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = true;
+    api("/content-types")
+      .then(async (types) => {
+        const results = await Promise.all(
+          types.map(async (type: ContentType) => ({
+            engine: type.engine,
+            items: await api(
+              type.engine === "book" ? "/chapters" : "/news",
+              "GET",
+              undefined,
+              type.id,
+            ),
+          })),
+        );
+        if (current) {
+          setBooks(
+            results
+              .filter((result) => result.engine === "book")
+              .flatMap((result) => result.items),
+          );
+          setNews(
+            results
+              .filter((result) => result.engine === "news")
+              .flatMap((result) => result.items),
+          );
+        }
+      })
+      .catch((error) => {
+        if (current) setError(error.message);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+  const images = [
+    ...books
+      .filter((c) => c.text_image)
+      .map((c) => ({
+        key: `book:${c.id}`,
+        title: c.title,
+        url: `/api/text-image/${c.id}?v=${encodeURIComponent(parse(c.text_image)?.renderedAt || "")}`,
+      })),
+    ...news
+      .filter((n) => n.production?.outputs.POST_IMAGE)
+      .map((n) => ({
+        key: `news:${n.id}`,
+        title: n.title,
+        url: `/api/news/${n.id}/media/POST_IMAGE/0`,
+      })),
+  ];
+  return (
+    <section className="card pad stack">
+      <h2 className="h3">Stok Konten Gambar</h2>
+      {error && (
+        <p className="warn" role="alert">
+          {error}
+        </p>
+      )}
+      {!images.length ? (
+        <div className="empty">Belum ada konten gambar siap posting.</div>
+      ) : (
+        <div className="gallery">
+          {images.map((image) => (
+            <figure key={image.key}>
+              <a href={image.url} target="_blank" rel="noreferrer">
+                <img src={image.url} alt={image.title} loading="lazy" />
+              </a>
+              <figcaption>
+                <b>{image.title}</b>
+                <a
+                  className="btn btn-sec btn-sm"
+                  href={image.url}
+                  download={`${image.key.replace(":", "-")}.jpg`}
+                >
+                  Unduh
+                </a>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function StockGallery() {
-  const { lanes: IMAGE_LANES } = useImageCatalog();
+  const { lanes, imageType } = useImageCatalog();
+  const IMAGE_LANES = lanes.filter(([key]) => imageType(key) !== "ready_post");
   const [kind, setKind] = useState(IMAGE_LANES[0][0]),
     [items, setItems] = useState<any[] | null>(null),
     [error, setError] = useState("");
@@ -4476,6 +4571,9 @@ function StockGallery() {
       .then(setItems)
       .catch((e) => setError((e as Error).message));
   }, [kind]);
+  useEffect(() => {
+    if (!IMAGE_LANES.some(([key]) => key === kind)) setKind(IMAGE_LANES[0][0]);
+  }, [kind, IMAGE_LANES.map(([key]) => key).join(",")]);
   const horizontal = isHorizontalKind(kind);
   return (
     <section className="card pad stack">
