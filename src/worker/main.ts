@@ -1,3 +1,4 @@
+import { labImageKind } from "../server/lab-image-types";
 import { productionLabPrompt } from "../server/lab-production";
 import { generateWholeTextImage } from "./text-image";
 import { LabStore } from "../server/lab";
@@ -234,7 +235,7 @@ async function runJob(job: Job) {
           bab: JSON.stringify(c.title),
           teks: text,
           artikel: c.article,
-          quote,
+          quote: quote || text,
         },
       );
     if (job.kind === "PREVIEW") {
@@ -411,7 +412,9 @@ async function runJob(job: Job) {
         store.db,
         c.content_type_id ?? 1,
       );
-      const lab = await labFor("QUOTE_IMAGE", c.quote, c.quote);
+      const lab = labImageKind(quoteImageStyle)
+        ? await labFor(quoteImageStyle, c.quote, c.quote)
+        : null;
       const prompt = lab?.prompt || quoteImagePrompt(quoteImageStyle, c.quote);
       const file = quoteImagePath(c);
       mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });

@@ -1,3 +1,4 @@
+import { ImageCatalogProvider, useImageCatalog } from "./image-catalog";
 import { LabPromptSettings } from "./lab-prompt-settings";
 import { api, setContentTypeScope } from "./api";
 import {
@@ -48,6 +49,7 @@ import {
   DEFAULT_BOOK_SETTINGS,
   sentenceJob,
   HORIZONTAL_KINDS,
+  isHorizontalKind,
   VERTICAL_KINDS,
   panelSources,
   type BookSettings,
@@ -108,19 +110,6 @@ const filters: [Filter, string][] = [
   ["lanjut", "Siap lanjut"],
   ["belum", "Belum dimulai"],
 ];
-const IMAGE_LANES = [
-  ["IMAGE_HORIZONTAL", "Realistic horizontal", "1920 × 1080"],
-  ["IMAGE_VERTICAL", "Realistic vertikal", "1080 × 1920"],
-  ["IMAGE_MINIMALIST", "Minimalist vertikal", "1080 × 1920 · line art"],
-  ["IMAGE_PAPERCUT", "Layered paper cut vertikal", "1080 × 1920 · paper cut"],
-  [
-    "IMAGE_PAPERCUT_HORIZONTAL",
-    "Layered paper cut horizontal",
-    "1920 × 1080 · paper cut",
-  ],
-];
-const laneName = (k: string | null) =>
-  IMAGE_LANES.find(([id]) => id === k)?.[1] ?? "Tidak ada";
 const parse = (s: string | null | undefined) => {
   try {
     return s ? JSON.parse(s) : null;
@@ -129,6 +118,12 @@ const parse = (s: string | null | undefined) => {
   }
 };
 function App() {
+  const {
+    lanes: IMAGE_LANES,
+    laneName,
+    quoteStyles: QUOTE_IMAGE_STYLES,
+    reload: reloadImageCatalog,
+  } = useImageCatalog();
   const [auth, setAuth] = useState(false),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
@@ -269,6 +264,7 @@ function App() {
     if (!auth) return;
     loadSettings();
     action(loadContentTypes);
+    action(reloadImageCatalog);
   }, [auth]);
   useEffect(() => {
     if (!auth) return;
@@ -714,6 +710,8 @@ function App() {
     };
   };
   const go = (n: string) => {
+    if (["Pengaturan Konten", "Pengaturan Berita", "Stok Gambar"].includes(n))
+      action(reloadImageCatalog);
     setPage(n);
     setDetail(null);
     setMsg("");
@@ -1929,6 +1927,7 @@ function App() {
 }
 
 function DetailView(p: any) {
+  const { lanes: IMAGE_LANES, laneName } = useImageCatalog();
   const type = useContentType();
   const uses = (stage: string) => !type || contentStages(type).has(stage);
 
@@ -3259,6 +3258,7 @@ function NewsStockView({
   error: string;
   onCreate: (kind: string) => void;
 }) {
+  const { laneName } = useImageCatalog();
   const p = article.production ?? emptyNewsProduction();
   const kinds = newsKinds(stage, article.settings ?? DEFAULT_BOOK_SETTINGS);
   const [selected, setSelected] = useState(kinds[0] ?? "");
@@ -3314,7 +3314,7 @@ function NewsStockView({
         <div className="empty">Belum ada gambar untuk jenis ini.</div>
       ) : (
         <div
-          className={`stock-grid${HORIZONTAL_KINDS.includes(kind.replace(/^S_/, "")) ? " wide" : ""}`}
+          className={`stock-grid${isHorizontalKind(kind.replace(/^S_/, "")) ? " wide" : ""}`}
         >
           {items.map((x) => (
             <figure key={x.panel}>
@@ -3652,6 +3652,13 @@ function BookSettingsCard({
   instagram: InstagramConnection;
   onSave: (book: string, settings: BookSettings) => void;
 }) {
+  const {
+    lanes: IMAGE_LANES,
+    laneName,
+    quoteStyles: QUOTE_IMAGE_STYLES,
+    horizontalKinds: HORIZONTAL_KINDS,
+    verticalKinds: VERTICAL_KINDS,
+  } = useImageCatalog();
   const type = useContentType();
   const stages = type ? contentStages(type) : null;
   const uses = (stage: string) => !stages || stages.has(stage);
@@ -3665,9 +3672,12 @@ function BookSettingsCard({
     setDraft((d) => {
       const next = { ...d, ...patch };
       const needed = [next.panelHorizontal, next.panelVertical];
-      next.stockKinds = IMAGE_LANES.map(([k]) => k).filter(
-        (k) => next.stockKinds.includes(k) || needed.includes(k),
-      );
+      next.stockKinds = [
+        ...new Set([
+          ...next.stockKinds,
+          ...needed.filter((kind): kind is string => !!kind),
+        ]),
+      ];
       return next;
     });
   const toggle = (k: string) =>
@@ -3686,6 +3696,7 @@ function BookSettingsCard({
     <label className="field">
       {label}
       <select
+        aria-label={label}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
       >
@@ -3716,12 +3727,7 @@ function BookSettingsCard({
       <LabPromptSettings
         engine={news ? "news" : "book"}
         selected={draft.labPromptIds || []}
-        images={[
-          "IMAGES_PANEL",
-          "IMAGES_VIDEO",
-          "POST_IMAGE",
-          "QUOTE_IMAGE",
-        ].some(uses)}
+        images={false}
         onChange={(ids) => set({ labPromptIds: ids })}
       />
       <div className="settings-grid">
@@ -3732,6 +3738,8 @@ function BookSettingsCard({
               <label key={k} className="check-row">
                 <input
                   type="checkbox"
+                  className="lab-prompt-switch"
+                  role="switch"
                   checked={draft.stockKinds.includes(k)}
                   disabled={used.has(k)}
                   onChange={() => toggle(k)}
@@ -3754,6 +3762,8 @@ function BookSettingsCard({
               <label key={k} className="check-row">
                 <input
                   type="checkbox"
+                  className="lab-prompt-switch"
+                  role="switch"
                   checked={draft.sentenceKinds.includes(k)}
                   disabled={
                     draft.sentenceVideoKind === k ||
@@ -4034,6 +4044,7 @@ function StockModal({
   onClose: () => void;
   onCreate: (kind: string, name: string) => void;
 }) {
+  const { lanes: IMAGE_LANES } = useImageCatalog();
   const job = (k: string) => (sentences ? sentenceJob(k) : k);
   const expected = sentences?.length ?? PANEL_COUNT;
   // Hanya lajur yang aktif di Pengaturan Konten buku ini.
@@ -4092,11 +4103,7 @@ function StockModal({
       ) : !items.length ? (
         <div className="empty">Belum ada gambar untuk jenis ini.</div>
       ) : (
-        <div
-          className={
-            "stock-grid" + (HORIZONTAL_KINDS.includes(kind) ? " wide" : "")
-          }
-        >
+        <div className={"stock-grid" + (isHorizontalKind(kind) ? " wide" : "")}>
           {items.map((x) => (
             <figure key={x.panel}>
               <a
@@ -4354,9 +4361,14 @@ function ArticleModal({ c, onClose }: { c: any; onClose: () => void }) {
     </Modal>
   );
 }
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <ImageCatalogProvider>
+    <App />
+  </ImageCatalogProvider>,
+);
 
 function StockGallery() {
+  const { lanes: IMAGE_LANES } = useImageCatalog();
   const [kind, setKind] = useState(IMAGE_LANES[0][0]),
     [items, setItems] = useState<any[] | null>(null),
     [error, setError] = useState("");
@@ -4367,7 +4379,7 @@ function StockGallery() {
       .then(setItems)
       .catch((e) => setError((e as Error).message));
   }, [kind]);
-  const horizontal = HORIZONTAL_KINDS.includes(kind);
+  const horizontal = isHorizontalKind(kind);
   return (
     <section className="card pad stack">
       <div className="card-title">

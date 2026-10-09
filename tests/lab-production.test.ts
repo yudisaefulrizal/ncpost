@@ -142,7 +142,7 @@ it("passes the saved static attachment and tuned prompt to a real production ima
   const lab = await productionLabPrompt(
     db,
     { ...DEFAULT_BOOK_SETTINGS, labPromptIds: [5] },
-    "POST_IMAGE",
+    "IMAGE_LAB_5_V",
     { ...vars, teks: vars.artikel },
   );
   expect(lab?.images).toEqual([image]);

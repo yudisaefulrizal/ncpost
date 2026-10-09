@@ -1,3 +1,4 @@
+import { labImageKind } from "./lab-image-types";
 import { validateLabSettings } from "./lab-production";
 import {
   currentContentType,
@@ -23,6 +24,8 @@ import {
 } from "./domain";
 import {
   STOCK_KINDS,
+  isStockKind,
+  baseKind,
   SENTENCE_KINDS,
   DEFAULT_BOOK_SETTINGS,
   normalizeBookSettings,
@@ -676,9 +679,24 @@ export class Store {
         "TTS_KALIMAT",
         "VIDEO_KALIMAT",
         "VIDEO_KALIMAT_H",
-      ].includes(kind)
+      ].includes(kind) &&
+      !isStockKind(baseKind(kind))
     )
       throw Error("Jenis job ditolak");
+    if (labImageKind(kind)) {
+      const settings = await this.bookSettings(
+        c.book,
+        connection,
+        c.content_type_id ?? 1,
+      );
+      if (
+        !(
+          kind.startsWith("S_") ? settings.sentenceKinds : settings.stockKinds
+        ).includes(baseKind(kind))
+      )
+        throw Error("Jenis gambar Lab belum diaktifkan");
+      await validateLabSettings(this.db, settings, "book");
+    }
     if (kind === "ARTICLE" && c.article && !replace)
       throw Error("Artikel sudah ada; regenerasi eksplisit diperlukan");
     if (/^(S_)?IMAGE_/.test(kind) && c.article_status !== "siap")

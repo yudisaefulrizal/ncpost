@@ -1,3 +1,4 @@
+import { labImageKind } from "./lab-image-types";
 import { validateLabSettings } from "./lab-production";
 import {
   currentContentType,
@@ -7,6 +8,8 @@ import {
 import type mysql from "mysql2/promise";
 import {
   normalizeBookSettings,
+  isStockKind,
+  baseKind,
   DEFAULT_BOOK_SETTINGS,
   type BookSettings,
 } from "./book-settings";
@@ -95,7 +98,10 @@ export class NewsMediaStore {
     if (
       !kinds.length ||
       new Set(kinds).size !== kinds.length ||
-      kinds.some((kind) => !NEWS_MEDIA_KINDS.includes(kind))
+      kinds.some(
+        (kind) =>
+          !NEWS_MEDIA_KINDS.includes(kind) && !isStockKind(baseKind(kind)),
+      )
     )
       throw Error("Jenis produksi berita tidak dikenal");
     const c = await this.db.getConnection();
@@ -128,6 +134,15 @@ export class NewsMediaStore {
       );
       if (kinds.some((kind) => !contentAllows(type, kind)))
         throw Error("Tahap tidak digunakan oleh jenis konten ini");
+      for (const kind of kinds)
+        if (
+          labImageKind(kind) &&
+          !(
+            kind.startsWith("S_") ? settings.sentenceKinds : settings.stockKinds
+          ).includes(baseKind(kind))
+        )
+          throw Error("Jenis gambar Lab belum diaktifkan");
+      await validateLabSettings(this.db, settings, "news");
       const p = await this.detail(id, n.attempts, c);
       const ids: number[] = [];
       for (const kind of kinds) {

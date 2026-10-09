@@ -1,3 +1,4 @@
+import { labImageCatalog } from "./lab-image-types";
 import { labReferences } from "./lab-references";
 import { LAB_IMAGE_LIMIT, saveLabImage, labImageFile } from "./lab-images";
 import { raw, Router } from "express";
@@ -49,6 +50,9 @@ export function labRouter(getStore: () => LabStore) {
       .type("png")
       .sendFile(await labImageFile(req.params.id), { dotfiles: "allow" });
   });
+  router.get("/image-types", async (_req, res) =>
+    res.json(labImageCatalog((await getStore().prompts("image")) as any)),
+  );
   router.get("/references", (req, res) =>
     res.json(labReferences(labKind(req.query.kind))),
   );

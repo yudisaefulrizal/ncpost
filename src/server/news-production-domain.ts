@@ -1,4 +1,10 @@
-import { type BookSettings, STOCK_KINDS, sentenceJob } from "./book-settings";
+import {
+  type BookSettings,
+  STOCK_KINDS,
+  sentenceJob,
+  isStockKind,
+  baseKind,
+} from "./book-settings";
 export const NEWS_MEDIA_STAGES = [
   ["POST_IMAGE", "Gambar per seluruh teks"],
   ["IMAGES_PANEL", "Gambar Panel"],
@@ -103,8 +109,7 @@ export function newsPrerequisite(
   const enough = (k: string, n: number) =>
     p.stock.filter((b) => b.kind === k).length >= n;
   if (
-    STOCK_KINDS.includes(kind as any) ||
-    STOCK_KINDS.map(sentenceJob).includes(kind) ||
+    isStockKind(baseKind(kind)) ||
     kind === "TTS_KALIMAT" ||
     kind === "POST_IMAGE"
   )

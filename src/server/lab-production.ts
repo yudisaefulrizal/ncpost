@@ -1,3 +1,4 @@
+import { labImageKind, labImageCatalog } from "./lab-image-types";
 import type mysql from "mysql2/promise";
 import type { BookSettings } from "./book-settings";
 import { labAttachments, labImageFile } from "./lab-images";
@@ -27,13 +28,36 @@ export async function validateLabSettings(
   settings: BookSettings,
   engine?: string,
 ) {
-  const ids = settings.labPromptIds || [];
+  const sources = [
+    ...settings.stockKinds,
+    ...settings.sentenceKinds,
+    settings.panelHorizontal,
+    settings.panelVertical,
+    settings.sentenceVideoKind,
+    settings.sentenceVideoHKind,
+    settings.quoteImageStyle,
+  ].filter((key): key is string => !!key && !!labImageKind(key));
+  const ids = [
+    ...new Set([
+      ...(settings.labPromptIds || []),
+      ...sources.map((key) => labImageKind(key)!.id),
+    ]),
+  ];
   if (!ids.length) return;
   const [rows]: any = await db.query(
-    "SELECT id,kind,reference_key FROM lab_prompts WHERE id IN (?)",
+    "SELECT id,name,kind,reference_key FROM lab_prompts WHERE id IN (?)",
     [ids],
   );
   if (rows.length !== ids.length) throw Error("Prompt Lab tidak ditemukan");
+  const catalog = labImageCatalog(
+    rows.filter((row: SavedPrompt) => row.kind === "image"),
+  );
+  const allowed = new Set(
+    [...catalog.stock, ...catalog.quote].map((type) => type.kind),
+  );
+  if (sources.some((source) => !allowed.has(source)))
+    throw Error("Jenis gambar Lab tidak sesuai sumber yang dipilih");
+
   if (
     engine &&
     rows.some(
@@ -103,13 +127,30 @@ export async function productionLabPrompt(
   target: ProductionPromptTarget,
   vars: Record<string, string>,
 ): Promise<ProductionLabPrompt | null> {
-  const ids = settings.labPromptIds || [];
+  const custom = labImageKind(target);
+  const ids = custom
+    ? [custom.id]
+    : target === "book" || target === "news"
+      ? settings.labPromptIds || []
+      : [];
   if (!ids.length) return null;
   const [rows]: any = await db.query(
     "SELECT * FROM lab_prompts WHERE id IN (?) ORDER BY id",
     [ids],
   );
-  const row = selectLabPrompt(rows, target);
+  const row = custom
+    ? rows.find(
+        (row: SavedPrompt) => row.id === custom.id && row.kind === "image",
+      )
+    : selectLabPrompt(rows, target);
+  if (custom) {
+    if (!row) throw Error("Jenis gambar Lab tidak ditemukan");
+    const catalog = labImageCatalog([row]);
+    if (
+      ![...catalog.stock, ...catalog.quote].some((type) => type.kind === target)
+    )
+      throw Error("Jenis gambar Lab tidak sesuai sumber yang dipilih");
+  }
   if (!row) return null;
   return {
     id: row.id,

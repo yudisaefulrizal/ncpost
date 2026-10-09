@@ -1,3 +1,4 @@
+import { labImageKind } from "./lab-image-types";
 // Pengaturan konten per judul buku: lajur stok yang dibuat dan sumber gambar
 // panel (horizontal untuk template 1/2/6, vertikal untuk 4/4B); video memakai
 // panel yang sama. Dipakai server, worker, dan tampilan.
@@ -24,6 +25,24 @@ export const VERTICAL_KINDS = [
   "IMAGE_VERTICAL",
   "IMAGE_MINIMALIST",
   "IMAGE_PAPERCUT",
+];
+export const isStockKind = (kind: unknown): kind is string =>
+  typeof kind === "string" &&
+  (STOCK_KINDS.includes(kind as any) ||
+    (!!labImageKind(kind) &&
+      !labImageKind(kind)!.quote &&
+      !kind.startsWith("S_")));
+export const isHorizontalKind = (kind: string) =>
+  HORIZONTAL_KINDS.includes(kind) ||
+  labImageKind(kind)?.orientation === "horizontal";
+export const isVerticalKind = (kind: string) =>
+  VERTICAL_KINDS.includes(kind) ||
+  labImageKind(kind)?.orientation === "vertikal";
+export const isSentenceKind = (kind: string) =>
+  kind.startsWith("S_") && isStockKind(baseKind(kind));
+const orderKinds = (kinds: string[]) => [
+  ...STOCK_KINDS.filter((k) => kinds.includes(k)),
+  ...new Set(kinds.filter((k) => !STOCK_KINDS.includes(k as any))),
 ];
 export interface BookSettings {
   labPromptIds?: number[];
@@ -75,7 +94,16 @@ export function normalizeBookSettings(input: any): BookSettings {
   };
   const pick = (value: unknown, allowed: string[], label: string) => {
     if (value === null || value === undefined || value === "") return null;
-    if (typeof value !== "string" || !allowed.includes(value))
+    const custom = labImageKind(value);
+    const validCustom =
+      custom &&
+      !custom.quote &&
+      typeof value === "string" &&
+      !value.startsWith("S_") &&
+      (allowed === HORIZONTAL_KINDS
+        ? custom.orientation === "horizontal"
+        : custom.orientation === "vertikal");
+    if (typeof value !== "string" || (!allowed.includes(value) && !validCustom))
       throw Error(`${label} tidak dikenal`);
     return value;
   };
@@ -90,7 +118,7 @@ export function normalizeBookSettings(input: any): BookSettings {
     "Sumber panel vertikal",
   );
   const chosen = Array.isArray(input?.stockKinds) ? input.stockKinds : [];
-  if (chosen.some((k: unknown) => !STOCK_KINDS.includes(k as any)))
+  if (chosen.some((k: unknown) => !isStockKind(k)))
     throw Error("Jenis stok tidak dikenal");
   // Sumber panel selalu ikut dibuat; urutan mengikuti STOCK_KINDS.
   const needed = new Set<string>([
@@ -100,7 +128,7 @@ export function normalizeBookSettings(input: any): BookSettings {
   const sentence = Array.isArray(input?.sentenceKinds)
     ? [...input.sentenceKinds]
     : [];
-  if (sentence.some((k: unknown) => !STOCK_KINDS.includes(k as any)))
+  if (sentence.some((k: unknown) => !isStockKind(k)))
     throw Error("Jenis gambar kalimat tidak dikenal");
   const sentenceVideoKind = pick(
     input?.sentenceVideoKind,
@@ -115,7 +143,10 @@ export function normalizeBookSettings(input: any): BookSettings {
   );
   if (sentenceVideoHKind) sentence.push(sentenceVideoHKind);
   const quoteImageStyle = input?.quoteImageStyle ?? DEFAULT_QUOTE_IMAGE_STYLE;
-  if (!(quoteImageStyle in QUOTE_IMAGE_STYLES))
+  if (
+    !(quoteImageStyle in QUOTE_IMAGE_STYLES) &&
+    !labImageKind(quoteImageStyle)?.quote
+  )
     throw Error("Gaya gambar quote tidak dikenal");
   const labIds = input?.labPromptIds;
   if (
@@ -132,8 +163,8 @@ export function normalizeBookSettings(input: any): BookSettings {
     instagramAccountId,
     youtubeAccountId: socialId("youtubeAccountId"),
     tiktokAccountId: socialId("tiktokAccountId"),
-    stockKinds: STOCK_KINDS.filter((k) => needed.has(k)),
-    sentenceKinds: STOCK_KINDS.filter((k) => sentence.includes(k)),
+    stockKinds: orderKinds([...needed]),
+    sentenceKinds: orderKinds(sentence),
     sentenceVideoKind,
     sentenceVideoHKind,
     quoteImageStyle,

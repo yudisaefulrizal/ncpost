@@ -10,7 +10,7 @@ import { ROOT } from "../server/config";
 import type { Store } from "../server/store";
 import { generateCodexImage } from "../server/codex-image";
 import { stockPrompt } from "../server/prompts";
-import { HORIZONTAL_KINDS } from "../server/book-settings";
+import { isHorizontalKind } from "../server/book-settings";
 import { stripMarkdownEmphasis } from "../server/stock-prompts";
 import { slugify } from "../server/stock-match";
 export async function generateStock(
@@ -22,7 +22,9 @@ export async function generateStock(
   panel: number,
   lab?: ProductionLabPrompt | null,
 ) {
-  const prompt = lab?.prompt || stockPrompt(kind, heading, paragraph);
+  const prompt = lab
+    ? `${lab.prompt}\n\nOrientasi gambar: ${isHorizontalKind(kind) ? "horizontal 16:9" : "vertikal 9:16"}.`
+    : stockPrompt(kind, heading, paragraph);
   const tmp = path.join(work, `stock-panel-${panel}.jpg`);
   let failure = "";
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -31,7 +33,7 @@ export async function generateStock(
         prompt,
         work,
         tmp,
-        HORIZONTAL_KINDS.includes(kind) ? "horizontal" : "vertikal",
+        isHorizontalKind(kind) ? "horizontal" : "vertikal",
         ...(lab ? ([lab.images] as [string[]]) : []),
       );
       failure = "";

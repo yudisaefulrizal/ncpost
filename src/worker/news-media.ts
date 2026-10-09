@@ -107,7 +107,7 @@ export async function runNewsMediaJob(
         artikel: n.article,
         bab: JSON.stringify(n.title),
         buku: "",
-        quote: "",
+        quote: text,
       });
     const p = await store.detail(n.id, j.revision);
     const prerequisite = newsPrerequisite(j.kind, p, settings, n.article);

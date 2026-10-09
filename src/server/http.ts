@@ -28,7 +28,11 @@ import {
   verifyPassword,
 } from "./auth";
 import { validateArticle, instagramCaption, bookKey } from "./domain";
-import { STOCK_KINDS, normalizeBookSettings } from "./book-settings";
+import {
+  STOCK_KINDS,
+  normalizeBookSettings,
+  isStockKind,
+} from "./book-settings";
 import {
   audioDir,
   chapterDir,
@@ -523,8 +527,7 @@ app.get("/api/media/:job/:file", (req, res) => {
 });
 app.get("/api/stock", async (req, res) => {
   const kind = String(req.query.kind);
-  if (!(STOCK_KINDS as readonly string[]).includes(kind))
-    throw Error("Lajur stok tidak dikenal");
+  if (!isStockKind(kind)) throw Error("Lajur stok tidak dikenal");
   res.json(
     (await store.assets(kind)).map(
       ({ id, description, usage, created_at }) => ({

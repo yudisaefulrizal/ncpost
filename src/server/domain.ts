@@ -1,4 +1,4 @@
-import { STOCK_KINDS } from "./book-settings";
+import { STOCK_KINDS, isStockKind, isSentenceKind } from "./book-settings";
 import { stripMarkdownEmphasis } from "./stock-prompts";
 // Artikel final = paragraf hook (di bawah heading hook) + lima paragraf isi.
 export const PANEL_COUNT = 6;
@@ -219,7 +219,9 @@ export function canStart(j: ActiveJob, active: ActiveJob[]) {
       (o.state === "running" || o.id < j.id) &&
       (EXCLUSIVE_JOBS.includes(o.kind) ||
         EXCLUSIVE_JOBS.includes(j.kind) ||
-        needs.includes(o.kind)),
+        needs.includes(o.kind) ||
+        (j.kind === "PANEL" && isStockKind(o.kind)) ||
+        (VIDEO_JOBS.includes(j.kind) && isSentenceKind(o.kind))),
   );
 }
 export function roundRobin<T extends { book: string }>(items: T[]): T[] {

@@ -1,0 +1,56 @@
+export type LabImageType = {
+  kind: string;
+  name: string;
+  orientation: "horizontal" | "vertikal" | "bebas";
+};
+export type LabImageCatalog = { stock: LabImageType[]; quote: LabImageType[] };
+export function labImageKind(value: unknown) {
+  if (typeof value !== "string") return null;
+  const match = /^(?:S_)?IMAGE_LAB_([1-9]\d{0,9})_([HV])$/.exec(value);
+  const quote = /^QUOTE_LAB_([1-9]\d{0,9})$/.exec(value);
+  const id = Number(match?.[1] || quote?.[1]);
+  if (!Number.isSafeInteger(id) || id < 1 || id > 2147483647) return null;
+  return {
+    id,
+    quote: !!quote,
+    orientation: match
+      ? match[2] === "H"
+        ? "horizontal"
+        : "vertikal"
+      : "bebas",
+  } as const;
+}
+export function labImageCatalog(
+  rows: { id: number; name: string; reference_key?: string | null }[],
+): LabImageCatalog {
+  const stock: LabImageType[] = [],
+    quote: LabImageType[] = [];
+  for (const row of rows) {
+    const key = row.reference_key || "";
+    const stockOnly = key.startsWith("IMAGE_");
+    const horizontal = [
+      "IMAGE_HORIZONTAL",
+      "IMAGE_PAPERCUT_HORIZONTAL",
+    ].includes(key);
+    {
+      if (!stockOnly || horizontal)
+        stock.push({
+          kind: `IMAGE_LAB_${row.id}_H`,
+          name: `${row.name} · horizontal`,
+          orientation: "horizontal",
+        });
+      if (!stockOnly || !horizontal)
+        stock.push({
+          kind: `IMAGE_LAB_${row.id}_V`,
+          name: `${row.name} · vertikal`,
+          orientation: "vertikal",
+        });
+    }
+    quote.push({
+      kind: `QUOTE_LAB_${row.id}`,
+      name: row.name,
+      orientation: "bebas",
+    });
+  }
+  return { stock, quote };
+}

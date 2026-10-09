@@ -465,6 +465,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                     );
                     setDraftId(r.id);
                     setDrafts(await api(`/prompts?kind=${kind}`));
+                    window.dispatchEvent(new Event("lab-prompts-changed"));
                     setMessage("Jenis disimpan");
                     setEditing(false);
                   })
