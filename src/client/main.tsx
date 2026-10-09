@@ -53,6 +53,8 @@ import {
   PANEL_COUNT,
 } from "../server/domain";
 import {
+  socialTargets,
+  socialColumns,
   DEFAULT_BOOK_SETTINGS,
   sentenceJob,
   HORIZONTAL_KINDS,
@@ -200,7 +202,9 @@ function App() {
     ? contentStages(activeType)
     : new Set<string>();
   const uses = (stage: string) => !activeType || activeStages.has(stage);
-  const showsOutput = (stage: string) => uses(stage) && isFinalOutput(stage);
+  const showsOutput = (stage: string) =>
+    uses(stage) &&
+    (isFinalOutput(stage) || ["IMAGES_PANEL", "IMAGES_VIDEO"].includes(stage));
   const contentNav: [string, IconName][] =
     activeType?.engine === "news"
       ? [
@@ -905,6 +909,8 @@ function App() {
     api(url, method, body, activeType?.id || null);
   const batchStages = [
     ["ARTICLE", "Artikel", "artikel"],
+    ["IMAGES_PANEL", "Gambar carousel", "gambar"],
+    ["IMAGES_VIDEO", "Gambar video", "kalimat"],
     ["POST_IMAGE", "1 gambar", "textImage"],
     ["PANEL", "Carousel", "panel"],
     ["VIDEO_KALIMAT", "Video vertikal", "videoKalimat"],
@@ -919,8 +925,23 @@ function App() {
           const play = stagePlay(c, stage);
           if (!play.run || play.busy || play.done) return null;
           const job = kind === "ARTICLE" && c.article ? "EDITOR" : kind;
-          return () =>
-            batchApi(`/chapters/${c.id}/jobs`, "POST", { kind: job });
+          const kinds =
+            kind === "IMAGES_PANEL"
+              ? settingsFor(c.book).stockKinds.filter(
+                  (k) => count(c, k) < PANEL_COUNT,
+                )
+              : kind === "IMAGES_VIDEO"
+                ? settingsFor(c.book)
+                    .sentenceKinds.map(sentenceJob)
+                    .filter(
+                      (k) =>
+                        count(c, k) < articleSentences(c.article || "").length,
+                    )
+                : [job];
+          return async () => {
+            for (const kind of kinds)
+              await batchApi(`/chapters/${c.id}/jobs`, "POST", { kind });
+          };
         },
       },
       {
@@ -929,13 +950,20 @@ function App() {
         destructive: true,
         prepare: (c: any) => {
           const play = stagePlay(c, stage);
-          return play.redo && !play.busy
-            ? () =>
-                batchApi(`/chapters/${c.id}/jobs`, "POST", {
-                  kind,
-                  replace: true,
-                })
-            : null;
+          if (!play.redo || play.busy) return null;
+          const kinds =
+            kind === "IMAGES_PANEL"
+              ? settingsFor(c.book).stockKinds
+              : kind === "IMAGES_VIDEO"
+                ? settingsFor(c.book).sentenceKinds.map(sentenceJob)
+                : [kind];
+          return async () => {
+            for (const kind of kinds)
+              await batchApi(`/chapters/${c.id}/jobs`, "POST", {
+                kind,
+                replace: true,
+              });
+          };
         },
       },
     ],
@@ -965,6 +993,10 @@ function App() {
         : () => batchApi(`/chapters/${c.id}`, "DELETE"),
   });
 
+  const bookTargets = activeType?.settings
+    ? socialTargets(activeType.settings)
+    : [...new Set(rows.flatMap((c) => socialTargets(settingsFor(c.book))))];
+  const bookSocial = socialColumns(bookTargets);
   const queueCard = (
     <section className="card queue">
       <div className="card-head">
@@ -1088,24 +1120,19 @@ function App() {
                 {selection.all(queue.items, batchBusy)}
               </th>
               <th>Bagian</th>
-              <th>Status</th>
-              {showsOutput("POST_IMAGE") && <th>1 gambar</th>}
+              <th>Artikel</th>
               {showsOutput("QUOTE") && <th>Quote</th>}
               {showsOutput("QUOTE_IMAGE") && <th>Gambar Quote</th>}
-              {showsOutput("IMAGES_PANEL") && <th>Gambar Panel</th>}
+              {showsOutput("IMAGES_PANEL") && <th>Gambar carousel</th>}
               {showsOutput("IMAGES_VIDEO") && <th>Gambar Video</th>}
+              {showsOutput("POST_IMAGE") && <th>1 gambar</th>}
               {showsOutput("TTS_KALIMAT") && <th>Audio</th>}
               {showsOutput("VIDEO_KALIMAT") && <th>Video vertikal</th>}
               {showsOutput("VIDEO_KALIMAT_H") && <th>Video horizontal</th>}
               {showsOutput("PANEL") && <th>Carousel</th>}
-              {(showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT")) && (
-                <th>Instagram</th>
-              )}
-              {(showsOutput("VIDEO_KALIMAT") ||
-                showsOutput("VIDEO_KALIMAT_H")) && <th>YouTube</th>}
-              {(showsOutput("PANEL") ||
-                showsOutput("VIDEO_KALIMAT") ||
-                showsOutput("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
+              {bookSocial.instagram && <th>Instagram</th>}
+              {bookSocial.youtube && <th>YouTube</th>}
+              {bookSocial.tiktok && <th>TikTok</th>}
               <th>Aksi</th>
             </tr>
           </thead>
@@ -1116,18 +1143,9 @@ function App() {
                   <td
                     colSpan={
                       4 +
-                      Number(
-                        showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT"),
-                      ) +
-                      Number(
-                        showsOutput("VIDEO_KALIMAT") ||
-                          showsOutput("VIDEO_KALIMAT_H"),
-                      ) +
-                      Number(
-                        showsOutput("PANEL") ||
-                          showsOutput("VIDEO_KALIMAT") ||
-                          showsOutput("VIDEO_KALIMAT_H"),
-                      ) +
+                      Number(bookSocial.instagram) +
+                      Number(bookSocial.youtube) +
+                      Number(bookSocial.tiktok) +
                       [
                         "POST_IMAGE",
                         "QUOTE",
@@ -1177,42 +1195,18 @@ function App() {
                       </button>
                     </td>
                     <td>
-                      <ProductionProgress
-                        outputs={activeType?.outputs || []}
-                        ready={{
-                          POST_IMAGE: !!c.text_image,
-                          PANEL: !!c.panels,
-                          VIDEO_KALIMAT: !!c.sentence_video,
-                          VIDEO_KALIMAT_H: !!c.sentence_video_h,
-                        }}
-                        jobs={
-                          c.production_jobs ||
-                          jobs.filter(
-                            (j) =>
-                              j.chapter_id === c.id &&
-                              j.revision === c.revision,
-                          )
-                        }
-                        needsEdit={
-                          !!c.article &&
-                          ["draft", "revisi"].includes(c.article_status)
-                        }
-                        automatic={!!activeType?.settings?.autoProcess}
-                        onRetry={(kind) =>
-                          action(async () => {
-                            await api(`/chapters/${c.id}/jobs`, "POST", {
-                              kind,
-                            });
-                            await refresh();
-                          })
-                        }
-                      />
+                      <div className="stage-cell">
+                        <StageCell play={stagePlay(c, "artikel")} />
+                        <button
+                          className="play redo"
+                          title="Buka dan sunting bagian"
+                          aria-label={`Buka dan sunting ${c.title}`}
+                          onClick={() => action(() => open(c))}
+                        >
+                          <Icon name="edit" size={14} />
+                        </button>
+                      </div>
                     </td>
-                    {showsOutput("POST_IMAGE") && (
-                      <td>
-                        <StageCell play={stagePlay(c, "textImage")} />
-                      </td>
-                    )}
                     {showsOutput("QUOTE") && (
                       <td>
                         <StageCell play={stagePlay(c, "quote")} />
@@ -1231,6 +1225,11 @@ function App() {
                     {showsOutput("IMAGES_VIDEO") && (
                       <td>
                         <StageCell play={stagePlay(c, "kalimat")} />
+                      </td>
+                    )}
+                    {showsOutput("POST_IMAGE") && (
+                      <td>
+                        <StageCell play={stagePlay(c, "textImage")} />
                       </td>
                     )}
                     {showsOutput("TTS_KALIMAT") && (
@@ -1253,9 +1252,18 @@ function App() {
                         <StageCell play={stagePlay(c, "panel")} />
                       </td>
                     )}
-                    {(showsOutput("PANEL") || showsOutput("VIDEO_KALIMAT")) && (
+                    {bookSocial.instagram && (
                       <td>
                         <div className="stack-sm">
+                          {!showsOutput("PANEL") &&
+                            !showsOutput("VIDEO_KALIMAT") && (
+                              <StageCell
+                                play={{
+                                  title:
+                                    "Instagram membutuhkan carousel atau video vertikal",
+                                }}
+                              />
+                            )}
                           {showsOutput("PANEL") && (
                             <div>
                               <small className="muted">Carousel</small>
@@ -1271,8 +1279,7 @@ function App() {
                         </div>
                       </td>
                     )}
-                    {(showsOutput("VIDEO_KALIMAT") ||
-                      showsOutput("VIDEO_KALIMAT_H")) && (
+                    {bookSocial.youtube && (
                       <td>
                         <ZernioCell
                           source={`book:${c.id}`}
@@ -1283,9 +1290,7 @@ function App() {
                         />
                       </td>
                     )}
-                    {(showsOutput("PANEL") ||
-                      showsOutput("VIDEO_KALIMAT") ||
-                      showsOutput("VIDEO_KALIMAT_H")) && (
+                    {bookSocial.tiktok && (
                       <td>
                         <ZernioCell
                           source={`book:${c.id}`}
@@ -1303,15 +1308,7 @@ function App() {
                       </td>
                     )}
                     <td>
-                      <div className="stage-cell">
-                        <button
-                          className="play redo"
-                          title="Ubah nomor bagian"
-                          aria-label={`Ubah nomor bagian ${partNumber(rows, c)} ${c.book}`}
-                          onClick={() => editPart(c)}
-                        >
-                          <Icon name="edit" size={14} />
-                        </button>
+                      <div className="production-actions">
                         <button
                           className="play redo"
                           title={
@@ -1681,38 +1678,14 @@ function App() {
     sub = "";
     content = activeType && (
       <section className="card pad stack">
-        <h2 className="h3">Produksi otomatis</h2>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            role="switch"
-            checked={!!activeType.settings?.autoProcess}
-            disabled={!activeType.settings?.managed}
-            onChange={(e) =>
-              action(async () => {
-                await api(`/content-types/${activeType.id}`, "PUT", {
-                  ...activeType,
-                  settings: {
-                    ...activeType.settings,
-                    autoProcess: e.target.checked,
-                  },
-                });
-                await loadContentTypes();
-              })
-            }
-          />
-          Proses semua bahan yang masuk
-        </label>
-        <details>
-          <summary>Jadwal publikasi</summary>
-          <CronSettings
-            items={bookCrons}
-            onSave={async (cron) => {
-              await api("/book-crons", "PUT", cron);
-              await refresh();
-            }}
-          />
-        </details>
+        <h2 className="h3">Jadwal cronjob</h2>
+        <CronSettings
+          items={bookCrons}
+          onSave={async (cron) => {
+            await api("/book-crons", "PUT", cron);
+            await refresh();
+          }}
+        />
         {!activeType.settings?.managed && (
           <button
             className="btn btn-pri"
@@ -2746,9 +2719,7 @@ function CronSettings({
 }) {
   const type = useContentType();
   const stages = CRON_TYPES.filter(
-    ([key]) =>
-      ["POST_IG", "REELS_IG"].includes(key) &&
-      (!type || contentAllows(type, key)),
+    ([key]) => !type || contentAllows(type, key),
   );
 
   const books = [...new Set(items.map((c) => c.book))];
@@ -2907,6 +2878,33 @@ function NewsProduction({
   const [selected, setSelected] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<{
+    id: number;
+    revision: number;
+    article: string;
+  } | null>(null);
+  const [editError, setEditError] = useState("");
+  const locked = (n: NewsArticle) =>
+    ["queued", "running"].includes(n.state) ||
+    !!n.production?.jobs.some((j) => ["queued", "running"].includes(j.state));
+  const removeNews = (n: NewsArticle) => {
+    if (
+      !confirm(
+        `Hapus berita "${n.title || `#${n.id}`}" beserta hasil produksinya?`,
+      )
+    )
+      return;
+    return run(async () => {
+      await api(
+        `/news/${n.id}`,
+        "DELETE",
+        { revision: n.attempts },
+        type?.id || null,
+      );
+      if (selected === n.id) setSelected(null);
+    });
+  };
+
   const [loading, setLoading] = useState(true);
   const load = async () => {
     setItems(await api("/news"));
@@ -2950,11 +2948,20 @@ function NewsProduction({
   const current = items.find((n) => n.id === selected);
   const candidates = current ? parse(current.candidates) : null;
   const artifacts = current ? parse(current.artifacts) : null;
-  const stages = NEWS_MEDIA_STAGES.filter(
-    ([key]) =>
-      allowed(key) &&
-      (isFinalOutput(key) || ["POST_IG", "REELS_IG"].includes(key)),
-  );
+  const newsTargets = type?.settings
+    ? socialTargets(type.settings)
+    : [...new Set(items.flatMap((n) => socialTargets(n.settings)))];
+  const newsSocial = socialColumns(newsTargets);
+  const stages = [...NEWS_MEDIA_STAGES]
+    .sort(([a], [b]) => Number(isFinalOutput(a)) - Number(isFinalOutput(b)))
+    .filter(
+      ([key]) =>
+        allowed(key) &&
+        (isFinalOutput(key) ||
+          ["IMAGES_PANEL", "IMAGES_VIDEO", "POST_IG", "REELS_IG"].includes(
+            key,
+          )),
+    );
   const mediaUrl = (id: number, stage: string, index = 0) =>
     `/api/news/${id}/media/${stage}/${index}`;
   const mediaCurrent = items.find((n) => n.id === mediaView?.id);
@@ -3107,8 +3114,21 @@ function NewsProduction({
           : null;
       },
     },
+    {
+      id: "DELETE",
+      label: "Hapus berita",
+      destructive: true,
+      prepare: (n) =>
+        locked(n)
+          ? null
+          : () => batchApi(`/news/${n.id}`, "DELETE", { revision: n.attempts }),
+    },
     ...stages
-      .filter(([kind]) => isFinalOutput(kind))
+      .filter(
+        ([kind]) =>
+          isFinalOutput(kind) ||
+          ["IMAGES_PANEL", "IMAGES_VIDEO"].includes(kind),
+      )
       .flatMap(([kind, label]) => [
         {
           id: kind,
@@ -3185,13 +3205,15 @@ function NewsProduction({
                   {selection.all(visible, batchBusy)}
                 </th>
                 <th>Konten</th>
-                <th>Status</th>
+                <th>Artikel</th>
                 {stages
                   .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
                   .map(([key, stage]) => (
                     <th key={key}>
                       {(
                         {
+                          IMAGES_PANEL: "Gambar carousel",
+                          IMAGES_VIDEO: "Gambar video",
                           POST_IMAGE: "1 gambar",
                           PANEL: "Carousel",
                           VIDEO_KALIMAT: "Video vertikal",
@@ -3200,15 +3222,9 @@ function NewsProduction({
                       )[key] || stage}
                     </th>
                   ))}
-                {(allowed("POST_IG") || allowed("REELS_IG")) && (
-                  <th>Instagram</th>
-                )}
-                {(allowed("VIDEO_KALIMAT") || allowed("VIDEO_KALIMAT_H")) && (
-                  <th>YouTube</th>
-                )}
-                {(allowed("PANEL") ||
-                  allowed("VIDEO_KALIMAT") ||
-                  allowed("VIDEO_KALIMAT_H")) && <th>TikTok</th>}
+                {newsSocial.instagram && <th>Instagram</th>}
+                {newsSocial.youtube && <th>YouTube</th>}
+                {newsSocial.tiktok && <th>TikTok</th>}
                 <th>Aksi</th>
               </tr>
             </thead>
@@ -3242,34 +3258,25 @@ function NewsProduction({
                     </div>
                   </td>
                   <td>
-                    <ProductionProgress
-                      outputs={type?.outputs || []}
-                      ready={Object.fromEntries(
-                        Object.keys(n.production?.outputs || {}).map((k) => [
-                          k,
-                          true,
-                        ]),
-                      )}
-                      jobs={
-                        n.state === "failed"
-                          ? [
-                              {
-                                kind: "ARTICLE",
-                                state: "failed",
-                                error: n.error,
-                              },
-                            ]
-                          : n.state !== "completed"
-                            ? [{ kind: "ARTICLE", state: n.state }]
-                            : n.production?.jobs || []
-                      }
-                      automatic={!!type?.settings?.autoProcess}
-                      onRetry={(kind) =>
-                        kind === "ARTICLE"
-                          ? run(() => api(`/news/${n.id}/retry`, "POST"))
-                          : runMedia(n, kind)
-                      }
-                    />
+                    <div className="stage-cell">
+                      <StageCell play={articlePlay(n)} />
+                      <button
+                        className="play redo"
+                        title="Sunting berita"
+                        aria-label={`Sunting berita #${n.id}`}
+                        disabled={busy || locked(n) || n.state !== "completed"}
+                        onClick={() => {
+                          setEditError("");
+                          setEditing({
+                            id: n.id,
+                            revision: n.attempts,
+                            article: n.article,
+                          });
+                        }}
+                      >
+                        <Icon name="edit" size={14} />
+                      </button>
+                    </div>
                   </td>
                   {stages
                     .filter(([key]) => !["POST_IG", "REELS_IG"].includes(key))
@@ -3278,9 +3285,17 @@ function NewsProduction({
                         <StageCell play={mediaPlay(n, stage)} />
                       </td>
                     ))}
-                  {(allowed("POST_IG") || allowed("REELS_IG")) && (
+                  {newsSocial.instagram && (
                     <td>
                       <div className="stack-sm">
+                        {!allowed("POST_IG") && !allowed("REELS_IG") && (
+                          <StageCell
+                            play={{
+                              title:
+                                "Instagram membutuhkan carousel atau video vertikal",
+                            }}
+                          />
+                        )}
                         {["POST_IG", "REELS_IG"]
                           .filter(allowed)
                           .map((stage) => (
@@ -3299,7 +3314,7 @@ function NewsProduction({
                       </div>
                     </td>
                   )}
-                  {(allowed("VIDEO_KALIMAT") || allowed("VIDEO_KALIMAT_H")) && (
+                  {newsSocial.youtube && (
                     <td>
                       <ZernioCell
                         source={`news:${n.id}`}
@@ -3315,9 +3330,7 @@ function NewsProduction({
                       />
                     </td>
                   )}
-                  {(allowed("PANEL") ||
-                    allowed("VIDEO_KALIMAT") ||
-                    allowed("VIDEO_KALIMAT_H")) && (
+                  {newsSocial.tiktok && (
                     <td>
                       <ZernioCell
                         source={`news:${n.id}`}
@@ -3335,7 +3348,17 @@ function NewsProduction({
                     </td>
                   )}
                   <td>
-                    <StageCell play={articlePlay(n)} />
+                    <div className="production-actions">
+                      <button
+                        className="play redo"
+                        title="Hapus berita"
+                        aria-label={`Hapus berita #${n.id}`}
+                        disabled={busy || locked(n)}
+                        onClick={() => removeNews(n)}
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3352,6 +3375,76 @@ function NewsProduction({
           )}
         </div>
       </section>
+      {editing && (
+        <Modal
+          c={editing}
+          title="Sunting berita"
+          onClose={() => {
+            if (!busy) setEditing(null);
+          }}
+          wide
+        >
+          <form
+            className="stack"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (busy) return;
+              setBusy(true);
+              setEditError("");
+              try {
+                await api(
+                  `/news/${editing.id}`,
+                  "PUT",
+                  { article: editing.article, revision: editing.revision },
+                  type?.id || null,
+                );
+                await load();
+                setEditing(null);
+              } catch (error) {
+                setEditError((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <label className="field">
+              Artikel
+              <textarea
+                aria-label="Isi artikel berita"
+                rows={20}
+                value={editing.article}
+                disabled={busy}
+                onChange={(e) =>
+                  setEditing({ ...editing, article: e.target.value })
+                }
+                required
+              />
+            </label>
+            <small className="muted">
+              Perubahan artikel akan membuat hasil gambar dan video perlu
+              diproduksi ulang.
+            </small>
+            {editError && (
+              <p role="alert" className="warn">
+                {editError}
+              </p>
+            )}
+            <div className="toolbar">
+              <button className="btn btn-pri" disabled={busy}>
+                {busy ? "Menyimpan…" : "Simpan"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sec"
+                disabled={busy}
+                onClick={() => setEditing(null)}
+              >
+                Batal
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
       {mediaCurrent && mediaView && (
         <Modal
           c={mediaCurrent}
@@ -3816,9 +3909,7 @@ function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
 function NewsCronSettings() {
   const type = useContentType();
   const stages = NEWS_CRON_TYPES.filter(
-    ([key]) =>
-      ["ARTICLE", "POST_IG", "REELS_IG"].includes(key) &&
-      (!type || contentAllows(type, key)),
+    ([key]) => !type || contentAllows(type, key),
   );
 
   const [items, setItems] = useState<BookCron<NewsCronKind>[]>([]),
@@ -3831,7 +3922,7 @@ function NewsCronSettings() {
   return (
     <div className="stack-lg">
       <section className="card pad stack">
-        <h2 className="h3">Jadwal bahan berita</h2>
+        <h2 className="h3">Jadwal cronjob berita</h2>
       </section>
       {error && (
         <p className="warn" role="alert">
@@ -4524,66 +4615,5 @@ function ZernioCell({
         </Modal>
       )}
     </>
-  );
-}
-
-function ProductionProgress({
-  outputs,
-  ready,
-  jobs,
-  automatic,
-  needsEdit = false,
-  onRetry,
-}: {
-  outputs: string[];
-  ready: Record<string, boolean>;
-  jobs: { kind: string; state: string; error?: string | null }[];
-  automatic: boolean;
-  needsEdit?: boolean;
-  onRetry: (kind: string) => void;
-}) {
-  const latest = jobs.filter(
-    (job, i) => jobs.findIndex((j) => j.kind === job.kind) === i,
-  );
-  const active = latest.find((j) => ["queued", "running"].includes(j.state));
-  const failed = latest.find(
-    (j) =>
-      j.state === "failed" &&
-      !["POST_IG", "REELS_IG", "PREVIEW"].includes(j.kind),
-  );
-  const targets = outputs.filter(isFinalOutput);
-  const done = targets.length > 0 && targets.every((kind) => ready[kind]);
-  return (
-    <div className="stack-sm">
-      <Chip
-        s={
-          done
-            ? { tone: "ok", label: "Selesai" }
-            : active
-              ? { tone: "run", label: "Diproses" }
-              : failed
-                ? { tone: "block", label: "Gagal" }
-                : {
-                    tone: "none",
-                    label: needsEdit
-                      ? "Perlu sunting"
-                      : automatic
-                        ? "Menunggu"
-                        : "Otomatis nonaktif",
-                  }
-        }
-      />
-      {!done && failed && !active && (
-        <>
-          <small className="warn">{failed.error}</small>
-          <button
-            className="btn btn-sec btn-sm"
-            onClick={() => onRetry(failed.kind)}
-          >
-            Coba lagi
-          </button>
-        </>
-      )}
-    </div>
   );
 }

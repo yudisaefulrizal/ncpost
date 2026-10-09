@@ -222,6 +222,21 @@ app.get("/api/news", async (_, res) => {
     ),
   );
 });
+app.put("/api/news/:id", async (req, res) => {
+  await new NewsStore(store.db).save(
+    Number(req.params.id),
+    req.body?.article,
+    req.body?.revision,
+  );
+  res.json({ ok: true });
+});
+app.delete("/api/news/:id", async (req, res) => {
+  await new NewsStore(store.db).remove(
+    Number(req.params.id),
+    req.body?.revision,
+  );
+  res.json({ ok: true });
+});
 app.get("/api/news-crons", async (_, res) =>
   res.json(await new NewsCronStore(store.db).list()),
 );

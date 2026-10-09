@@ -44,7 +44,33 @@ const orderKinds = (kinds: string[]) => [
   ...STOCK_KINDS.filter((k) => kinds.includes(k)),
   ...new Set(kinds.filter((k) => !STOCK_KINDS.includes(k as any))),
 ];
+export const SOCIAL_TARGETS = ["instagram", "youtube", "tiktok"] as const;
+export type SocialTarget = (typeof SOCIAL_TARGETS)[number];
+export function socialTargets(
+  settings:
+    | {
+        socialTargets?: SocialTarget[];
+        instagramAccountId?: string | null;
+        youtubeAccountId?: string | null;
+        tiktokAccountId?: string | null;
+      }
+    | null
+    | undefined,
+): SocialTarget[] {
+  return (
+    settings?.socialTargets ??
+    SOCIAL_TARGETS.filter((platform) => !!settings?.[`${platform}AccountId`])
+  );
+}
+export function socialColumns(targets: SocialTarget[]) {
+  return {
+    instagram: targets.includes("instagram"),
+    youtube: targets.includes("youtube"),
+    tiktok: targets.includes("tiktok"),
+  };
+}
 export interface BookSettings {
+  socialTargets?: SocialTarget[];
   labPromptIds?: number[];
   managed?: boolean;
   autoProcess?: boolean;
@@ -78,6 +104,14 @@ export const DEFAULT_BOOK_SETTINGS: BookSettings = {
   panelVertical: "IMAGE_VERTICAL",
 };
 export function normalizeBookSettings(input: any): BookSettings {
+  if (
+    input?.socialTargets !== undefined &&
+    (!Array.isArray(input.socialTargets) ||
+      input.socialTargets.some(
+        (target: unknown) => !SOCIAL_TARGETS.includes(target as SocialTarget),
+      ))
+  )
+    throw Error("Target sosmed tidak valid");
   const instagramAccountId =
     input?.instagramAccountId === ""
       ? null
@@ -180,6 +214,9 @@ export function normalizeBookSettings(input: any): BookSettings {
       throw Error("Cara pembuatan gambar tidak dikenal");
   }
   return {
+    ...(input?.socialTargets !== undefined
+      ? { socialTargets: [...new Set<SocialTarget>(input.socialTargets)] }
+      : {}),
     ...(input?.singleImageMode !== undefined
       ? { singleImageMode: input.singleImageMode }
       : {}),
@@ -187,9 +224,7 @@ export function normalizeBookSettings(input: any): BookSettings {
       ? { carouselMode: input.carouselMode }
       : {}),
     ...(input?.managed !== undefined ? { managed: input.managed } : {}),
-    ...(input?.autoProcess !== undefined
-      ? { autoProcess: input.autoProcess }
-      : {}),
+    ...(input?.autoProcess !== undefined ? { autoProcess: false } : {}),
     ...(input?.wholeTextImageKind !== undefined
       ? { wholeTextImageKind: input.wholeTextImageKind || null }
       : {}),

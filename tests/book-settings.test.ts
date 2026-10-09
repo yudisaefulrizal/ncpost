@@ -156,3 +156,10 @@ it("menyimpan akun YouTube/TikTok per konten dan menolak ID tidak valid", () => 
     }),
   ).toThrow("ID akun");
 });
+
+it("pengaturan otomatis lama tidak mengaktifkan produksi tanpa jadwal", () => {
+  expect(
+    normalizeBookSettings({ ...DEFAULT_BOOK_SETTINGS, autoProcess: true })
+      .autoProcess,
+  ).toBe(false);
+});

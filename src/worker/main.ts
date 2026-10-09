@@ -3,7 +3,6 @@ import {
   generateDirectCarousel,
   generateTemplatePost,
 } from "./posting-images";
-import { scheduleProduction } from "../server/auto-production";
 import { labImageKind } from "../server/lab-image-types";
 import {
   productionLabPrompt,
@@ -791,19 +790,10 @@ async function runJob(job: Job) {
 const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
 const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
-let lastProductionTick = 0;
 let newsRunning = false;
 while (!stop) {
   await store.recover();
   await pollPosts();
-  if (Date.now() - lastProductionTick >= 3000) {
-    lastProductionTick = Date.now();
-    try {
-      await scheduleProduction(store);
-    } catch (e) {
-      console.error("Produksi otomatis gagal:", (e as Error).message);
-    }
-  }
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastCronMinute) {
     try {

@@ -46,6 +46,12 @@ export function contentStages(
 export function contentAllows(type: ContentType, kind: string) {
   const stages = contentStages(type);
   if (["EDITOR", "PREVIEW"].includes(kind)) return true;
+  if (
+    ["POST_IG", "REELS_IG"].includes(kind) &&
+    type.settings?.socialTargets !== undefined &&
+    !type.settings.socialTargets.includes("instagram")
+  )
+    return false;
   if (kind === "POST_IG") return stages.has("PANEL");
   if (kind === "REELS_IG") return stages.has("VIDEO_KALIMAT");
   if (kind.startsWith("S_IMAGE_")) return stages.has("IMAGES_VIDEO");

@@ -21,7 +21,7 @@ export function ContentTypes({
   const [outputs, setOutputs] = useState<string[]>(["VIDEO_KALIMAT"]);
   const [settings, setSettings] = useState<BookSettings>(() => ({
     ...planSettings(["VIDEO_KALIMAT"], null),
-    autoProcess: true,
+    autoProcess: false,
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,7 +34,7 @@ export function ContentTypes({
     setOutputs(next);
     setSettings(
       type === "new"
-        ? { ...planSettings(next, null), autoProcess: true }
+        ? { ...planSettings(next, null), autoProcess: false }
         : planSettings(next, type.settings),
     );
     setError("");

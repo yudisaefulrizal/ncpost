@@ -1630,3 +1630,13 @@ dialog.app-dialog::backdrop {
   height: 16px;
   cursor: pointer;
 }
+
+.production-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.production-actions .play {
+  border-radius: 6px;
+}

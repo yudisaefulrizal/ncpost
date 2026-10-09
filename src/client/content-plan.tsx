@@ -28,7 +28,7 @@ export function planSettings(
     settings: {
       ...settings,
       managed: true,
-      autoProcess: settings.autoProcess ?? true,
+      autoProcess: false,
       singleImageMode: settings.singleImageMode || "direct",
       carouselMode: settings.carouselMode || "template",
       wholeTextImageKind: settings.wholeTextImageKind ?? null,
@@ -155,15 +155,6 @@ export function ContentPlanFields({
             true,
           )}
       </div>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          role="switch"
-          checked={!!settings.autoProcess}
-          onChange={(e) => set({ autoProcess: e.target.checked })}
-        />
-        Proses otomatis
-      </label>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { socialTargets, type SocialTarget } from "../server/book-settings";
 import type { InstagramConnection } from "../server/instagram-account";
 import React, { useEffect, useState } from "react";
 async function api(route: string, body?: unknown) {
@@ -29,11 +30,13 @@ export function ZernioPanel({
   instagram?: InstagramConnection;
   credentials?: boolean;
   settings?: {
+    socialTargets?: SocialTarget[];
     instagramAccountId: string | null;
     youtubeAccountId: string | null;
     tiktokAccountId: string | null;
   };
   onChange?: (value: {
+    socialTargets?: SocialTarget[];
     instagramAccountId?: string | null;
     youtubeAccountId?: string | null;
     tiktokAccountId?: string | null;
@@ -256,65 +259,96 @@ export function ZernioPanel({
         </section>
       )}
       {settings && (
-        <div className="settings-grid">
-          {(
-            [
-              {
-                label: "Instagram",
-                key: "instagramAccountId",
-                state: instagram?.state || "loading",
-                accounts: instagram?.accounts || [],
-              },
-              {
-                label: "TikTok",
-                key: "tiktokAccountId",
-                state: connection.state,
-                accounts: connection.accounts.filter(
-                  (a) => a.platform === "tiktok",
+        <section className="stack">
+          <fieldset className="output-targets">
+            <legend>Target sosmed</legend>
+            <div className="output-target-options">
+              {(
+                [
+                  ["instagram", "Instagram"],
+                  ["youtube", "YouTube"],
+                  ["tiktok", "TikTok"],
+                ] as const
+              ).map(([platform, label]) => (
+                <label className="check-row" key={platform}>
+                  <input
+                    type="checkbox"
+                    checked={socialTargets(settings).includes(platform)}
+                    onChange={(e) =>
+                      onChange?.({
+                        socialTargets: e.target.checked
+                          ? [...socialTargets(settings), platform]
+                          : socialTargets(settings).filter(
+                              (target) => target !== platform,
+                            ),
+                      })
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="settings-grid">
+            {(
+              [
+                {
+                  label: "Instagram",
+                  key: "instagramAccountId",
+                  state: instagram?.state || "loading",
+                  accounts: instagram?.accounts || [],
+                },
+                {
+                  label: "TikTok",
+                  key: "tiktokAccountId",
+                  state: connection.state,
+                  accounts: connection.accounts.filter(
+                    (a) => a.platform === "tiktok",
+                  ),
+                },
+                {
+                  label: "YouTube",
+                  key: "youtubeAccountId",
+                  state: connection.state,
+                  accounts: connection.accounts.filter(
+                    (a) => a.platform === "youtube",
+                  ),
+                },
+              ] as const
+            )
+              .filter(({ key }) =>
+                socialTargets(settings).includes(
+                  key.replace("AccountId", "") as SocialTarget,
                 ),
-              },
-              {
-                label: "YouTube",
-                key: "youtubeAccountId",
-                state: connection.state,
-                accounts: connection.accounts.filter(
-                  (a) => a.platform === "youtube",
-                ),
-              },
-            ] as const
-          ).map(({ label, key, state, accounts }) => (
-            <label className="field" key={key}>
-              Akun tujuan {label}
-              <select
-                aria-label={`Akun tujuan ${label}`}
-                value={settings[key] || ""}
-                onChange={(e) => onChange?.({ [key]: e.target.value || null })}
-                disabled={state === "loading"}
-              >
-                <option value="">
-                  {state === "loading"
-                    ? "Memuat akun…"
-                    : state !== "connected"
-                      ? "Belum terhubung"
-                      : !accounts.length
-                        ? "Belum ada akun"
-                        : "Pilih akun tujuan"}
-                </option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    @{a.username}
-                  </option>
-                ))}
-                {settings[key] &&
-                  !accounts.some((a) => a.id === settings[key]) && (
-                    <option value={settings[key]!}>
-                      Akun tersimpan tidak tersedia
-                    </option>
-                  )}
-              </select>
-            </label>
-          ))}
-        </div>
+              )
+              .map(({ label, key, state, accounts }) => (
+                <label className="field" key={key}>
+                  Akun tujuan {label}
+                  <select
+                    aria-label={`Akun tujuan ${label}`}
+                    value={settings[key] || ""}
+                    onChange={(e) =>
+                      onChange?.({ [key]: e.target.value || null })
+                    }
+                    disabled={state === "loading"}
+                  >
+                    <option value="">Pilih akun tujuan</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        @{a.username}
+                      </option>
+                    ))}
+                    {settings[key] &&
+                      !accounts.some((a) => a.id === settings[key]) && (
+                        <option value={settings[key]!}>
+                          Akun tersimpan tidak tersedia
+                        </option>
+                      )}
+                  </select>
+                </label>
+              ))}
+          </div>
+        </section>
       )}
       {!settings && !credentials && connection.state !== "connected" && (
         <p>{connection.reason || "Memuat koneksi…"}</p>

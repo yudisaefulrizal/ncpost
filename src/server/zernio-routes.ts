@@ -214,6 +214,11 @@ export function zernioRouter(getStore: () => Store) {
             store.db,
             newsRows[0]?.content_type_id ?? 2,
           );
+    if (
+      settings.socialTargets !== undefined &&
+      !settings.socialTargets.includes(account.platform)
+    )
+      throw Error("Target sosmed tidak aktif di Pengaturan Konten");
     const targetId =
       account.platform === "youtube"
         ? settings.youtubeAccountId

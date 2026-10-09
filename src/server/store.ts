@@ -542,11 +542,7 @@ export class Store {
         const type = await new ContentTypeStore(this.db).get(
           cron.content_type_id ?? 1,
         );
-        if (
-          type.settings?.managed &&
-          !["POST_IG", "REELS_IG"].includes(cron.kind)
-        )
-          continue;
+        if (!contentAllows(type, cron.kind)) continue;
         if (
           Number(cron.last_tick) >= tick ||
           !intervalDue(

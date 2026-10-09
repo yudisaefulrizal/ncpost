@@ -122,11 +122,11 @@ npm start        # produksi: build frontend lalu jalankan server + worker
 
 Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `Ctrl+C` menghentikan keduanya. Perubahan skema database: `MYSQL_ROOT_PASSWORD=... npm run db:setup` (idempoten). Contoh service systemd (opsional, gaya nc-wa) ada di `deploy/`.
 
-## Produksi otomatis dan cronjob
+## Produksi dan cronjob
 
-Jenis konten menentukan target akhir dan gaya gambar. **Proses otomatis** mengantrekan semua bahan di jenis tersebut dan melanjutkan prasyarat hingga hasil selesai; tidak perlu jadwal terpisah untuk artikel, gambar, audio, dan render. Halaman **Cronjob** dapat menjeda antrean baru dan mengatur jadwal publikasi Instagram per buku. Cronjob berita mengatur pencarian bahan baru serta publikasi. Interval publikasi tetap 1–8760 jam, bawaan 24 jam dan nonaktif.
+Jenis konten menentukan target akhir dan gaya gambar. Produksi dijalankan lewat tombol manual (termasuk aksi batch) atau cronjob yang diaktifkan dengan jadwal. Worker tidak lagi mengantrekan semua bahan secara otomatis di luar cronjob; pengaturan lama `autoProcess` dinonaktifkan.
 
-Hasil yang sudah ada dipakai kembali. Job aktif tidak digandakan. Langkah gagal menunggu tombol **Coba lagi**; otomatisasi tidak mengulang panggilan penyedia yang gagal terus-menerus. Mematikan proses otomatis menghentikan penambahan job berikutnya, sementara job yang sudah antre/berjalan tetap diselesaikan. Publikasi hanya lewat aksi atau jadwal publikasi yang diaktifkan pengguna.
+Setiap tahap memiliki cronjob dan interval sendiri: artikel, gambar, audio, render, atau publikasi. Cronjob hanya mengantrekan tahap yang dipilih saat prasyarat sudah siap; tidak membuat prasyarat dan tidak menjalankan tahap berikutnya. Interval tetap 1–8760 jam, bawaan 24 jam dan nonaktif. Job yang sudah diantrekan tetap diproses; perubahan ini menghentikan pemicu otomatis yang menambahkan job baru tanpa jadwal.
 
 ## Akun Instagram per buku
 

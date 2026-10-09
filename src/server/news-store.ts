@@ -3,7 +3,12 @@ import type { NewsProductionData } from "./news-production-domain";
 import type { BookSettings } from "./book-settings";
 import type mysql from "mysql2/promise";
 import { createHash } from "node:crypto";
-import { newsSourceKey, type NewsResult, validateNewsResult } from "./news";
+import {
+  newsSourceKey,
+  type NewsResult,
+  validateNewsResult,
+  validateNewsArticle,
+} from "./news";
 export interface NewsArticle {
   content_type_id?: number;
   production?: NewsProductionData;
@@ -88,6 +93,116 @@ export class NewsStore {
     } finally {
       c.release();
     }
+  }
+  private async change(
+    id: number,
+    revision: number,
+    edit?: { article: string; title: string; sourceUrl: string },
+  ) {
+    if (
+      !Number.isSafeInteger(id) ||
+      id < 1 ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0
+    )
+      throw Error("Versi berita tidak valid");
+    const c = await this.db.getConnection();
+    try {
+      await c.beginTransaction();
+      const [rows]: any = await c.query(
+        "SELECT * FROM news_articles WHERE id=? FOR UPDATE",
+        [id],
+      );
+      const news: NewsArticle | undefined = rows[0];
+      if (
+        !news ||
+        (currentContentType() &&
+          news.content_type_id !== currentContentType()!.id)
+      )
+        throw Error("Berita tidak ditemukan");
+      if (news.attempts !== revision)
+        throw Error(
+          "Berita sudah berubah. Muat ulang sebelum menyimpan atau menghapus",
+        );
+      if (news.state === "running" || (edit && news.state !== "completed"))
+        throw Error("Tunggu proses artikel berita selesai");
+      const [active]: any = await c.query(
+        "SELECT id FROM news_media_jobs WHERE news_id=? AND state IN ('queued','running')",
+        [id],
+      );
+      if (active.length)
+        throw Error(
+          "Tunggu produksi berita selesai sebelum menyunting atau menghapus",
+        );
+      const [posts]: any = await c.query(
+        "SELECT data FROM news_media_outputs WHERE news_id=? AND kind IN ('POST_IG','REELS_IG')",
+        [id],
+      );
+      if (
+        posts.some((post: any) =>
+          ["processing", "preparing", "publishing", "unknown"].includes(
+            JSON.parse(post.data).status,
+          ),
+        )
+      )
+        throw Error("Periksa status publikasi Instagram terlebih dahulu");
+      const [zernio]: any = await c.query(
+        "SELECT status FROM zernio_publications WHERE source_key LIKE ?",
+        [`news:${id}:%`],
+      );
+      if (
+        zernio.some(
+          (post: any) =>
+            !["published", "failed", "cancelled"].includes(post.status),
+        )
+      )
+        throw Error("Tunggu publikasi YouTube/TikTok selesai terlebih dahulu");
+      if (edit) {
+        if (news.article !== edit.article) {
+          const hash = createHash("sha256")
+            .update(
+              (news.content_type_id && news.content_type_id !== 2
+                ? `${news.content_type_id}:`
+                : "") + newsSourceKey(edit.sourceUrl).url,
+            )
+            .digest("hex");
+          await c.query(
+            "UPDATE news_articles SET title=?,article=?,source_url=?,source_hash=?,attempts=attempts+1,candidates=NULL,artifacts=NULL,error=NULL,lease=0 WHERE id=?",
+            [edit.title, edit.article, edit.sourceUrl, hash, id],
+          );
+        }
+      } else {
+        // Keep shared assets and external publication history; remove owned production records.
+        await c.query("DELETE FROM news_stock WHERE news_id=?", [id]);
+        await c.query("DELETE FROM news_media_outputs WHERE news_id=?", [id]);
+        await c.query("DELETE FROM news_media_jobs WHERE news_id=?", [id]);
+        await c.query("DELETE FROM news_articles WHERE id=?", [id]);
+      }
+      await c.commit();
+    } catch (error) {
+      await c.rollback();
+      throw error;
+    } finally {
+      c.release();
+    }
+  }
+  async save(id: number, article: unknown, revision: number) {
+    if (typeof article !== "string" || article.length > 100000)
+      throw Error("Isi artikel berita tidak valid");
+    const text = article.replace(/\r\n/g, "\n").trim();
+    const validation = validateNewsArticle(text);
+    if (!validation.ok || validation.title.length > 500)
+      throw Error(
+        validation.errors.join("; ") || "Judul maksimal 500 karakter",
+      );
+    await this.change(id, revision, {
+      article: text,
+      title: validation.title,
+      sourceUrl: validation.sourceUrl!,
+    });
+  }
+  async remove(id: number, revision: number) {
+    await this.change(id, revision);
   }
   async claim(now = Date.now()) {
     await this.db.query(
