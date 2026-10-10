@@ -208,3 +208,13 @@ it("ready-post Lab ignores illustration orientation and requests a 4:5 final ima
     height: 1350,
   });
 });
+
+it("ready-video Lab overrides illustration orientation without adding templates", async () => {
+  const { job, store, providers } = workerSetup("image");
+  job.image_type = "ready_video";
+  job.orientation = "horizontal";
+  await runLabJob(store, job, providers);
+  expect(providers.generateCodexImage.mock.calls[0][0]).toContain("16:9");
+  expect(providers.generateCodexImage.mock.calls[0][3]).toBe("video-h");
+  expect(store.complete).toHaveBeenCalled();
+});

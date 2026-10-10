@@ -205,7 +205,8 @@ function App() {
   const uses = (stage: string) => !activeType || activeStages.has(stage);
   const showsOutput = (stage: string) =>
     uses(stage) &&
-    (isFinalOutput(stage) || ["IMAGES_PANEL", "IMAGES_VIDEO"].includes(stage));
+    (isFinalOutput(stage) ||
+      ["IMAGES_PANEL", "IMAGES_VIDEO", "TTS_KALIMAT"].includes(stage));
   const contentNav: [string, IconName][] =
     activeType?.engine === "news"
       ? [
@@ -913,6 +914,7 @@ function App() {
     ["IMAGES_PANEL", "Gambar carousel", "gambar"],
     ["IMAGES_VIDEO", "Gambar video", "kalimat"],
     ["POST_IMAGE", "1 gambar", "textImage"],
+    ["TTS_KALIMAT", "Audio", "audioKalimat"],
     ["PANEL", "Carousel", "panel"],
     ["VIDEO_KALIMAT", "Video vertikal", "videoKalimat"],
     ["VIDEO_KALIMAT_H", "Video horizontal", "videoKalimatH"],
@@ -2962,9 +2964,13 @@ function NewsProduction({
       ([key]) =>
         allowed(key) &&
         (isFinalOutput(key) ||
-          ["IMAGES_PANEL", "IMAGES_VIDEO", "POST_IG", "REELS_IG"].includes(
-            key,
-          )),
+          [
+            "IMAGES_PANEL",
+            "IMAGES_VIDEO",
+            "TTS_KALIMAT",
+            "POST_IG",
+            "REELS_IG",
+          ].includes(key)),
     );
   const mediaUrl = (id: number, stage: string, index = 0) =>
     `/api/news/${id}/media/${stage}/${index}`;
@@ -3131,7 +3137,7 @@ function NewsProduction({
       .filter(
         ([kind]) =>
           isFinalOutput(kind) ||
-          ["IMAGES_PANEL", "IMAGES_VIDEO"].includes(kind),
+          ["IMAGES_PANEL", "IMAGES_VIDEO", "TTS_KALIMAT"].includes(kind),
       )
       .flatMap(([kind, label]) => [
         {

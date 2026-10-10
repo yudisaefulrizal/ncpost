@@ -33,7 +33,13 @@ export async function generateStock(
         prompt,
         work,
         tmp,
-        isHorizontalKind(kind) ? "horizontal" : "vertikal",
+        lab?.imageType === "ready_video"
+          ? isHorizontalKind(kind)
+            ? "video-h"
+            : "video-v"
+          : isHorizontalKind(kind)
+            ? "horizontal"
+            : "vertikal",
         ...(lab ? ([lab.images] as [string[]]) : []),
       );
       failure = "";

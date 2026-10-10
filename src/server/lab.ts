@@ -10,10 +10,10 @@ export function labKind(value: unknown): LabKind {
 export function labInput(input: any) {
   const kind = labKind(input?.kind);
   const imageType = input.imageType ?? "illustration";
-  if (!["illustration", "ready_post"].includes(imageType))
+  if (!["illustration", "ready_post", "ready_video"].includes(imageType))
     throw Error("Jenis gambar Lab tidak valid");
   if (kind !== "image" && imageType !== "illustration")
-    throw Error("Label siap posting hanya untuk Lab Gambar");
+    throw Error("Jenis gambar hanya untuk Lab Gambar");
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const prompt = typeof input.prompt === "string" ? input.prompt.trim() : "";
   const context = typeof input.input === "string" ? input.input.trim() : "";

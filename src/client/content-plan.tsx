@@ -97,6 +97,40 @@ export function ContentPlanFields({
       </select>
     </label>
   );
+  const videoText = (horizontal: boolean) => {
+    const mode = horizontal
+      ? settings.sentenceVideoHMode
+      : settings.sentenceVideoMode;
+    const kind = horizontal
+      ? settings.sentenceVideoHKind
+      : settings.sentenceVideoKind;
+    const enabled = mode
+      ? mode === "template"
+      : imageType(kind) !== "ready_video";
+    return (
+      <label className="check-row">
+        <input
+          type="checkbox"
+          aria-label={`Pakai teks video ${horizontal ? "horizontal" : "vertikal"}`}
+          checked={enabled}
+          onChange={(e) =>
+            set(
+              horizontal
+                ? {
+                    sentenceVideoHMode: e.target.checked
+                      ? "template"
+                      : "direct",
+                  }
+                : {
+                    sentenceVideoMode: e.target.checked ? "template" : "direct",
+                  },
+            )
+          }
+        />
+        Pakai teks video {horizontal ? "horizontal" : "vertikal"}
+      </label>
+    );
+  };
   return (
     <div className="stack">
       <fieldset className="output-targets">
@@ -135,11 +169,15 @@ export function ContentPlanFields({
             horizontalKinds,
             (kind) => set({ sentenceVideoHKind: kind }),
           )}
+        {outputs.includes("VIDEO_KALIMAT") && videoText(false)}
+        {outputs.includes("VIDEO_KALIMAT_H") && videoText(true)}
         {outputs.includes("PANEL") &&
           select(
             "Gaya gambar carousel",
             settings.panelVertical || settings.panelHorizontal,
-            lanes.map(([kind]) => kind),
+            lanes
+              .filter(([kind]) => imageType(kind) !== "ready_video")
+              .map(([kind]) => kind),
             (kind) =>
               set({
                 panelHorizontal: isHorizontalKind(kind) ? kind : null,
@@ -150,7 +188,9 @@ export function ContentPlanFields({
           select(
             "Gaya 1 gambar",
             settings.wholeTextImageKind ?? null,
-            lanes.map(([kind]) => kind),
+            lanes
+              .filter(([kind]) => imageType(kind) !== "ready_video")
+              .map(([kind]) => kind),
             (kind) => set({ wholeTextImageKind: kind || null }),
             true,
           )}

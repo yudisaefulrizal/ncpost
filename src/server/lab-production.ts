@@ -13,8 +13,10 @@ export type ProductionLabPrompt = {
   id: number;
   prompt: string;
   images: string[];
+  imageType?: "ready_video";
 };
 type SavedPrompt = {
+  image_type?: string;
   id: number;
   kind: string;
   prompt: string;
@@ -63,6 +65,25 @@ export async function validateLabSettings(
   )
     throw Error(
       "Gambar siap posting tidak dapat menjadi sumber ilustrasi video atau template",
+    );
+  const nonVideoIds = new Set(
+    [
+      ...settings.stockKinds,
+      settings.panelHorizontal,
+      settings.panelVertical,
+      settings.wholeTextImageKind,
+      settings.quoteImageStyle,
+    ]
+      .map((kind) => labImageKind(kind)?.id)
+      .filter(Boolean),
+  );
+  if (
+    rows.some(
+      (row: any) => row.image_type === "ready_video" && nonVideoIds.has(row.id),
+    )
+  )
+    throw Error(
+      "Gambar siap jadi video hanya dapat digunakan sebagai sumber gambar video",
     );
   const catalog = labImageCatalog(
     rows.filter((row: SavedPrompt) => row.kind === "image"),
@@ -128,6 +149,10 @@ export function productionLabText(
     });
   }
   const resolved = fill(row.prompt);
+  if (row.image_type === "ready_video" && labImageKind(target)) {
+    const horizontal = labImageKind(target)!.orientation === "horizontal";
+    return `${resolved}\n\nBuat gambar final siap jadi video: teks dan desain sudah menyatu dalam gambar. Aturan ini menggantikan instruksi ilustrasi tanpa teks. Rasio ${horizontal ? "16:9, 1920 × 1080" : "9:16, 1080 × 1920"}. Seluruh teks harus terbaca dan tidak terpotong; sisakan margin aman. Gunakan referensi dan logo yang dilampirkan. Teks yang wajib tampil pada gambar:\n${vars.teks || vars.artikel || ""}`;
+  }
   if (target === "book")
     return `${resolved}\n\nInput buku: ${vars.buku}; bab: ${vars.bab}.`;
   if (target === "news") return resolved;
@@ -169,6 +194,9 @@ export async function productionLabPrompt(
   if (!row) return null;
   return {
     id: row.id,
+    ...(row.image_type === "ready_video"
+      ? { imageType: "ready_video" as const }
+      : {}),
     prompt: productionLabText(row, target, vars),
     images: await Promise.all(labAttachments(row).map(labImageFile)),
   };

@@ -1,3 +1,4 @@
+import { buildImageAudioVideo } from "../server/image-audio-video";
 import {
   generateReadyPost,
   generateDirectCarousel,
@@ -339,6 +340,39 @@ export async function runNewsMediaJob(
       const audio = p.outputs.TTS_KALIMAT;
       if (audio.sentences.length !== content.sentences.length)
         throw Error("Audio tidak sesuai artikel");
+      const direct =
+        (horizontal
+          ? settings.sentenceVideoHMode
+          : settings.sentenceVideoMode) === "direct";
+      if (direct) {
+        const slides = content.sentences.map((_, i) => {
+          const binding = p.stock.find(
+            (b) => b.kind === sentenceJob(source) && b.panel === i + 1,
+          );
+          if (!binding) throw Error(`Gambar kalimat ${i + 1} belum tersedia`);
+          return {
+            image: path.join(ROOT, binding.file),
+            audio: path.join(ROOT, audio.sentences[i].file),
+          };
+        });
+        const file = path.join(
+          work,
+          horizontal ? "video-h.mp4" : "video-v.mp4",
+        );
+        const result = await buildImageAudioVideo(
+          slides,
+          file,
+          work,
+          horizontal ? LANDSCAPE : VERTICAL,
+        );
+        await store.complete(j, {
+          ...result,
+          file: relative(file),
+          source,
+          renderedAt,
+        });
+        return;
+      }
       const panels = [];
       for (const [i, s] of content.sentences.entries()) {
         const binding = p.stock.find(

@@ -1,7 +1,7 @@
 export type LabImageType = {
   kind: string;
   name: string;
-  imageType?: "illustration" | "ready_post";
+  imageType?: "illustration" | "ready_post" | "ready_video";
   orientation: "horizontal" | "vertikal" | "bebas";
 };
 export type LabImageCatalog = { stock: LabImageType[]; quote: LabImageType[] };
@@ -32,8 +32,12 @@ export function labImageCatalog(
   const stock: LabImageType[] = [],
     quote: LabImageType[] = [];
   for (const row of rows) {
-    const imageType: "ready_post" | "illustration" =
-      row.image_type === "ready_post" ? "ready_post" : "illustration";
+    const imageType: NonNullable<LabImageType["imageType"]> =
+      row.image_type === "ready_video"
+        ? "ready_video"
+        : row.image_type === "ready_post"
+          ? "ready_post"
+          : "illustration";
     const typeMetadata = row.image_type ? { imageType } : {};
     const key = row.reference_key || "";
     const stockOnly = key.startsWith("IMAGE_");

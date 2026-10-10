@@ -1,3 +1,4 @@
+import { buildImageAudioVideo } from "../src/server/image-audio-video";
 import { afterEach, beforeEach, it, expect, vi } from "vitest";
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";
@@ -61,6 +62,9 @@ vi.mock("../src/server/render", () => ({
   subtitleLayout: vi.fn(),
   SUBTITLE_VERTICAL: {},
   SUBTITLE_LANDSCAPE: {},
+}));
+vi.mock("../src/server/image-audio-video", () => ({
+  buildImageAudioVideo: vi.fn(),
 }));
 vi.mock("../src/server/video", () => ({
   buildReels: vi.fn(),
@@ -437,4 +441,46 @@ it("direct single image is saved as a posting-ready JPEG with its final prompt",
     prompt: expect.stringContaining("gambar final siap posting"),
   });
   expect(generateCodexImage).toHaveBeenCalledTimes(1);
+});
+
+it("ready-video rendering uses original images and audio without invoking subtitle or template renderers", async () => {
+  const h = harness();
+  h.p.outputs.TTS_KALIMAT = {
+    sentences: Array.from({ length: 8 }, (_, i) => ({
+      file: `output/.test/audio-${i + 1}.mp3`,
+    })),
+  };
+  for (let i = 1; i <= 8; i++)
+    for (const kind of ["S_IMAGE_LAB_9_V", "S_IMAGE_LAB_9_H"])
+      h.p.stock.push({
+        kind,
+        panel: i,
+        asset_id: i,
+        file: `output/stock/frame-${i}.jpg`,
+        description: "Final",
+      });
+  vi.mocked(buildImageAudioVideo).mockResolvedValue({
+    mode: "image_audio",
+  } as any);
+  for (const kind of ["VIDEO_KALIMAT", "VIDEO_KALIMAT_H"]) {
+    const j = job(kind);
+    j.settings = JSON.stringify({
+      ...JSON.parse(j.settings),
+      sentenceVideoKind: "IMAGE_LAB_9_V",
+      sentenceVideoHKind: "IMAGE_LAB_9_H",
+      sentenceVideoMode: "direct",
+      sentenceVideoHMode: "direct",
+    });
+    await runNewsMediaJob(h.store, h.assets, j);
+    expect(h.p.outputs[kind].mode).toBe("image_audio");
+  }
+  expect(buildImageAudioVideo).toHaveBeenCalledTimes(2);
+  const slides = vi.mocked(buildImageAudioVideo).mock.calls[0][0];
+  expect(slides).toHaveLength(8);
+  expect(slides[0].image).toContain("frame-1.jpg");
+  expect(slides[7].audio).toContain("audio-8.mp3");
+  expect(subtitleLayout).not.toHaveBeenCalled();
+  expect(renderSubtitleFrame).not.toHaveBeenCalled();
+  expect(buildReels).not.toHaveBeenCalled();
+  expect(h.spies.fail).not.toHaveBeenCalled();
 });

@@ -24,7 +24,7 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
     ...builtins,
     ...lab.stock.map((type) => [
       type.kind,
-      `${type.name}${type.imageType === "ready_post" ? " · siap posting" : ""}`,
+      `${type.name}${type.imageType === "ready_post" ? " · siap posting" : type.imageType === "ready_video" ? " · siap jadi video" : ""}`,
       type.imageType === "ready_post"
         ? "1080 × 1350"
         : type.orientation === "horizontal"
@@ -35,7 +35,9 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
   const quoteStyles = {
     ...QUOTE_IMAGE_STYLES,
     ...Object.fromEntries(
-      lab.quote.map((type) => [type.kind, { label: type.name }]),
+      lab.quote
+        .filter((type) => type.imageType !== "ready_video")
+        .map((type) => [type.kind, { label: type.name }]),
     ),
   };
   return {

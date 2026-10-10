@@ -257,3 +257,9 @@ Label terlihat di list Lab dan pilihan gaya gambar. Pengaturan konten cukup memi
 Hasil posting memakai JPEG 1080 × 1350. Prompt dan lampiran Lab dibekukan untuk seluruh carousel. Preview, unduh dan publikasi carousel memakai manifest yang sama; penamaan berkas per revisi/job menjaga hasil lama saat regenerate gagal. Publikasi tetap lewat aksi/jadwal yang tersedia.
 
 Jalankan **npm run migrate** untuk menambahkan `image_type` pada `lab_prompts` dan snapshot `lab_runs`. Jenis lama mendapat label Ilustrasi; ubah label di Lab bila prompt tersebut memang membuat gambar final siap posting.
+
+## Gambar siap jadi video
+
+Lab Prompt Gambar menyediakan label **Siap jadi video** selain Ilustrasi dan Siap posting. Gambar jenis ini memuat teks dan desain final, berasio 9:16 atau 16:9. Pilih gayanya sebagai sumber gambar video vertikal/horizontal di Pengaturan Konten; pilihan **Pakai teks** tersedia terpisah untuk setiap target video. Label menentukan nilai awal (Ilustrasi aktif, Siap jadi video nonaktif), lalu pilihan yang disimpan di Pengaturan Konten menjadi penentu render.
+
+Produksi gambar dan audio tetap merupakan tahap terpisah. Saat Pakai teks nonaktif, render hanya menyusun gambar per kalimat mengikuti audio yang sesuai: tanpa subtitle, template, judul tambahan, visualizer, atau slide penutup otomatis. Teks/logo tidak dipotong saat gambar disesuaikan ukurannya. Video lama tetap tersedia jika render ulang gagal. Saat Pakai teks aktif, render memakai template/subtitle. Tidak ada pemicu produksi otomatis baru atau perubahan jadwal cronjob.

@@ -311,7 +311,9 @@ export function PromptLab({ kind }: { kind: Kind }) {
                           <span className="chip">
                             {row.imageType === "ready_post"
                               ? "Siap posting"
-                              : "Ilustrasi"}
+                              : row.imageType === "ready_video"
+                                ? "Siap jadi video"
+                                : "Ilustrasi"}
                           </span>
                         </td>
                       )}
@@ -445,6 +447,22 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 >
                   <option value="illustration">Ilustrasi</option>
                   <option value="ready_post">Siap posting</option>
+                  <option value="ready_video">Siap jadi video</option>
+                </select>
+              </label>
+            )}
+            {kind === "image" && imageType === "ready_video" && (
+              <label className="field">
+                Rasio video
+                <select
+                  aria-label="Rasio video"
+                  value={
+                    orientation === "horizontal" ? "horizontal" : "vertikal"
+                  }
+                  onChange={(e) => setOrientation(e.target.value)}
+                >
+                  <option value="vertikal">9:16 · Vertikal</option>
+                  <option value="horizontal">16:9 · Horizontal</option>
                 </select>
               </label>
             )}

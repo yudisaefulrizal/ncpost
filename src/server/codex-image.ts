@@ -31,7 +31,13 @@ export async function collectCodexImage(
     home: string;
     output: string;
     startedAt: number;
-    orientation: "horizontal" | "vertikal" | "bebas" | "posting";
+    orientation:
+      | "horizontal"
+      | "vertikal"
+      | "bebas"
+      | "posting"
+      | "video-v"
+      | "video-h";
   },
 ) {
   const parsed = events
@@ -70,21 +76,16 @@ export async function collectCodexImage(
   // Orientasi bebas (gambar quote): ukuran asli Codex dipertahankan.
   const free = opts.orientation === "bebas";
   const posting = opts.orientation === "posting";
-  const width = free
-      ? meta.width
-      : opts.orientation === "horizontal"
-        ? 1920
-        : 1080,
-    height = posting
-      ? 1350
-      : free
-        ? meta.height
-        : opts.orientation === "horizontal"
-          ? 1080
-          : 1920;
+  const video =
+    opts.orientation === "video-v" || opts.orientation === "video-h";
+  const horizontal =
+    opts.orientation === "horizontal" || opts.orientation === "video-h";
+  const width = free ? meta.width : horizontal ? 1920 : 1080,
+    height = posting ? 1350 : free ? meta.height : horizontal ? 1080 : 1920;
   if (
     !free &&
     !posting &&
+    !video &&
     (opts.orientation === "horizontal"
       ? meta.width <= meta.height
       : meta.width >= meta.height)
@@ -98,7 +99,9 @@ export async function collectCodexImage(
       .resize(
         width,
         height,
-        posting ? { fit: "contain", background: "#ffffff" } : { fit: "cover" },
+        posting || video
+          ? { fit: "contain", background: "#ffffff" }
+          : { fit: "cover" },
       )
       .jpeg(STOCK_JPEG)
       .toBuffer(),
@@ -110,7 +113,13 @@ export async function generateCodexImage(
   prompt: string,
   cwd: string,
   output: string,
-  orientation: "horizontal" | "vertikal" | "bebas" | "posting",
+  orientation:
+    | "horizontal"
+    | "vertikal"
+    | "bebas"
+    | "posting"
+    | "video-v"
+    | "video-h",
   referenceImages: string[] = [],
 ) {
   const { runCli } = await import("./providers");

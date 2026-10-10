@@ -82,6 +82,8 @@ export interface BookSettings {
   wholeTextImageKind?: string | null;
   singleImageMode?: "template" | "direct";
   carouselMode?: "template" | "direct";
+  sentenceVideoMode?: "template" | "direct";
+  sentenceVideoHMode?: "template" | "direct";
   instagramAccountId: string | null;
   youtubeAccountId: string | null;
   tiktokAccountId: string | null;
@@ -211,7 +213,12 @@ export function normalizeBookSettings(input: any): BookSettings {
     !isStockKind(input.wholeTextImageKind)
   )
     throw Error("Gaya gambar tunggal tidak dikenal");
-  for (const key of ["singleImageMode", "carouselMode"]) {
+  for (const key of [
+    "singleImageMode",
+    "carouselMode",
+    "sentenceVideoMode",
+    "sentenceVideoHMode",
+  ]) {
     if (
       input?.[key] !== undefined &&
       !["template", "direct"].includes(input[key])
@@ -219,6 +226,12 @@ export function normalizeBookSettings(input: any): BookSettings {
       throw Error("Cara pembuatan gambar tidak dikenal");
   }
   return {
+    ...(input?.sentenceVideoMode !== undefined
+      ? { sentenceVideoMode: input.sentenceVideoMode }
+      : {}),
+    ...(input?.sentenceVideoHMode !== undefined
+      ? { sentenceVideoHMode: input.sentenceVideoHMode }
+      : {}),
     ...(input?.tiktok !== undefined
       ? { tiktok: normalizeTikTokSettings(input.tiktok) }
       : {}),

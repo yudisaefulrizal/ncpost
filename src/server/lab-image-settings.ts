@@ -24,6 +24,20 @@ export function imageSettingsFromLabels(
       "template",
     ),
     singleImageMode: mode(settings.wholeTextImageKind, "direct"),
+    sentenceVideoMode:
+      settings.sentenceVideoMode ??
+      (rows.find(
+        (row) => row.id === labImageKind(settings.sentenceVideoKind)?.id,
+      )?.image_type === "ready_video"
+        ? "direct"
+        : "template"),
+    sentenceVideoHMode:
+      settings.sentenceVideoHMode ??
+      (rows.find(
+        (row) => row.id === labImageKind(settings.sentenceVideoHKind)?.id,
+      )?.image_type === "ready_video"
+        ? "direct"
+        : "template"),
   };
 }
 export async function resolveImageSettings(
@@ -36,6 +50,8 @@ export async function resolveImageSettings(
         settings.panelVertical,
         settings.panelHorizontal,
         settings.wholeTextImageKind,
+        settings.sentenceVideoKind,
+        settings.sentenceVideoHKind,
       ]
         .map((kind) => labImageKind(kind)?.id)
         .filter((id): id is number => !!id),

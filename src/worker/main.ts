@@ -1,3 +1,4 @@
+import { buildImageAudioVideo } from "../server/image-audio-video";
 import { publishZernio } from "../server/zernio-routes";
 import {
   generateReadyPost,
@@ -344,6 +345,38 @@ async function runJob(job: Job) {
       if (audio.sentences.length !== sentences.length)
         throw Error("Audio kalimat tidak sesuai artikel; buat ulang audionya");
       const stock = await store.stock(c.id, sentenceJob(sentenceVideoKind));
+      const direct =
+        (horizontal
+          ? settings.sentenceVideoHMode
+          : settings.sentenceVideoMode) === "direct";
+      if (direct) {
+        const slides = sentences.map((_, i) => {
+          const binding = stock.find((b) => b.panel === i + 1);
+          if (!binding) throw Error(`Gambar kalimat ${i + 1} belum ada`);
+          return {
+            image: path.join(ROOT, binding.file),
+            audio: path.join(audioDir(c), audio.sentences[i].file),
+          };
+        });
+        const result = await buildImageAudioVideo(
+          slides,
+          videoPath(c, horizontal),
+          work,
+          horizontal ? LANDSCAPE : VERTICAL,
+        );
+        const manifest = JSON.stringify({
+          ...result,
+          source: sentenceVideoKind,
+          renderedAt: new Date().toISOString(),
+        });
+        await store.complete(
+          job.id,
+          horizontal
+            ? { sentenceVideoH: manifest }
+            : { sentenceVideo: manifest },
+        );
+        return;
+      }
       const panels = [];
       for (const [i, s] of sentences.entries()) {
         const binding = stock.find((b) => b.panel === i + 1);
