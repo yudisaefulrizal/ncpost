@@ -47,6 +47,8 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
         ? lab.stock.find((type) => type.kind === key)?.imageType ||
           "illustration"
         : "ready_post",
+    usage: (key: string | null) =>
+      lab.stock.find((type) => type.kind === key)?.usage,
     quoteStyles,
     horizontalKinds: [
       ...HORIZONTAL_KINDS,
@@ -54,7 +56,7 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
         .filter(
           (type) =>
             type.orientation === "horizontal" &&
-            type.imageType !== "ready_post",
+            (type.imageType !== "ready_post" || type.usage === "video"),
         )
         .map((type) => type.kind),
     ],
@@ -63,7 +65,8 @@ function catalog(lab: LabImageCatalog, reload: () => Promise<void>) {
       ...lab.stock
         .filter(
           (type) =>
-            type.orientation === "vertikal" && type.imageType !== "ready_post",
+            type.orientation === "vertikal" &&
+            (type.imageType !== "ready_post" || type.usage === "video"),
         )
         .map((type) => type.kind),
     ],

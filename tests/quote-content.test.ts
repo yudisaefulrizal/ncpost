@@ -109,18 +109,16 @@ it("generates an independent quote exclusively from its active Lab prompt", asyn
 
 it("requires an active self-contained Lab Quote prompt instead of falling back to a theme", async () => {
   const generate = vi.fn();
-  const query = vi
-    .fn()
-    .mockResolvedValue([
-      [
-        {
-          id: 3,
-          kind: "quote",
-          prompt: "Ringkas {{artikel}}",
-          reference_key: "quote",
-        },
-      ],
-    ]);
+  const query = vi.fn().mockResolvedValue([
+    [
+      {
+        id: 3,
+        kind: "quote",
+        prompt: "Ringkas {{artikel}}",
+        reference_key: "quote",
+      },
+    ],
+  ]);
   await expect(
     generateStandaloneQuote(
       { query } as any,
@@ -128,7 +126,7 @@ it("requires an active self-contained Lab Quote prompt instead of falling back t
       "/tmp/quote",
       generate,
     ),
-  ).rejects.toThrow("Aktifkan prompt Lab Quote");
+  ).rejects.toThrow("Aktifkan prompt Quote dari Lab Artikel");
   await expect(
     generateStandaloneQuote(
       { query } as any,

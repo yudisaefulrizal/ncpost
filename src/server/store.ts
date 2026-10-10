@@ -1,3 +1,5 @@
+import { contentImportItems } from "./content-import";
+import { mediaUnits } from "./content-contract";
 import { labImageKind } from "./lab-image-types";
 import { validateLabSettings } from "./lab-production";
 import {
@@ -14,14 +16,11 @@ import {
   type BookCron,
 } from "./cron";
 import {
-  validateArticle,
   validateContentText,
   roundRobin,
   canStart,
   bookKey,
-  articleSentences,
   partNumber,
-  PANEL_COUNT,
 } from "./domain";
 import {
   STOCK_KINDS,
@@ -42,6 +41,8 @@ import {
 export interface Chapter {
   content_type_id?: number;
   content_engine?: "book" | "news" | "quote";
+  article_config?: import("./content-contract").ArticleConfig;
+  content_settings?: string | null;
   id: number;
   book: string;
   title: string;
@@ -151,7 +152,7 @@ export class Store {
   async create(book: string, title: string) {
     book = book.replace(/\s+/g, " ").trim();
     title = title.replace(/\s+/g, " ").trim();
-    if (!book || !title) throw Error("Judul buku dan judul bagian wajib diisi");
+    if (!book || !title) throw Error("Konteks dan topik wajib diisi");
     if (book.length > 255 || title.length > 500)
       throw Error("Judul terlalu panjang");
     // Nomor bagian berikutnya dalam buku ini (tidak bentrok dengan yang ada).
@@ -168,27 +169,10 @@ export class Store {
       )
     ).insertId;
   }
-  // Impor dari JSON [{ "buku": "...", "tema": "..." }]: buku = judul buku,
-  // tema = judul bagian. Berurutan sesuai file; nomor bagian melanjutkan nomor
-  // terbesar di bukunya. Entri yang sudah ada (buku + judul sama, tanpa beda
-  // huruf besar/kecil dan spasi) dilewati, jadi aman diulang. Semua entri
-  // divalidasi dulu; satu yang salah membatalkan seluruh impor. dryRun = hitung
-  // saja, tanpa menulis.
+  // Impor konteks/topik; format buku/tema lama tetap diterima. Validasi seluruh
+  // file sebelum transaksi; dryRun menghitung tanpa menulis.
   async importChapters(items: unknown, dryRun = false) {
-    if (!Array.isArray(items)) throw Error("File harus berisi array JSON");
-    if (!items.length) throw Error("File tidak berisi entri");
-    if (items.length > 500) throw Error("Maksimal 500 bagian per impor");
-    const clean = items.map((x: any, i) => {
-      const book =
-        typeof x?.buku === "string" ? x.buku.replace(/\s+/g, " ").trim() : "";
-      const title =
-        typeof x?.tema === "string" ? x.tema.replace(/\s+/g, " ").trim() : "";
-      if (!book || !title)
-        throw Error(`Entri ${i + 1}: "buku" dan "tema" wajib berupa teks`);
-      if (book.length > 255 || title.length > 500)
-        throw Error(`Entri ${i + 1}: judul terlalu panjang`);
-      return { book, title };
-    });
+    const clean = contentImportItems(items);
     return this.tx(async (db) => {
       const existing = await rows<Chapter>(
         db,
@@ -400,20 +384,24 @@ export class Store {
     const chapters = await rows<Chapter>(
       this.db,
       currentContentType()
-        ? "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.content_type_id=? ORDER BY c.id"
-        : "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id ORDER BY c.id",
+        ? "SELECT c.*,t.engine AS content_engine,t.settings AS content_settings FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.content_type_id=? ORDER BY c.id"
+        : "SELECT c.*,t.engine AS content_engine,t.settings AS content_settings FROM chapters c JOIN content_types t ON t.id=c.content_type_id ORDER BY c.id",
       currentContentType() ? [currentContentType()!.id] : [],
     );
     const counts = await rows<{ chapter_id: number; kind: string; n: number }>(
       this.db,
       "SELECT chapter_id,kind,COUNT(*) AS n FROM chapter_stock GROUP BY chapter_id,kind",
     );
-    for (const c of chapters)
+    for (const c of chapters) {
+      c.article_config = c.content_settings
+        ? JSON.parse(c.content_settings).articleConfig
+        : undefined;
       c.stock_counts = Object.fromEntries(
         counts
           .filter((x) => x.chapter_id === c.id)
           .map((x) => [x.kind, Number(x.n)]),
       );
+    }
     const latest = await rows<any>(
       this.db,
       `SELECT j.chapter_id,j.kind,j.state,j.error FROM jobs j JOIN (
@@ -459,7 +447,7 @@ export class Store {
     }
   }
   async saveBookSettings(book: string, input: unknown) {
-    if (!bookKey(book)) throw Error("Judul buku wajib diisi");
+    if (!bookKey(book)) throw Error("Konteks wajib diisi");
     const settings = normalizeBookSettings(input);
     await validateLabSettings(
       this.db,
@@ -644,13 +632,16 @@ export class Store {
     }
   }
   async chapter(id: number, db: Db = this.db) {
-    return (
+    const c = (
       await rows<Chapter>(
         db,
-        "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.id=?",
+        "SELECT c.*,t.engine AS content_engine,t.settings AS content_settings FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.id=?",
         [id],
       )
     )[0];
+    if (c?.content_settings)
+      c.article_config = JSON.parse(c.content_settings).articleConfig;
+    return c;
   }
   async nextChapter() {
     return roundRobin(
@@ -675,8 +666,12 @@ export class Store {
         "UPDATE chapters SET article=?,article_status=?,revision=revision+1,quote=NULL,quote_image=NULL,text_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,preview=NULL,report=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
         [
           article,
-          validateContentText(article, chapter.content_engine).ok
-            ? chapter.content_engine === "quote"
+          validateContentText(
+            article,
+            chapter.content_engine,
+            chapter.article_config,
+          ).ok
+            ? chapter.content_engine === "quote" || !!chapter.article_config
               ? "siap"
               : "menunggu editor"
             : "draft",
@@ -747,19 +742,26 @@ export class Store {
         throw Error("Pilih sumber gambar panel");
       if (
         c.article_status !== "siap" ||
-        !validateContentText(c.article, c.content_engine).ok
+        !validateContentText(c.article, c.content_engine, c.article_config).ok
       )
         throw Error("Carousel butuh artikel lolos editor");
       for (const source of settings.carouselMode === "direct"
         ? []
         : panelSources(settings))
-        if ((await this.stock(id, source, connection)).length < PANEL_COUNT)
-          throw Error("Render panel butuh enam stok gambar " + source);
+        if (
+          (await this.stock(id, source, connection)).length <
+          mediaUnits(
+            c.article,
+            settings.imageUnit || "paragraph",
+            c.content_engine === "quote",
+          ).length
+        )
+          throw Error("Render panel butuh stok untuk setiap unit: " + source);
     }
     if (
       kind === "POST_IMAGE" &&
       (c.article_status !== "siap" ||
-        !validateContentText(c.article, c.content_engine).ok)
+        !validateContentText(c.article, c.content_engine, c.article_config).ok)
     )
       throw Error("Gambar per seluruh teks butuh artikel lolos editor");
     if (kind === "POST_IMAGE" && c.text_image && !replace)
@@ -768,7 +770,7 @@ export class Store {
       throw Error("Gambar quote butuh quote");
     if (
       kind === "QUOTE" &&
-      !validateContentText(c.article, c.content_engine).ok
+      !validateContentText(c.article, c.content_engine, c.article_config).ok
     )
       throw Error("Quote butuh artikel final yang valid");
     if (kind === "POST_IG") {
@@ -799,7 +801,11 @@ export class Store {
         throw Error(
           `Pilih sumber gambar Video Kalimat${kind === "VIDEO_KALIMAT_H" ? " H" : ""} di Pengaturan Konten`,
         );
-      const n = articleSentences(c.article, c.content_engine).length;
+      const n = mediaUnits(
+        c.article,
+        settings.imageUnit || "sentence",
+        c.content_engine === "quote",
+      ).length;
       if ((await this.stock(id, "S_" + source, connection)).length < n)
         throw Error("Video kalimat butuh gambar untuk setiap kalimat");
       if (!c.sentence_audio)
@@ -819,7 +825,7 @@ export class Store {
     }
     if (
       kind === "PREVIEW" &&
-      !validateContentText(c.article, c.content_engine).ok
+      !validateContentText(c.article, c.content_engine, c.article_config).ok
     )
       throw Error("Artikel belum valid");
     // Regenerate stok: ikatan lajur ini dilepas dan job memaksa gambar baru.

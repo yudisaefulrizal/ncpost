@@ -25,9 +25,9 @@ it("test runs snapshot the image label and saved prompts retain it", async () =>
   const query = vi.fn().mockResolvedValue([{ insertId: 5, affectedRows: 1 }]);
   const store = new LabStore({ query } as any);
   await store.save({ ...input, imageType: "ready_post" });
-  expect(query.mock.calls[0][1]?.at(-1)).toBe("ready_post");
+  expect(query.mock.calls[0][1]?.at(-2)).toBe("ready_post");
   await store.enqueue({ ...input, imageType: "ready_post" });
-  expect(query.mock.calls[1][1]?.at(-1)).toBe("ready_post");
+  expect(query.mock.calls[1][1]?.at(-2)).toBe("ready_post");
   await store.save({ ...input, imageType: "illustration" }, 5);
   expect(query.mock.calls[2][1]).toContain("illustration");
 });

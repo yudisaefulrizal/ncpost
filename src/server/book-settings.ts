@@ -1,4 +1,9 @@
 import {
+  normalizeArticleConfig,
+  type ArticleConfig,
+  type ImageUnit,
+} from "./content-contract";
+import {
   normalizeTikTokSettings,
   type TikTokSettings,
 } from "./tiktok-settings";
@@ -74,6 +79,8 @@ export function socialColumns(targets: SocialTarget[]) {
   };
 }
 export interface BookSettings {
+  articleConfig?: ArticleConfig;
+  imageUnit?: ImageUnit;
   tiktok?: TikTokSettings;
   socialTargets?: SocialTarget[];
   labPromptIds?: number[];
@@ -196,6 +203,11 @@ export function normalizeBookSettings(input: any): BookSettings {
     !labImageKind(quoteImageStyle)?.quote
   )
     throw Error("Gaya gambar quote tidak dikenal");
+  if (
+    input?.imageUnit !== undefined &&
+    !["article", "paragraph", "sentence"].includes(input.imageUnit)
+  )
+    throw Error("Unit gambar tidak valid");
   const labIds = input?.labPromptIds;
   if (
     labIds !== undefined &&
@@ -248,6 +260,12 @@ export function normalizeBookSettings(input: any): BookSettings {
     ...(input?.autoProcess !== undefined ? { autoProcess: false } : {}),
     ...(input?.wholeTextImageKind !== undefined
       ? { wholeTextImageKind: input.wholeTextImageKind || null }
+      : {}),
+    ...(input?.articleConfig !== undefined
+      ? { articleConfig: normalizeArticleConfig(input.articleConfig) }
+      : {}),
+    ...(input?.imageUnit !== undefined
+      ? { imageUnit: input.imageUnit as ImageUnit }
       : {}),
     ...(labIds !== undefined
       ? { labPromptIds: [...new Set<number>(labIds)] }

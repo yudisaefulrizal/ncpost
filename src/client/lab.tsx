@@ -1,3 +1,7 @@
+import { labConfig, type LabConfig } from "../server/lab-config";
+import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
+import { LabVariables } from "./lab-variables";
+import { api as projectApi } from "./api";
 import { ImageUploads, imageAttachments, uploadLabImage } from "./lab-uploads";
 import { Modal } from "./modal";
 import React, { useEffect, useState } from "react";
@@ -9,6 +13,7 @@ type Reference = {
   orientation: string;
 };
 type Draft = {
+  config?: string | null;
   image_type?: string;
   id: number;
   name: string;
@@ -19,6 +24,7 @@ type Draft = {
   reference_images?: string | null;
 };
 type Run = {
+  config?: string | null;
   image_type?: string;
   id: number;
   name: string;
@@ -43,6 +49,17 @@ const states: Record<string, string> = {
   completed: "Selesai",
   failed: "Gagal",
 };
+function LabRunStatus({ state }: { state: string }) {
+  return (
+    <span
+      className="lab-run-status"
+      role={state === "running" ? "status" : undefined}
+    >
+      {state === "running" && <span className="spinner" aria-hidden="true" />}
+      {states[state] || state}
+    </span>
+  );
+}
 async function api(route: string, method = "GET", body?: unknown) {
   const response = await fetch("/api/lab" + route, {
     method,
@@ -90,6 +107,54 @@ export function PromptLab({ kind }: { kind: Kind }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [config, setConfig] = useState<LabConfig | null>(null);
+  const [examples, setExamples] = useState<
+    {
+      name: string;
+      article: string;
+      quote: boolean;
+      context: string;
+      topic: string;
+    }[]
+  >([]);
+  useEffect(() => {
+    let active = true;
+    projectApi("/content-types")
+      .then(async (types) => {
+        const groups = await Promise.all(
+          types.map(async (type: any) => ({
+            type,
+            rows: await projectApi(
+              type.engine === "news" ? "/news" : "/chapters",
+              "GET",
+              undefined,
+              type.id,
+            ),
+          })),
+        );
+        if (active)
+          setExamples(
+            groups.flatMap(({ type, rows }) =>
+              rows
+                .filter((row: any) => row.article)
+                .map((row: any) => ({
+                  name: `${type.name} · ${row.title || row.id}`,
+                  article: row.article,
+                  quote: type.engine === "quote",
+                  context:
+                    row.book || type.settings?.articleConfig?.context || "",
+                  topic: row.title || "",
+                })),
+            ),
+          );
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const payload = {
     kind,
     name,
@@ -99,6 +164,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     referenceKey,
     referenceImages: attachments,
     imageType,
+    ...(config ? { config } : {}),
   };
   useEffect(() => {
     setEditing(false);
@@ -195,6 +261,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     });
   }
   function useReference(ref: Reference) {
+    setConfig(null);
     setImageType(ref.id.startsWith("QUOTE_") ? "ready_post" : "illustration");
     setDraftId(null);
     setAttachments([]);
@@ -205,6 +272,11 @@ export function PromptLab({ kind }: { kind: Kind }) {
     setMessage("");
   }
   function newDraft() {
+    setConfig(
+      kind === "image"
+        ? { usage: "single", unit: "article" }
+        : { article: defaultArticleConfig("article") },
+    );
     setImageType("illustration");
     setDraftId(null);
     setAttachments([]);
@@ -296,6 +368,8 @@ export function PromptLab({ kind }: { kind: Kind }) {
                         (r.image_type || "illustration") === row.imageType) &&
                       r.reference_key === (row.reference || null) &&
                       r.prompt === row.prompt &&
+                      JSON.stringify(labConfig(r.config)) ===
+                        JSON.stringify(labConfig(row.draft?.config)) &&
                       JSON.stringify(imageAttachments(r)) ===
                         JSON.stringify(
                           row.draft ? imageAttachments(row.draft) : [],
@@ -323,9 +397,11 @@ export function PromptLab({ kind }: { kind: Kind }) {
                           "Kustom"}
                       </td>
                       <td>
-                        {latest
-                          ? states[latest.state] || latest.state
-                          : "Belum diuji"}
+                        {latest ? (
+                          <LabRunStatus state={latest.state} />
+                        ) : (
+                          "Belum diuji"
+                        )}
                       </td>
                       <td>
                         <button
@@ -362,6 +438,9 @@ export function PromptLab({ kind }: { kind: Kind }) {
                                   prompt: row.prompt,
                                   referenceKey: row.reference,
                                   input: "",
+                                  ...(row.draft?.config
+                                    ? { config: labConfig(row.draft.config) }
+                                    : {}),
                                   referenceImages: row.draft
                                     ? imageAttachments(row.draft)
                                     : [],
@@ -383,6 +462,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                             className="btn btn-sec btn-sm"
                             onClick={() => {
                               if (row.draft) {
+                                setConfig(labConfig(row.draft.config));
                                 setDraftId(row.draft.id);
                                 setImageType(row.imageType);
                                 setAttachments(imageAttachments(row.draft));
@@ -438,6 +518,123 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 onChange={(e) => setName(e.target.value)}
               />
             </label>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={!!config}
+                onChange={(e) =>
+                  setConfig(
+                    e.target.checked
+                      ? kind === "image"
+                        ? { usage: "single", unit: "article" }
+                        : {
+                            article: defaultArticleConfig(
+                              referenceKey || "article",
+                            ),
+                          }
+                      : null,
+                  )
+                }
+              />
+              Form dengan variabel konten
+            </label>
+            {config && kind !== "image" && (
+              <ArticleConfigFields
+                value={
+                  config.article ||
+                  defaultArticleConfig(referenceKey || "article")
+                }
+                book={referenceKey === "book"}
+                quote={referenceKey === "quote"}
+                onChange={(article) => setConfig({ ...config, article })}
+              />
+            )}
+            {config && kind === "image" && (
+              <>
+                <label className="field">
+                  Penggunaan
+                  <select
+                    value={config.usage || "single"}
+                    onChange={(e) =>
+                      setConfig({
+                        ...config,
+                        usage: e.target.value as LabConfig["usage"],
+                        unit:
+                          e.target.value === "single"
+                            ? "article"
+                            : e.target.value === "video"
+                              ? "sentence"
+                              : "paragraph",
+                      })
+                    }
+                  >
+                    <option value="single">1 gambar</option>
+                    <option value="carousel">Carousel</option>
+                    <option value="video">Gambar video</option>
+                  </select>
+                </label>
+                {config.usage !== "single" && (
+                  <label className="field">
+                    Unit gambar
+                    <select
+                      value={config.unit || "paragraph"}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          unit: e.target.value as LabConfig["unit"],
+                        })
+                      }
+                    >
+                      <option value="article">Seluruh artikel</option>
+                      <option value="paragraph">Per paragraf</option>
+                      <option value="sentence">Per kalimat</option>
+                    </select>
+                  </label>
+                )}
+                <label className="field">
+                  Artikel contoh untuk Uji
+                  <select
+                    value={examples.findIndex(
+                      (item) => item.article === config.sampleArticle,
+                    )}
+                    onChange={(e) => {
+                      const example = examples[Number(e.target.value)];
+                      setConfig({
+                        ...config,
+                        sampleArticle: example?.article,
+                        sampleQuote: example?.quote,
+                        sampleContext: example?.context,
+                        sampleTopic: example?.topic,
+                        testIndex: 1,
+                      });
+                    }}
+                  >
+                    <option value={-1}>Pilih artikel</option>
+                    {examples.map((item, i) => (
+                      <option key={i} value={i}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {config.usage !== "single" && (
+                  <label className="field">
+                    Nomor unit uji
+                    <input
+                      type="number"
+                      min={1}
+                      value={config.testIndex || 1}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          testIndex: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                )}
+              </>
+            )}
             {kind === "image" && (
               <label className="field">
                 Jenis gambar
@@ -500,6 +697,31 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 placeholder="Tulis instruksi yang ingin diuji"
               />
             </label>
+            <LabVariables
+              image={kind === "image"}
+              onInsert={(value) => setPrompt((current) => current + value)}
+            />
+            {config?.usage === "carousel" && kind === "image" && (
+              <label className="field">
+                Prompt halaman berikutnya
+                <textarea
+                  rows={8}
+                  value={config.promptNext || ""}
+                  onChange={(e) =>
+                    setConfig({ ...config, promptNext: e.target.value })
+                  }
+                />
+                <LabVariables
+                  image
+                  onInsert={(value) =>
+                    setConfig({
+                      ...config,
+                      promptNext: (config.promptNext || "") + value,
+                    })
+                  }
+                />
+              </label>
+            )}
             {kind === "image" && (
               <ImageUploads
                 images={attachments}
@@ -566,7 +788,9 @@ export function PromptLab({ kind }: { kind: Kind }) {
                   <tr key={r.id}>
                     <td>#{r.id}</td>
                     <td>{r.name}</td>
-                    <td>{states[r.state] || r.state}</td>
+                    <td>
+                      <LabRunStatus state={r.state} />
+                    </td>
                     <td>{new Date(r.created_at).toLocaleString("id-ID")}</td>
                     <td>
                       <button
@@ -605,7 +829,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 <h2 className="h3">
                   Hasil uji #{selected.id} · {selected.name}
                 </h2>
-                <span>{states[selected.state] || selected.state}</span>
+                <LabRunStatus state={selected.state} />
               </div>
               {selected.state === "queued" && (
                 <p>Menunggu worker menjalankan pengujian.</p>

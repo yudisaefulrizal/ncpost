@@ -52,7 +52,7 @@ const cfg = initConfig(),
   app = express(),
   limit = new RateLimiter();
 app.disable("x-powered-by");
-// Impor JSON boleh lebih besar (maks 500 entri); parser pertama yang membaca
+// Impor JSON boleh lebih besar (maks 600 entri); parser pertama yang membaca
 // body menang, jadi ini harus dipasang sebelum parser umum.
 app.use("/api/chapters/import", express.json({ limit: "512kb" }));
 app.use("/api/lab", express.json({ limit: "256kb" }));
@@ -354,7 +354,7 @@ app.get("/api/news/:id/media/:kind/:index", async (req, res) => {
   const m = p.outputs[kind];
   const file =
     kind === "PANEL"
-      ? index === 4
+      ? index === m?.panels?.length
         ? m?.closing
         : m?.panels?.[index]?.file
       : kind === "TTS_KALIMAT"
@@ -389,19 +389,23 @@ app.post("/api/chapters", async (req, res) => {
     const ids = type.settings?.labPromptIds || [];
     const [prompts]: any = ids.length
       ? await store.db.query(
-          "SELECT id FROM lab_prompts WHERE kind='quote' AND id IN (?)",
+          "SELECT id FROM lab_prompts WHERE (kind='quote' OR (kind='article' AND (reference_key='quote' OR reference_key IS NULL))) AND id IN (?)",
           [ids],
         )
       : [[]];
     if (!prompts.length)
-      throw Error("Aktifkan prompt Lab Quote di Pengaturan Konten");
+      throw Error(
+        "Aktifkan prompt Quote dari Lab Artikel di Pengaturan Konten",
+      );
     return void res
       .status(201)
       .json({ id: await store.create(type.name, "Quote") });
   }
-  const { book, title } = req.body ?? {};
+  const input = req.body ?? {};
+  const book = input.konteks !== undefined ? input.konteks : input.book;
+  const title = input.topik !== undefined ? input.topik : input.title;
   if (typeof book !== "string" || typeof title !== "string")
-    throw Error("Judul buku dan judul bagian wajib diisi");
+    throw Error("Konteks dan topik wajib diisi");
   res.status(201).json({ id: await store.create(book, title) });
 });
 app.post("/api/chapters/import", async (req, res) => {
@@ -419,7 +423,7 @@ app.put("/api/chapters/:id/part", async (req, res) => {
   );
 });
 app.post("/api/books/renumber", async (req, res) => {
-  if (typeof req.body?.book !== "string") throw Error("Judul buku wajib diisi");
+  if (typeof req.body?.book !== "string") throw Error("Konteks wajib diisi");
   res.json(await store.renumberBook(req.body.book));
 });
 app.get("/api/chapters/:id/caption", async (req, res) => {
@@ -432,7 +436,11 @@ app.get("/api/chapters/:id", async (req, res) => {
   if (!c) return void res.status(404).json({ error: "Bagian tidak ditemukan" });
   res.json({
     ...c,
-    validation: validateContentText(c.article, c.content_engine),
+    validation: validateContentText(
+      c.article,
+      c.content_engine,
+      c.article_config,
+    ),
     stock: await store.stock(c.id),
   });
 });
@@ -452,7 +460,7 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
 app.put("/api/book-crons", async (req, res) => {
-  if (typeof req.body?.book !== "string") throw Error("Judul buku wajib diisi");
+  if (typeof req.body?.book !== "string") throw Error("Konteks wajib diisi");
   res.json(await store.saveBookCron(req.body.book, req.body));
 });
 
@@ -472,7 +480,7 @@ app.get("/api/book-settings", async (_, res) => {
 });
 app.put("/api/book-settings", async (req, res) => {
   const { book, settings } = req.body ?? {};
-  if (typeof book !== "string") throw Error("Judul buku wajib diisi");
+  if (typeof book !== "string") throw Error("Konteks wajib diisi");
   const normalized = normalizeBookSettings(settings);
   const current = await store.bookSettings(book);
   await validateZernioSettings(normalized, current);
@@ -519,8 +527,10 @@ function chapterFile(
     res.sendFile(safeFile(outputRoot(), resolve(c, file)));
   });
 }
-chapterFile("/api/audio-kalimat/:id/:file", /^kalimat_\d{2}\.mp3$/, (c, file) =>
-  path.join(audioDir(c), file),
+chapterFile(
+  "/api/audio-kalimat/:id/:file",
+  /^kalimat_\d{2,}\.mp3$/,
+  (c, file) => path.join(audioDir(c), file),
 );
 chapterFile("/api/video-kalimat-h/:id/:file", /^video-h\.mp4$/, (c, file) =>
   path.join(chapterDir(c), file),

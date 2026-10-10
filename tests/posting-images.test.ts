@@ -232,3 +232,44 @@ it("a failed new carousel keeps previous files intact and does not return a part
   ).rejects.toThrow("Provider failed");
   expect((await readFile(previous)).toString()).toBe("previous result");
 });
+
+it("configured carousel uses first and next prompts with native image size and no implicit closing", async () => {
+  const { work, generate } = await fixture();
+  const labFor = vi.fn().mockResolvedValue({
+    id: 1,
+    prompt: "Sampul",
+    rawPrompt: "Sampul {{kalimat}}",
+    images: [],
+    config: {
+      usage: "carousel",
+      promptNext: "Halaman {{nomor_unit}} {{kalimat}}",
+      unit: "sentence",
+    },
+  });
+  const result = await generateDirectCarousel({
+    dir: work,
+    work,
+    title: "Judul",
+    paragraphs: ["Satu.", "Dua."],
+    footer: "Sumber",
+    kind: "IMAGE_LAB_1_V",
+    labFor,
+    generate,
+    variables: (i) => ({
+      kalimat: i ? "Dua." : "Satu.",
+      nomor_unit: String(i + 1),
+    }),
+  });
+  expect(labFor).toHaveBeenCalledTimes(1);
+  expect(result.panels).toHaveLength(2);
+  expect(result.closing).toBe("");
+  expect(generate.mock.calls.map((call) => call[0])).toEqual([
+    "Sampul Satu.",
+    "Halaman 2 Dua.",
+  ]);
+  for (const panel of result.panels)
+    expect(await sharp(panel.file).metadata()).toMatchObject({
+      width: 400,
+      height: 300,
+    });
+});

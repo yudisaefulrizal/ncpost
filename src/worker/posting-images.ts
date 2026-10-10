@@ -1,3 +1,4 @@
+import { fillVariables } from "../server/content-contract";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -41,8 +42,9 @@ export async function generateReadyPost({
   generate?: typeof generateCodexImage;
 }) {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const prompt =
-    (total ?? 1) === 1
+  const prompt = lab?.config
+    ? lab.prompt
+    : (total ?? 1) === 1
       ? lab?.prompt || style || text
       : readyPostPrompt(
           lab?.prompt ||
@@ -64,7 +66,7 @@ export async function generateReadyPost({
   );
   // Only carousel slides share a fixed canvas; single images keep their native size.
   const image = sharp(raw).rotate();
-  if ((total ?? 1) > 1)
+  if (!lab?.config && (total ?? 1) > 1)
     image.resize(1080, 1350, { fit: "contain", background: "#ffffff" });
   const meta = await image
     .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
@@ -88,7 +90,9 @@ export async function generateDirectCarousel({
   labFor,
   generate = generateCodexImage,
   filePrefix = "",
+  variables,
 }: {
+  variables?: (index: number) => Record<string, string>;
   filePrefix?: string;
   dir: string;
   work: string;
@@ -100,7 +104,7 @@ export async function generateDirectCarousel({
   generate?: typeof generateCodexImage;
 }) {
   if (!paragraphs.length) throw Error("Carousel membutuhkan teks");
-  const texts = [
+  let texts = [
     ...paragraphs,
     `Simpan postingan ini untuk dibaca kembali.\n${footer}`,
   ];
@@ -109,6 +113,7 @@ export async function generateDirectCarousel({
   // Freeze Lab style and immutable attachments once for the whole carousel.
   const marker = `__NCPOST_SLIDE_${randomUUID()}__`;
   const snapshot = await labFor(kind, marker);
+  if (snapshot?.config) texts = paragraphs;
   for (const [i, text] of texts.entries()) {
     const file = path.join(
       dir,
@@ -117,7 +122,17 @@ export async function generateDirectCarousel({
     const lab = snapshot
       ? {
           ...snapshot,
-          prompt: snapshot.prompt.split(marker).join(text),
+          prompt:
+            snapshot.config && variables
+              ? fillVariables(
+                  i === 0
+                    ? snapshot.rawPrompt || snapshot.prompt
+                    : snapshot.config.promptNext ||
+                        snapshot.rawPrompt ||
+                        snapshot.prompt,
+                  variables(i),
+                )
+              : snapshot.prompt.split(marker).join(text),
           images: [...snapshot.images],
         }
       : null;
@@ -133,7 +148,7 @@ export async function generateDirectCarousel({
       context: paragraphs.join("\n\n"),
       generate,
     });
-    if (i === texts.length - 1) closing = file;
+    if (!snapshot?.config && i === texts.length - 1) closing = file;
     else panels.push({ file, template: "direct" });
   }
   return {

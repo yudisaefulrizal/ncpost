@@ -112,7 +112,7 @@ export class NewsMediaStore {
         [id],
       );
       const n: NewsArticle = rows[0];
-      if (!n || n.state !== "completed" || !validateNewsArticle(n.article).ok)
+      if (!n || n.state !== "completed")
         throw Error("Butuh artikel berita selesai yang valid");
       const [active]: any = await c.query(
         "SELECT * FROM news_media_jobs WHERE news_id=? AND state IN ('queued','running')",
@@ -129,6 +129,8 @@ export class NewsMediaStore {
         c,
         n.content_type_id ?? 2,
       );
+      if (!validateNewsArticle(n.article, settings.articleConfig).ok)
+        throw Error("Format artikel berita tidak valid");
       const type = await new ContentTypeStore(this.db).get(
         n.content_type_id ?? 2,
       );

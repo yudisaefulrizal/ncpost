@@ -1,3 +1,5 @@
+import { labConfig } from "./lab-config";
+import { fillVariables } from "./content-contract";
 import { standaloneQuotePrompt } from "./quote-text";
 import { labImageKind, labImageCatalog } from "./lab-image-types";
 import type mysql from "mysql2/promise";
@@ -14,9 +16,12 @@ export type ProductionLabPrompt = {
   id: number;
   prompt: string;
   images: string[];
+  config?: import("./lab-config").LabConfig;
+  rawPrompt?: string;
   imageType?: "ready_video";
 };
 type SavedPrompt = {
+  config?: string | null;
   image_type?: string;
   id: number;
   kind: string;
@@ -49,7 +54,7 @@ export async function validateLabSettings(
   ];
   if (!ids.length) return;
   const [rows]: any = await db.query(
-    "SELECT id,name,kind,prompt,reference_key,image_type FROM lab_prompts WHERE id IN (?)",
+    "SELECT id,name,kind,prompt,reference_key,image_type,config FROM lab_prompts WHERE id IN (?)",
     [ids],
   );
   if (rows.length !== ids.length) throw Error("Prompt Lab tidak ditemukan");
@@ -65,7 +70,9 @@ export async function validateLabSettings(
   if (
     rows.some(
       (row: any) =>
-        row.image_type === "ready_post" && illustrationIds.has(row.id),
+        !labConfig(row.config) &&
+        row.image_type === "ready_post" &&
+        illustrationIds.has(row.id),
     )
   )
     throw Error(
@@ -84,7 +91,10 @@ export async function validateLabSettings(
   );
   if (
     rows.some(
-      (row: any) => row.image_type === "ready_video" && nonVideoIds.has(row.id),
+      (row: any) =>
+        !labConfig(row.config) &&
+        row.image_type === "ready_video" &&
+        nonVideoIds.has(row.id),
     )
   )
     throw Error(
@@ -104,6 +114,7 @@ export async function validateLabSettings(
     rows.some(
       (row: SavedPrompt) =>
         row.kind === "article" &&
+        row.reference_key !== "quote" &&
         row.reference_key &&
         row.reference_key !== engine,
     )
@@ -117,10 +128,15 @@ export function selectLabPrompt(
 ) {
   const article = target === "book" || target === "news";
   const candidates = rows.filter((row) => {
-    if (target === "QUOTE") return row.kind === "quote";
+    if (target === "QUOTE")
+      return (
+        row.kind === "quote" ||
+        (row.kind === "article" && row.reference_key === "quote")
+      );
     if (article)
       return (
         row.kind === "article" &&
+        row.reference_key !== "quote" &&
         (!row.reference_key || row.reference_key === target)
       );
     if (row.kind !== "image") return false;
@@ -143,28 +159,41 @@ export function productionLabText(
   vars: Record<string, string>,
 ) {
   const fill = (text: string) =>
-    text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
-      if (key === "paragraf") return vars.teks || "";
-      if (!(key in vars)) throw Error(`Placeholder {{${key}}} tidak dikenal`);
-      return vars[key];
+    fillVariables(text, {
+      ...vars,
+      paragraf: vars.paragraf ?? vars.teks ?? "",
+      konteks: vars.konteks ?? vars.buku ?? "",
+      topik: vars.topik ?? vars.bab ?? "",
     });
-  if (target === "book" && row.reference_key === "book") {
+  if (
+    target === "book" &&
+    row.reference_key === "book" &&
+    !labConfig(row.config)
+  ) {
     return fillPrompt("artikel/tulis.md", {
       buku: vars.buku,
       bab: vars.bab,
       aturan: fill(row.prompt),
     });
   }
-  const resolved = fill(row.prompt);
-  if (row.image_type === "ready_video" && labImageKind(target)) {
+  const config = labConfig(row.config);
+  const template =
+    config?.usage === "carousel" && Number(vars.nomor_unit || 1) > 1
+      ? config.promptNext || row.prompt
+      : row.prompt;
+  const resolved = fill(template);
+  if (!config && row.image_type === "ready_video" && labImageKind(target)) {
     const horizontal = labImageKind(target)!.orientation === "horizontal";
     return `${resolved}\n\nBuat gambar final siap jadi video: teks dan desain sudah menyatu dalam gambar. Aturan ini menggantikan instruksi ilustrasi tanpa teks. Rasio ${horizontal ? "16:9, 1920 × 1080" : "9:16, 1080 × 1920"}. Seluruh teks harus terbaca dan tidak terpotong; sisakan margin aman. Gunakan referensi dan logo yang dilampirkan. Teks yang wajib tampil pada gambar:\n${vars.teks || vars.artikel || ""}`;
   }
   if (target === "book")
     return `${resolved}\n\nInput buku: ${vars.buku}; bab: ${vars.bab}.`;
   if (target === "news") return resolved;
+  if (config) return resolved;
   // A plain instruction must receive the actual production content as well.
-  return /\{\{(?:teks|artikel|quote|paragraf)\}\}/.test(row.prompt)
+  return /\{\{(?:teks|artikel|quote|paragraf|kalimat|judul|heading)\}\}/.test(
+    row.prompt,
+  )
     ? resolved
     : `${resolved}\n\n${vars.teks || vars.quote || vars.artikel || ""}`;
 }
@@ -201,6 +230,9 @@ export async function productionLabPrompt(
   if (!row) return null;
   return {
     id: row.id,
+    ...(labConfig(row.config)
+      ? { config: labConfig(row.config)!, rawPrompt: row.prompt }
+      : {}),
     ...(row.image_type === "ready_video"
       ? { imageType: "ready_video" as const }
       : {}),

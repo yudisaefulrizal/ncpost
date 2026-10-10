@@ -1,3 +1,4 @@
+import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
 import React, { useEffect, useState } from "react";
 import {
   FINAL_OUTPUTS,
@@ -59,11 +60,12 @@ export function ContentPlanFields({
   settings: BookSettings;
   onChange: (outputs: string[], settings: BookSettings) => void;
 }) {
-  const { lanes, horizontalKinds, verticalKinds, laneName, imageType } =
+  const { lanes, horizontalKinds, verticalKinds, laneName, imageType, usage } =
     useImageCatalog();
   const set = (patch: Partial<BookSettings>) => {
     const next = { ...settings, ...patch };
     next.carouselMode =
+      usage(next.panelVertical || next.panelHorizontal) === "carousel" ||
       imageType(next.panelVertical || next.panelHorizontal) === "ready_post"
         ? "direct"
         : "template";
@@ -160,6 +162,27 @@ export function ContentPlanFields({
           )}
         </div>
       </fieldset>
+      {!quote &&
+        outputs.some((key) => key === "PANEL" || key.startsWith("VIDEO_")) && (
+          <label className="field">
+            Unit gambar
+            <select
+              value={settings.imageUnit || ""}
+              onChange={(e) =>
+                set({
+                  imageUnit: e.target.value
+                    ? (e.target.value as BookSettings["imageUnit"])
+                    : undefined,
+                })
+              }
+            >
+              <option value="">Mengikuti penggunaan prompt</option>
+              <option value="article">Seluruh artikel</option>
+              <option value="paragraph">Per paragraf</option>
+              <option value="sentence">Per kalimat</option>
+            </select>
+          </label>
+        )}
       <div className="settings-grid">
         {outputs.includes("VIDEO_KALIMAT") &&
           select(
@@ -230,6 +253,39 @@ export function ContentPlanCard({
   return (
     <section className="card pad stack">
       <h2 className="h3">{type.name}</h2>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={!!settings.articleConfig}
+          onChange={(e) =>
+            setSettings((s) => ({
+              ...s,
+              articleConfig: e.target.checked
+                ? {
+                    ...defaultArticleConfig(type.engine),
+                    paragraphCount:
+                      type.engine === "book"
+                        ? 6
+                        : type.engine === "quote"
+                          ? 1
+                          : null,
+                  }
+                : undefined,
+            }))
+          }
+        />
+        Konfigurasi bahan dan struktur artikel
+      </label>
+      {settings.articleConfig && (
+        <ArticleConfigFields
+          value={settings.articleConfig}
+          book={type.engine === "book"}
+          quote={type.engine === "quote"}
+          onChange={(value) =>
+            setSettings((s) => ({ ...s, articleConfig: value }))
+          }
+        />
+      )}
       <ContentPlanFields
         outputs={outputs}
         quote={type.engine === "quote"}

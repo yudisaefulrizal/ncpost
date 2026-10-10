@@ -1,3 +1,5 @@
+import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
+import { LabPromptSettings } from "./lab-prompt-settings";
 import { ContentPlanFields, finalTargets, planSettings } from "./content-plan";
 import type { BookSettings } from "../server/book-settings";
 import { Modal } from "./modal";
@@ -38,7 +40,11 @@ export function ContentTypes({
     setOutputs(next);
     setSettings(
       type === "new"
-        ? { ...planSettings(next, null), autoProcess: false }
+        ? {
+            ...planSettings(next, null),
+            autoProcess: false,
+            articleConfig: defaultArticleConfig("book"),
+          }
         : planSettings(next, type.settings),
     );
     setError("");
@@ -142,17 +148,51 @@ export function ContentTypes({
                 onChange={(e) => {
                   const next = e.target.value as ContentType["engine"];
                   setEngine(next);
+                  setSettings((current) => ({
+                    ...current,
+                    articleConfig: defaultArticleConfig(next),
+                    labPromptIds: [],
+                  }));
                   if (next === "quote") {
                     setOutputs(["POST_IMAGE"]);
-                    setSettings(planSettings(["POST_IMAGE"], settings));
+                    setSettings(
+                      planSettings(["POST_IMAGE"], {
+                        ...settings,
+                        articleConfig: defaultArticleConfig(next),
+                        labPromptIds: [],
+                      }),
+                    );
                   }
                 }}
               >
                 <option value="quote">Quote</option>
-                <option value="book">Buku</option>
-                <option value="news">Berita teknologi</option>
+                <option value="book">Konteks dan topik</option>
+                <option value="news">Artikel mandiri</option>
               </select>
             </label>
+            {settings.articleConfig && (
+              <ArticleConfigFields
+                value={settings.articleConfig}
+                book={engine === "book"}
+                quote={engine === "quote"}
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    articleConfig: value,
+                  }))
+                }
+              />
+            )}
+            {settings.articleConfig && (
+              <LabPromptSettings
+                engine={engine}
+                selected={settings.labPromptIds || []}
+                images={false}
+                onChange={(ids) =>
+                  setSettings((current) => ({ ...current, labPromptIds: ids }))
+                }
+              />
+            )}
             <ContentPlanFields
               quote={engine === "quote"}
               outputs={outputs}

@@ -51,24 +51,24 @@ Simpan draf membatalkan job aktif, menambah revisi dan menghapus pointer hasil t
 
 Preview boleh dibuat setelah lint struktur, tetapi diberi label template-only dan tidak membuka gate produksi. Worker menghasilkan lima PNG 1080×1350 memakai Template 1 asli, DejaVuSans, geometri registry, heading hanya panel 1, progress of-05, footer buku/bagian. CTA berasal dari closing-slide asli. Gallery menampilkan hanya ID 1,2,4,4B,6. Preview API/renderer dapat menguji 1/2/6; vertical tanpa portrait ditolak. Pemilihan template acak, skor registry sumber, crop stok aktual, font parity piksel dengan Pillow, dan renderer final belum selesai. Jangan menyebut preview sebagai stok gambar atau paket siap tayang.
 
-## Impor buku dari JSON
+## Impor konteks dan topik dari JSON
 
-Di halaman Produksi, tombol **Impor JSON** membuat satu bagian untuk tiap entri file berformat:
+Di halaman Produksi, tombol **Impor JSON** membuat satu topik untuk tiap entri:
 
 ```json
 [
   {
-    "buku": "How to Win Friends and Influence People",
-    "tema": "Cara Membuat Orang Menyukai Anda - Biasakan tersenyum"
+    "konteks": "Literasi keuangan",
+    "topik": "Mengatur pengeluaran bulanan"
   },
   {
-    "buku": "How to Win Friends and Influence People",
-    "tema": "Cara Membuat Orang Menyukai Anda - Ingat dan gunakan nama orang dengan baik"
+    "konteks": "Literasi keuangan",
+    "topik": "Membangun dana darurat"
   }
 ]
 ```
 
-`buku` menjadi judul buku dan `tema` menjadi judul bagian. Nomor bagian berurutan sesuai file dan melanjutkan nomor terbesar di bukunya. Entri yang sudah ada (buku dan judul sama, tanpa beda huruf besar/kecil dan spasi) dilewati, jadi aman diulang. Aplikasi menampilkan pratinjau dulu (jumlah baru dan yang dilewati) sebelum menulis. Maksimal 500 entri per impor; satu entri yang salah membatalkan seluruh impor.
+`konteks` mengelompokkan topik. Nomor topik mengikuti urutan file dan melanjutkan nomor terbesar pada konteks yang sama. Pasangan konteks/topik yang sudah ada (tanpa beda huruf besar/kecil dan spasi) dilewati. Pratinjau menampilkan jumlah baru dan yang dilewati sebelum menulis. Maksimal 600 entri; satu entri salah membatalkan seluruh impor. Tombol **Download contoh JSON** menyediakan format ini. Format lama `buku`/`tema` tetap diterima untuk file yang sudah dimiliki; nama kolom internal database dipertahankan agar data lama tetap terbaca.
 
 Data di MySQL database `ncpost`; output hanya di `output/`. Hasil render tiap bagian ada di folder yang bisa dibaca, `output/<buku>/<NN-judul-bagian>/`:
 
@@ -238,7 +238,7 @@ Tab **Status dan riwayat** menampilkan Menunggu, Berjalan, Selesai, atau Gagal, 
 
 ## Kreat Konten
 
-**Kreat Konten** menjadi halaman utama daftar jenis konten. **Tambah jenis** cukup menentukan nama, sumber Buku/Berita teknologi, target output (**Video vertikal**, **Video horizontal**, **Carousel**, atau **1 gambar**), dan gaya gambar. Beberapa target dapat dipilih bersamaan. Jenis baru mengaktifkan **Proses otomatis** secara bawaan.
+**Kreat Konten** menjadi halaman utama daftar jenis konten. **Tambah jenis** cukup menentukan nama, sumber Buku/Berita teknologi, target output (**Video vertikal**, **Video horizontal**, **Carousel**, atau **1 gambar**), dan gaya gambar. Beberapa target dapat dipilih bersamaan. Produksi dijalankan per tahap melalui aksi atau cronjob; membuat jenis konten tidak menyalakan seluruh pipeline.
 
 Semua buku dan bagian yang ditambahkan atau diimpor ke jenis tersebut mengikuti pengaturan yang sama. Langkah internal diturunkan dari target: video membutuhkan artikel, gambar per kalimat, audio dan render; carousel membutuhkan artikel, gambar per paragraf dan render; satu gambar hanya membutuhkan artikel dan satu permintaan gambar. Produksi menampilkan status dan hasil akhir; detail artikel dan aksi lanjutan tetap dapat dibuka.
 
@@ -254,7 +254,7 @@ Di **Lab Prompt Gambar**, label **Jenis gambar** menentukan penggunaan prompt:
 
 Label terlihat di list Lab dan pilihan gaya gambar. Pengaturan konten cukup memilih jenis gambar; cara pembuatan diturunkan dari label Lab pada server, termasuk setelah label diedit. Tidak ada pilihan mode terpisah pada konten. Infografis bawaan untuk 1 gambar tetap tersedia.
 
-Hasil posting memakai JPEG 1080 × 1350. Prompt dan lampiran Lab dibekukan untuk seluruh carousel. Preview, unduh dan publikasi carousel memakai manifest yang sama; penamaan berkas per revisi/job menjaga hasil lama saat regenerate gagal. Publikasi tetap lewat aksi/jadwal yang tersedia.
+Carousel lama memakai JPEG 1080 × 1350; satu gambar mengikuti ukuran hasil Lab. Prompt dan lampiran Lab dibekukan untuk seluruh carousel. Preview, unduh dan publikasi carousel memakai manifest yang sama; penamaan berkas per revisi/job menjaga hasil lama saat regenerate gagal. Publikasi tetap lewat aksi/jadwal yang tersedia.
 
 Jalankan **npm run migrate** untuk menambahkan `image_type` pada `lab_prompts` dan snapshot `lab_runs`. Jenis lama mendapat label Ilustrasi; ubah label di Lab bila prompt tersebut memang membuat gambar final siap posting.
 
@@ -263,3 +263,18 @@ Jalankan **npm run migrate** untuk menambahkan `image_type` pada `lab_prompts` d
 Lab Prompt Gambar menyediakan label **Siap jadi video** selain Ilustrasi dan Siap posting. Gambar jenis ini memuat teks dan desain final, berasio 9:16 atau 16:9. Pilih gayanya sebagai sumber gambar video vertikal/horizontal di Pengaturan Konten; pilihan **Pakai teks** tersedia terpisah untuk setiap target video. Label menentukan nilai awal (Ilustrasi aktif, Siap jadi video nonaktif), lalu pilihan yang disimpan di Pengaturan Konten menjadi penentu render.
 
 Produksi gambar dan audio tetap merupakan tahap terpisah. Saat Pakai teks nonaktif, render hanya menyusun gambar per kalimat mengikuti audio yang sesuai: tanpa subtitle, template, judul tambahan, visualizer, atau slide penutup otomatis. Teks/logo tidak dipotong saat gambar disesuaikan ukurannya. Video lama tetap tersedia jika render ulang gagal. Saat Pakai teks aktif, render memakai template/subtitle. Tidak ada pemicu produksi otomatis baru atau perubahan jadwal cronjob.
+
+
+## Struktur artikel dan form Lab universal
+
+Jenis baru menggunakan pengaturan artikel universal. Pilih **Sumber bahan** (Pengetahuan AI, Bahan manual, atau Riset web), **Asal topik** (Manual atau Ditentukan AI), konteks, dan jumlah paragraf. Jumlah kosong mengikuti prompt. Konteks dan topik pada alur Buku berasal dari buku dan bagian; preset Buku tetap enam paragraf dengan struktur yang sudah digunakan. Jenis lama tetap memakai alur lamanya sampai **Konfigurasi bahan dan struktur artikel** diaktifkan. Pilih minimal satu prompt aktif dari **Lab Prompt Artikel** untuk mode universal.
+
+Artikel berstruktur `# Judul`, satu `## Heading` bila relevan, paragraf isi, `Sumber:` dan `Tag:` bila tersedia. Quote tetap satu paragraf dan target 1 gambar, tetapi promptnya berada di Lab Artikel. Migrasi memindahkan prompt Quote lama ke Lab Artikel tanpa mengganti ID; riwayat uji lama tetap tersimpan.
+
+Variabel artikel: `{{konteks}}`, `{{topik}}`, `{{jumlah_paragraf}}`, dan `{{bahan}}`. `{{buku}}` dan `{{bab}}` tetap diterima sebagai alias untuk prompt lama. Pengetahuan AI dan bahan manual tidak mengaktifkan pencarian web. Riset web mengaktifkan tool pencarian dan menolak hasil tanpa bukti pemanggilan tool; log riset tersimpan privat bersama job.
+
+Form Lab Gambar menyediakan penggunaan **1 gambar**, **Carousel**, atau **Gambar video**, artikel contoh, dan nomor unit untuk uji. Carousel memiliki prompt halaman pertama serta prompt halaman berikutnya. Variabel tersedia sebagai tombol pada form: `{{judul}}`, `{{heading}}`, `{{artikel}}`, `{{paragraf}}`, `{{kalimat}}`, `{{sumber}}`, `{{tag}}`, `{{nomor_unit}}`, dan `{{total_unit}}`. Artikel berisi seluruh paragraf tanpa judul atau metadata. Alias `{{teks}}` untuk isi unit, `{{quote}}`, `{{buku}}`, dan `{{bab}}` tetap didukung.
+
+**Unit gambar** di Pengaturan Konten menentukan jumlah gambar, audio, dan panel: seluruh artikel satu unit, per paragraf sejumlah paragraf, atau per kalimat sejumlah kalimat. Nomor kalimat berurutan secara global; variabel paragraf kosong ketika unit kalimat digunakan. Pilihan kosong mengikuti penggunaan prompt. Gambar dari form baru memakai prompt yang sama di Lab dan produksi tanpa instruksi rasio tambahan, pemaksaan ukuran, atau slide penutup otomatis. Lampiran referensi tetap statis. Pilihan Pakai teks mengatur penambahan template/subtitle saat render video.
+
+Jalankan `npm run migrate` sebelum memakai revisi ini untuk menambahkan konfigurasi pada `lab_prompts` dan snapshot `lab_runs`. Cronjob tetap menjalankan tahap yang dipilih, bukan seluruh pipeline.

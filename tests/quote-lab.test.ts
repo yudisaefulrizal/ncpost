@@ -13,7 +13,7 @@ afterEach(() => {
   rmSync("output/.test/lab/991299", { recursive: true, force: true });
   vi.unstubAllEnvs();
 });
-it("offers a separate quote reference and selects only quote prompts for quote production", async () => {
+it("offers a unified article quote reference and selects only quote prompts for quote production", async () => {
   expect(
     labInput({
       kind: "quote",
@@ -22,7 +22,8 @@ it("offers a separate quote reference and selects only quote prompts for quote p
       referenceKey: "quote",
     }).kind,
   ).toBe("quote");
-  const reference = labReferences("quote")[0];
+  expect(labReferences("quote")).toEqual([]);
+  const reference = labReferences("article").find((ref) => ref.id === "quote")!;
   expect(reference.id).toBe("quote");
   expect(resolveLabPrompt("quote", "quote", reference.prompt)).not.toContain(
     "{{paragraf}}",

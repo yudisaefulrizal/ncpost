@@ -48,7 +48,11 @@ export function nextBookJob(
   const candidates =
     chapter.article && chapter.article_status !== "siap"
       ? chapter.article_status === "menunggu editor" &&
-        validateContentText(chapter.article, type.engine).ok
+        validateContentText(
+          chapter.article,
+          type.engine,
+          type.settings?.articleConfig,
+        ).ok
         ? ["EDITOR"]
         : []
       : ORDER.filter((k) => stages.has(k)).flatMap((k) =>

@@ -1,3 +1,4 @@
+import { validateUnifiedArticle, type ArticleConfig } from "./content-contract";
 import { quoteText } from "./quote-text";
 import { STOCK_KINDS, isStockKind, isSentenceKind } from "./book-settings";
 import { stripMarkdownEmphasis } from "./stock-prompts";
@@ -21,7 +22,17 @@ export function validateDraft(raw: string) {
 export function validateArticle(raw: string) {
   return parseArticle(raw, false);
 }
-export function validateContentText(raw: string, engine?: string) {
+export function validateContentText(
+  raw: string,
+  engine?: string,
+  config?: ArticleConfig,
+) {
+  if (config)
+    return validateUnifiedArticle(
+      raw,
+      engine === "quote" ? 1 : config.paragraphCount,
+      engine === "quote",
+    );
   if (engine !== "quote") return validateArticle(raw);
   let text = "",
     errors: string[] = [];
@@ -174,13 +185,15 @@ export function partNumber<
 }
 // Caption Instagram (skill-ncpost-buku-produksi §3): artikel final sebagai teks
 // biasa, memuat #buku dan seluruh tag artikel tanpa duplikat, maks 2.200 karakter.
-export function instagramCaption(article: string) {
-  const v = validateArticle(article);
+export function instagramCaption(article: string, config?: ArticleConfig) {
+  const v = config
+    ? validateUnifiedArticle(article, config.paragraphCount)
+    : validateArticle(article);
   const plain = (t: string) =>
     t.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
   const tags = [
     ...new Set(
-      ["buku", ...v.tags].map(
+      [...(config ? [] : ["buku"]), ...v.tags].map(
         (t) =>
           "#" +
           t

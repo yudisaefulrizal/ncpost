@@ -1,3 +1,4 @@
+import { mediaUnits } from "../server/content-contract";
 import { QuoteProduction } from "./quote-production";
 import { FinishedVideos } from "./finished-videos";
 import {
@@ -47,13 +48,7 @@ import "@fontsource/plus-jakarta-sans/800.css";
 import "@fontsource/ibm-plex-mono/500.css";
 import "./style.css";
 import { paginateRows } from "./pagination";
-import {
-  validateArticle,
-  partNumber,
-  bookKey,
-  articleSentences,
-  PANEL_COUNT,
-} from "../server/domain";
+import { validateContentText, partNumber, bookKey } from "../server/domain";
 import {
   socialTargets,
   socialColumns,
@@ -83,9 +78,9 @@ import {
 const importJsonExample =
   JSON.stringify(
     [
-      { buku: "Judul Buku Pertama", tema: "Judul Bagian 1" },
-      { buku: "Judul Buku Pertama", tema: "Judul Bagian 2" },
-      { buku: "Judul Buku Kedua", tema: "Judul Bagian 1" },
+      { konteks: "Literasi keuangan", topik: "Mengatur pengeluaran bulanan" },
+      { konteks: "Literasi keuangan", topik: "Membangun dana darurat" },
+      { konteks: "Kesehatan sehari-hari", topik: "Membangun kebiasaan tidur" },
     ],
     null,
     2,
@@ -105,7 +100,6 @@ const navGroups: [string, [string, IconName][]][] = [
     "Lab",
     [
       ["Lab Prompt Artikel", "doc"],
-      ["Lab Quote", "doc"],
       ["Lab Prompt Gambar", "image"],
     ],
   ],
@@ -326,11 +320,11 @@ function App() {
     setMsg("");
     window.scrollTo(0, 0);
   };
-  // Ubah nomor bagian; nomor yang sudah dipakai bagian lain saling ditukar.
+  // Ubah nomor topik; nomor yang sudah dipakai topik lain saling ditukar.
   const editPart = (c: any) => {
     const current = partNumber(rows, c);
     const raw = prompt(
-      `Nomor bagian untuk "${c.title}" (${c.book}):\nNomor yang sudah dipakai bagian lain akan bertukar.`,
+      `Nomor topik untuk "${c.title}" (${c.book}):\nNomor yang sudah dipakai topik lain akan bertukar.`,
       String(current),
     );
     if (raw === null) return;
@@ -340,16 +334,16 @@ function App() {
       });
       setMsg(
         r.swapped
-          ? `Nomor bagian jadi ${r.part}; bagian yang tadi bernomor ${r.part} jadi ${current}. Panel dan video yang terdampak perlu dirender ulang.`
+          ? `Nomor topik jadi ${r.part}; topik yang tadi bernomor ${r.part} jadi ${current}. Panel dan video yang terdampak perlu dirender ulang.`
           : r.part === current
-            ? "Nomor bagian tidak berubah"
-            : `Nomor bagian jadi ${r.part}. Panel dan video bagian ini perlu dirender ulang.`,
+            ? "Nomor topik tidak berubah"
+            : `Nomor topik jadi ${r.part}. Panel dan video topik ini perlu dirender ulang.`,
       );
       await refresh();
       if (detail?.id === c.id) await open(c);
     });
   };
-  // Rapatkan nomor satu buku menjadi 1..N (mis. setelah ada bagian dihapus).
+  // Rapatkan nomor satu buku menjadi 1..N (mis. setelah ada topik dihapus).
   const renumberBook = (book: string) => {
     const list = rows.filter((r) => bookKey(r.book) === bookKey(book));
     const sorted = [...list].sort(
@@ -359,28 +353,28 @@ function App() {
       (c, i) => partNumber(rows, c) !== i + 1,
     ).length;
     if (!willChange) {
-      setMsg(`Nomor bagian "${book}" sudah berurutan 1–${list.length}`);
+      setMsg(`Nomor topik "${book}" sudah berurutan 1–${list.length}`);
       return;
     }
     if (
       !confirm(
-        `Urutkan ulang nomor bagian "${book}" menjadi 1–${list.length}?\n` +
-          `${willChange} bagian berganti nomor; panel dan video bagian itu perlu dirender ulang.`,
+        `Urutkan ulang nomor topik "${book}" menjadi 1–${list.length}?\n` +
+          `${willChange} topik berganti nomor; panel dan video topik itu perlu dirender ulang.`,
       )
     )
       return;
     action(async () => {
       const r = await api("/books/renumber", "POST", { book });
-      setMsg(`${r.changed} dari ${r.total} bagian "${book}" diurutkan ulang`);
+      setMsg(`${r.changed} dari ${r.total} topik "${book}" diurutkan ulang`);
       await refresh();
     });
   };
   const removeChapter = (c: any) =>
-    confirm(`Hapus bagian "${c.title}"? Artikel dan job-nya ikut terhapus.`) &&
+    confirm(`Hapus topik "${c.title}"? Artikel dan job-nya ikut terhapus.`) &&
     action(async () => {
       await api("/chapters/" + c.id, "DELETE");
       if (detail?.id === c.id) setDetail(null);
-      setMsg("Bagian dihapus");
+      setMsg("Topik dihapus");
       await refresh();
     });
   const enqueue = async (kind: string, replace = false) => {
@@ -388,7 +382,7 @@ function App() {
     setMsg(`Job ${kind} masuk antrean`);
     await refresh();
   };
-  // Impor buku dari JSON [{ buku, tema }]: pratinjau dulu, lalu konfirmasi.
+  // Impor topik dari JSON [{ konteks, topik }]: pratinjau dulu, lalu konfirmasi.
   const importJson = async (file: File) => {
     let items: unknown;
     try {
@@ -398,12 +392,12 @@ function App() {
     }
     const plan = await api("/chapters/import", "POST", { items, dryRun: true });
     if (!plan.created) {
-      setMsg(`Tidak ada bagian baru: ${plan.skipped} entri sudah ada`);
+      setMsg(`Tidak ada topik baru: ${plan.skipped} entri sudah ada`);
       return;
     }
     if (
       !confirm(
-        `Impor ${plan.created} bagian baru dari ${plan.books} buku?` +
+        `Impor ${plan.created} topik baru dari ${plan.books} konteks?` +
           (plan.skipped
             ? `\n${plan.skipped} entri sudah ada dan dilewati.`
             : ""),
@@ -412,14 +406,14 @@ function App() {
       return;
     const r = await api("/chapters/import", "POST", { items });
     setMsg(
-      `${r.created} bagian diimpor${r.skipped ? `, ${r.skipped} dilewati` : ""}`,
+      `${r.created} topik diimpor${r.skipped ? `, ${r.skipped} dilewati` : ""}`,
     );
     await refresh();
   };
   const addChapter = async () => {
-    await api("/chapters", "POST", { book: newBook, title: newTitle });
+    await api("/chapters", "POST", { konteks: newBook, topik: newTitle });
     setNewTitle("");
-    setMsg(`Bagian "${newTitle.trim()}" ditambahkan`);
+    setMsg(`Topik "${newTitle.trim()}" ditambahkan`);
     await refresh();
   };
   // Jalankan tahap langsung dari daftar antrean.
@@ -427,7 +421,7 @@ function App() {
     action(async () => {
       for (const kind of kinds)
         await api("/chapters/" + c.id + "/jobs", "POST", { kind, replace });
-      setMsg(`${label}: bagian "${c.title}" masuk antrean`);
+      setMsg(`${label}: topik "${c.title}" masuk antrean`);
       await refresh();
     });
   // Selesai → centang (+ regenerate bila bisa diulang); belum → tombol play.
@@ -525,7 +519,13 @@ function App() {
           view: () => setViewingQuote(c),
           viewTitle: "Lihat quote",
         };
-      if (!validateArticle(c.article ?? "").ok)
+      if (
+        !validateContentText(
+          c.article ?? "",
+          c.content_engine,
+          settingsFor(c.book).articleConfig,
+        ).ok
+      )
         return { title: "Butuh artikel final yang valid" };
       return {
         title: "Buat quote dari paragraf artikel",
@@ -560,7 +560,14 @@ function App() {
         return { title: "Stok gambar sedang dibuat", busy: true };
       if (c.article_status !== "siap")
         return { title: "Butuh artikel lolos editor" };
-      if (kinds.every((k) => count(c, k) >= PANEL_COUNT))
+      if (
+        kinds.every(
+          (k) =>
+            count(c, k) >=
+            mediaUnits(c.article, settingsFor(c.book).imageUnit || "paragraph")
+              .length,
+        )
+      )
         return {
           title: "Stok gambar tersedia",
           done: true,
@@ -569,7 +576,12 @@ function App() {
               `Regenerate stok gambar "${c.title}"? Gambar baru dibuat; gambar lama tetap di kolam stok.`,
             ) && runStage(c, kinds, "Regenerate stok gambar", true),
         };
-      const missing = kinds.filter((k) => count(c, k) < PANEL_COUNT);
+      const missing = kinds.filter(
+        (k) =>
+          count(c, k) <
+          mediaUnits(c.article, settingsFor(c.book).imageUnit || "paragraph")
+            .length,
+      );
       return {
         title: `Buat stok gambar: ${missing.map(laneName).join(", ")}`,
         run: () => runStage(c, missing, "Stok gambar"),
@@ -586,7 +598,10 @@ function App() {
         return { title: "Gambar per kalimat sedang dibuat", busy: true };
       if (c.article_status !== "siap")
         return { title: "Butuh artikel lolos editor" };
-      const n = articleSentences(c.article).length;
+      const n = mediaUnits(
+        c.article,
+        settingsFor(c.book).imageUnit || "sentence",
+      ).length;
       if (kinds.every((k) => count(c, k) >= n))
         return {
           title: "Gambar per kalimat tersedia",
@@ -643,7 +658,10 @@ function App() {
         return {
           title: "Pilih sumber gambar Video Kalimat di Pengaturan Konten",
         };
-      const n = articleSentences(c.article ?? "").length;
+      const n = mediaUnits(
+        c.article || "",
+        settingsFor(c.book).imageUnit || "sentence",
+      ).length;
       if (c.article_status !== "siap" || count(c, sentenceJob(source)) < n)
         return { title: `Butuh gambar kalimat ${laneName(source)}` };
       if (!c.sentence_audio) return { title: "Butuh audio per kalimat" };
@@ -672,7 +690,10 @@ function App() {
         return {
           title: "Pilih sumber gambar Video Kalimat H di Pengaturan Konten",
         };
-      const n = articleSentences(c.article ?? "").length;
+      const n = mediaUnits(
+        c.article || "",
+        settingsFor(c.book).imageUnit || "sentence",
+      ).length;
       if (c.article_status !== "siap" || count(c, sentenceJob(source)) < n)
         return { title: `Butuh gambar kalimat ${laneName(source)}` };
       if (!c.sentence_audio) return { title: "Butuh audio per kalimat" };
@@ -694,16 +715,23 @@ function App() {
       const lacking =
         settingsFor(c.book).carouselMode === "direct"
           ? []
-          : sources.filter((k) => count(c, k) < PANEL_COUNT);
+          : sources.filter(
+              (k) =>
+                count(c, k) <
+                mediaUnits(
+                  c.article,
+                  settingsFor(c.book).imageUnit || "paragraph",
+                ).length,
+            );
       if (c.article_status !== "siap" || lacking.length)
         return {
-          title: `Butuh enam stok: ${lacking.map(laneName).join(", ") || "artikel lolos"}`,
+          title: `Butuh stok gambar: ${lacking.map(laneName).join(", ") || "artikel lolos"}`,
         };
       return {
         title:
           settingsFor(c.book).carouselMode === "direct"
             ? "Buat carousel langsung siap posting"
-            : "Render panel (6 panel + slide penutup)",
+            : "Render carousel",
         run: () => runStage(c, ["PANEL"], "Buat carousel"),
       };
     }
@@ -798,7 +826,7 @@ function App() {
   }
   useEffect(() => setQueuePage(1), [search, filter, filterBook]);
   const ttsLive = !!settings?.tts?.enabled;
-  // Urut per buku (urutan buku pertama kali diinput), lalu per bagian.
+  // Urut per buku (urutan buku pertama kali diinput), lalu per topik.
   const bookOrder = new Map<string, number>();
   for (const r of rows)
     if (!bookOrder.has(bookKey(r.book)))
@@ -943,14 +971,23 @@ function App() {
           const kinds =
             kind === "IMAGES_PANEL"
               ? settingsFor(c.book).stockKinds.filter(
-                  (k) => count(c, k) < PANEL_COUNT,
+                  (k) =>
+                    count(c, k) <
+                    mediaUnits(
+                      c.article,
+                      settingsFor(c.book).imageUnit || "paragraph",
+                    ).length,
                 )
               : kind === "IMAGES_VIDEO"
                 ? settingsFor(c.book)
                     .sentenceKinds.map(sentenceJob)
                     .filter(
                       (k) =>
-                        count(c, k) < articleSentences(c.article || "").length,
+                        count(c, k) <
+                        mediaUnits(
+                          c.article || "",
+                          settingsFor(c.book).imageUnit || "sentence",
+                        ).length,
                     )
                 : [job];
           return async () => {
@@ -1000,7 +1037,7 @@ function App() {
   });
   batchActions.push({
     id: "DELETE",
-    label: "Hapus bagian",
+    label: "Hapus topik",
     destructive: true,
     prepare: (c) =>
       activeJobs.some((j) => j.chapter_id === c.id)
@@ -1015,24 +1052,24 @@ function App() {
   const queueCard = (
     <section className="card queue">
       <div className="card-head">
-        <h2>Antrean bagian</h2>
+        <h2>Antrean topik</h2>
         <div className="toolbar">
           <div className="search">
             <Icon name="search" />
             <input
-              aria-label="Cari buku atau bagian"
-              placeholder="Cari buku atau bagian"
+              aria-label="Cari konteks atau topik"
+              placeholder="Cari konteks atau topik"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <select
             className="book-filter"
-            aria-label="Filter judul buku"
+            aria-label="Filter konteks"
             value={filterBook}
             onChange={(e) => setFilterBook(e.target.value)}
           >
-            <option value="">Semua buku</option>
+            <option value="">Semua konteks</option>
             {[
               ...new Map(rows.map((c) => [bookKey(c.book), c.book])).entries(),
             ].map(([key, book]) => (
@@ -1064,7 +1101,7 @@ function App() {
           }}
         >
           <label className="field">
-            Judul buku
+            Konteks
             <input
               value={newBook}
               onChange={(e) => setNewBook(e.target.value)}
@@ -1079,7 +1116,7 @@ function App() {
             </datalist>
           </label>
           <label className="field grow">
-            Judul bagian
+            Topik
             <input
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
@@ -1089,11 +1126,11 @@ function App() {
           </label>
           <button className="btn btn-pri">
             <Icon name="plus" />
-            Tambah bagian
+            Tambah topik
           </button>
           <label
             className="btn btn-sec"
-            title='Impor dari JSON: [{ "buku": "...", "tema": "..." }]'
+            title='Impor dari JSON: [{ "konteks": "...", "topik": "..." }]'
           >
             <Icon name="doc" />
             Impor JSON
@@ -1111,8 +1148,8 @@ function App() {
           <a
             className="btn btn-sec"
             href={`data:application/json;charset=utf-8,${encodeURIComponent(importJsonExample)}`}
-            download="contoh-impor-buku.json"
-            title="Unduh contoh JSON, lalu ganti buku dan tema sesuai kebutuhan"
+            download="contoh-impor-konten.json"
+            title="Unduh contoh JSON, lalu ganti konteks dan topik sesuai kebutuhan"
           >
             <Icon name="doc" />
             Download contoh JSON
@@ -1134,7 +1171,7 @@ function App() {
               <th className="selection-cell">
                 {selection.all(queue.items, batchBusy)}
               </th>
-              <th>Bagian</th>
+              <th>Topik</th>
               <th>Artikel</th>
               {showsOutput("QUOTE") && <th>Quote</th>}
               {showsOutput("QUOTE_IMAGE") && <th>Gambar Quote</th>}
@@ -1180,11 +1217,11 @@ function App() {
                         rows.filter((r) => bookKey(r.book) === bookKey(g.book))
                           .length
                       }{" "}
-                      bagian
+                      topik
                     </span>
                     <button
                       className="btn btn-sec btn-sm grp-action"
-                      title="Rapatkan nomor bagian menjadi 1, 2, 3, … tanpa celah"
+                      title="Rapatkan nomor topik menjadi 1, 2, 3, … tanpa celah"
                       onClick={() => renumberBook(g.book)}
                     >
                       Urutkan ulang
@@ -1202,7 +1239,7 @@ function App() {
                       </span>
                       <button
                         className="title-link"
-                        aria-label={`Buka bagian ${partNumber(rows, c)} ${c.book}`}
+                        aria-label={`Buka topik ${partNumber(rows, c)} ${c.book}`}
                         title="Buka detail"
                         onClick={() => action(() => open(c))}
                       >
@@ -1214,7 +1251,7 @@ function App() {
                         <StageCell play={stagePlay(c, "artikel")} />
                         <button
                           className="play redo"
-                          title="Buka dan sunting bagian"
+                          title="Buka dan sunting topik"
                           aria-label={`Buka dan sunting ${c.title}`}
                           onClick={() => action(() => open(c))}
                         >
@@ -1329,9 +1366,9 @@ function App() {
                           title={
                             activeJobs.some((j) => j.chapter_id === c.id)
                               ? "Tidak bisa dihapus: masih ada job aktif"
-                              : "Hapus bagian"
+                              : "Hapus topik"
                           }
-                          aria-label={`Hapus bagian ${partNumber(rows, c)} ${c.book}`}
+                          aria-label={`Hapus topik ${partNumber(rows, c)} ${c.book}`}
                           disabled={activeJobs.some(
                             (j) => j.chapter_id === c.id,
                           )}
@@ -1350,14 +1387,14 @@ function App() {
         {!visible.length && (
           <div className="empty">
             {rows.length
-              ? "Tidak ada bagian yang cocok dengan filter."
-              : "Belum ada bagian. Isi judul buku dan judul bagian di atas."}
+              ? "Tidak ada topik yang cocok dengan filter."
+              : "Belum ada topik. Isi konteks dan topik di atas."}
           </div>
         )}
       </div>
       <div className="card-foot" aria-label="Halaman antrean">
         <span>
-          Halaman {queue.page} / {queue.pages} · {queue.total} bagian
+          Halaman {queue.page} / {queue.pages} · {queue.total} topik
         </span>
         <div className="row-gap">
           <button
@@ -1396,8 +1433,8 @@ function App() {
                   {(() => {
                     const ch = rows.find((r) => r.id === j.chapter_id);
                     return ch
-                      ? `${ch.book} · Bagian ${partNumber(rows, ch)}`
-                      : "Bagian terhapus";
+                      ? `${ch.book} · Topik ${partNumber(rows, ch)}`
+                      : "Topik terhapus";
                   })()}
                 </b>
                 <small className={j.state === "failed" ? "text-block" : ""}>
@@ -1600,22 +1637,12 @@ function App() {
     sub =
       "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
     content = <NewsCronSettings key={activeType?.id} />;
-  } else if (
-    page === "Lab Prompt Artikel" ||
-    page === "Lab Prompt Gambar" ||
-    page === "Lab Quote"
-  ) {
+  } else if (page === "Lab Prompt Artikel" || page === "Lab Prompt Gambar") {
     sub = "";
     content = (
       <PromptLab
         key={page}
-        kind={
-          page === "Lab Prompt Artikel"
-            ? "article"
-            : page === "Lab Quote"
-              ? "quote"
-              : "image"
-        }
+        kind={page === "Lab Prompt Artikel" ? "article" : "image"}
       />
     );
   } else if (page === "Kredensial") {
@@ -1753,27 +1780,17 @@ function App() {
               instagram={instagram}
               onChange={set}
             />
-            {activeType.engine !== "quote" && (
+            {
               <details>
                 <summary>Prompt artikel</summary>
                 <LabPromptSettings
-                  engine="book"
+                  engine={activeType.engine}
                   images={false}
                   selected={draft.labPromptIds || []}
                   onChange={(ids) => set({ labPromptIds: ids })}
                 />
               </details>
-            )}
-            <details>
-              <summary>Prompt quote</summary>
-              <LabPromptSettings
-                engine="book"
-                images={false}
-                quote
-                selected={draft.labPromptIds || []}
-                onChange={(ids) => set({ labPromptIds: ids })}
-              />
-            </details>
+            }
           </>
         )}
       </ContentPlanCard>
@@ -1808,7 +1825,7 @@ function App() {
     // Produksi: halaman utama.
     const books = new Set(rows.map((r) => bookKey(r.book))).size;
     heading = page;
-    sub = `${rows.length} bagian dari ${books} buku.`;
+    sub = `${rows.length} topik dari ${books} konteks.`;
     content = queueCard;
   }
 
@@ -1895,7 +1912,7 @@ function App() {
                     onClick={() => action(() => open(nextChapter))}
                   >
                     <Icon name="plus" />
-                    Buka bagian berikutnya
+                    Buka topik berikutnya
                   </button>
                 )}
               </div>
@@ -1921,6 +1938,12 @@ function App() {
           {viewingStock && (
             <StockModal
               c={viewingStock}
+              expectedCount={
+                mediaUnits(
+                  viewingStock.article,
+                  settingsFor(viewingStock.book).imageUnit || "paragraph",
+                ).length
+              }
               kinds={settingsFor(viewingStock.book).stockKinds}
               onClose={() => setViewingStock(null)}
               onCreate={(kind, name) => {
@@ -1934,9 +1957,10 @@ function App() {
             <StockModal
               c={viewingSentence}
               kinds={settingsFor(viewingSentence.book).sentenceKinds}
-              sentences={articleSentences(viewingSentence.article).map(
-                (s) => s.text,
-              )}
+              sentences={mediaUnits(
+                viewingSentence.article,
+                settingsFor(viewingSentence.book).imageUnit || "sentence",
+              ).map((s) => s.text)}
               onClose={() => setViewingSentence(null)}
               onCreate={(kind, name) => {
                 const c = viewingSentence;
@@ -2134,7 +2158,11 @@ function DetailView(p: any) {
       : panelSources(p.bookSettings as BookSettings).filter(
           (k) =>
             (detail.stock ?? []).filter((x: any) => x.kind === k).length <
-            PANEL_COUNT,
+            mediaUnits(
+              detail.article,
+              p.bookSettings.imageUnit || "paragraph",
+              detail.content_engine === "quote",
+            ).length,
         );
   const thumbs = rendered
     ? [
@@ -2143,11 +2171,15 @@ function DetailView(p: any) {
           src: `/api/panels/${detail.id}/${x.file}?v=${rendered.renderedAt}`,
           alt: `Slide ${i + 1}${rendered.mode === "direct" ? " · siap posting" : ` · template ${x.template}`}`,
         })),
-        {
-          label: "CTA",
-          src: `/api/panels/${detail.id}/${rendered.closing}?v=${rendered.renderedAt}`,
-          alt: "Slide penutup",
-        },
+        ...(rendered.closing
+          ? [
+              {
+                label: "CTA",
+                src: `/api/panels/${detail.id}/${rendered.closing}?v=${rendered.renderedAt}`,
+                alt: "Slide penutup",
+              },
+            ]
+          : []),
       ]
     : [
         ...files.map((f, i) => ({
@@ -2171,9 +2203,7 @@ function DetailView(p: any) {
             <span>/</span>
             <span>{detail.book}</span>
             <span>/</span>
-            <span className="ink">
-              Bagian {String(p.part).padStart(2, "0")}
-            </span>
+            <span className="ink">Topik {String(p.part).padStart(2, "0")}</span>
           </nav>
           <h1>{detail.title}</h1>
           <p className="muted">
@@ -2182,7 +2212,7 @@ function DetailView(p: any) {
               ? ` · laporan editor ${report.lolos ? "lolos" : "minta revisi"}`
               : ""}
             {running.length
-              ? ` · ${running.length} job aktif untuk bagian ini`
+              ? ` · ${running.length} job aktif untuk topik ini`
               : ""}
           </p>
         </div>
@@ -2194,7 +2224,7 @@ function DetailView(p: any) {
             Ubah nomor
           </button>
           <button className="btn btn-sec btn-danger" onClick={p.onDelete}>
-            Hapus bagian
+            Hapus topik
           </button>
         </div>
       </header>
@@ -2373,7 +2403,7 @@ function DetailView(p: any) {
                 <span className="mono">
                   {current.label === "CTA"
                     ? "CTA"
-                    : `Panel ${current.label} / ${PANEL_COUNT}`}
+                    : `Panel ${current.label} / ${thumbs.length}`}
                 </span>
               )}
             </div>
@@ -2425,8 +2455,8 @@ function DetailView(p: any) {
             )}
             <small className="muted">
               {rendered
-                ? "Lima panel dengan stok gambar + slide penutup, siap dipublikasikan sebagai postingan gambar."
-                : "Preview memakai template asli tanpa stok foto; render panel memakai stok gambar bagian ini."}
+                ? "Carousel siap dipublikasikan sebagai postingan gambar."
+                : "Preview memakai template asli tanpa stok foto; render panel memakai stok gambar topik ini."}
             </small>
           </section>
         )}
@@ -2450,7 +2480,14 @@ function DetailView(p: any) {
                         (detail.stock ?? []).filter((x: any) => x.kind === k)
                           .length
                       }
-                      /{PANEL_COUNT} terikat
+                      /
+                      {
+                        mediaUnits(
+                          detail.article,
+                          p.bookSettings.imageUnit || "paragraph",
+                        ).length
+                      }{" "}
+                      terikat
                     </small>
                   </div>
                   <button
@@ -2726,7 +2763,7 @@ function CronSettings({
     <div className="stack-lg">
       {!books.length && (
         <section className="card pad">
-          Belum ada buku. Tambahkan bagian di halaman Produksi.
+          Belum ada konteks. Tambahkan topik di halaman Produksi.
         </section>
       )}
       {books.map((book) => (
@@ -2855,7 +2892,7 @@ function CronCell<K extends string>({
   );
 }
 
-// Pengaturan Konten: satu kartu per judul buku dengan draf lokal sampai disimpan.
+// Pengaturan Konten: satu kartu per konteks dengan draf lokal sampai disimpan.
 function NewsProduction({
   instagram,
   ttsReady,
@@ -3524,19 +3561,32 @@ function NewsProduction({
             />
           ) : mediaView.stage === "PANEL" ? (
             <div className="gallery">
-              {Array.from({ length: 5 }, (_, i) => (
-                <a
-                  key={i}
-                  href={mediaUrl(mediaCurrent.id, "PANEL", i)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <img
-                    src={mediaUrl(mediaCurrent.id, "PANEL", i)}
-                    alt={i === 4 ? "Slide penutup" : `Panel berita ${i + 1}`}
-                  />
-                </a>
-              ))}
+              {Array.from(
+                {
+                  length:
+                    (mediaCurrent.production?.outputs.PANEL?.panels?.length ||
+                      0) +
+                    (mediaCurrent.production?.outputs.PANEL?.closing ? 1 : 0),
+                },
+                (_, i) => (
+                  <a
+                    key={i}
+                    href={mediaUrl(mediaCurrent.id, "PANEL", i)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      src={mediaUrl(mediaCurrent.id, "PANEL", i)}
+                      alt={
+                        i ===
+                        mediaCurrent.production?.outputs.PANEL?.panels?.length
+                          ? "Slide penutup"
+                          : `Panel berita ${i + 1}`
+                      }
+                    />
+                  </a>
+                ),
+              )}
             </div>
           ) : mediaView.stage === "TTS_KALIMAT" ? (
             <div className="stack">
@@ -3683,7 +3733,10 @@ function NewsStockView({
   const kind = kinds.includes(selected) ? selected : (kinds[0] ?? "");
   const perSentence = stage === "IMAGES_VIDEO";
   const content = newsContent(article.article);
-  const expected = perSentence ? content.sentences.length : 4;
+  const expected = mediaUnits(
+    article.article,
+    article.settings?.imageUnit || (perSentence ? "sentence" : "paragraph"),
+  ).length;
   const items = p.stock.filter((x) => x.kind === kind);
   const active = p.jobs.some(
     (j) => j.kind === kind && ["queued", "running"].includes(j.state),
@@ -3871,22 +3924,31 @@ function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
           </div>
           {kind === "PANEL" ? (
             <div className="gallery">
-              {Array.from({ length: 5 }, (_, i) => (
-                <a
-                  key={i}
-                  href={`/api/news/${n.id}/media/PANEL/${i}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <img
-                    loading="lazy"
-                    src={`/api/news/${n.id}/media/PANEL/${i}`}
-                    alt={
-                      i === 4 ? "Slide penutup berita" : `Panel berita ${i + 1}`
-                    }
-                  />
-                </a>
-              ))}
+              {Array.from(
+                {
+                  length:
+                    (n.production?.outputs.PANEL?.panels?.length || 0) +
+                    (n.production?.outputs.PANEL?.closing ? 1 : 0),
+                },
+                (_, i) => (
+                  <a
+                    key={i}
+                    href={`/api/news/${n.id}/media/PANEL/${i}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      loading="lazy"
+                      src={`/api/news/${n.id}/media/PANEL/${i}`}
+                      alt={
+                        i === n.production?.outputs.PANEL?.panels?.length
+                          ? "Slide penutup berita"
+                          : `Panel berita ${i + 1}`
+                      }
+                    />
+                  </a>
+                ),
+              )}
             </div>
           ) : (
             <div className="row-gap">
@@ -3985,7 +4047,9 @@ function PanelContent({
     <div className="stack-lg">
       {rows.map((c) => {
         const m = parse(c.panels);
-        const files = [...m.panels.map((x: any) => x.file), m.closing];
+        const files = [...m.panels.map((x: any) => x.file), m.closing].filter(
+          Boolean,
+        );
         return (
           <section key={c.id} className="card pad stack">
             <div className="card-title">
@@ -3994,7 +4058,7 @@ function PanelContent({
                 <small className="muted">{m.footer}</small>
               </div>
               <button className="btn btn-sec btn-sm" onClick={() => onOpen(c)}>
-                Buka bagian
+                Buka topik
               </button>
             </div>
             <div className="panel-strip">
@@ -4004,7 +4068,9 @@ function PanelContent({
                   <a key={f} href={src} target="_blank" rel="noreferrer">
                     <img
                       src={src}
-                      alt={i < PANEL_COUNT ? `Panel ${i + 1}` : "Slide penutup"}
+                      alt={
+                        i < m.panels.length ? `Panel ${i + 1}` : "Slide penutup"
+                      }
                       loading="lazy"
                     />
                   </a>
@@ -4132,18 +4198,23 @@ function StockModal({
   c,
   kinds,
   sentences,
+  expectedCount,
   onClose,
   onCreate,
 }: {
   c: any;
   kinds: string[];
   sentences?: string[];
+  expectedCount?: number;
   onClose: () => void;
   onCreate: (kind: string, name: string) => void;
 }) {
   const { lanes: IMAGE_LANES } = useImageCatalog();
   const job = (k: string) => (sentences ? sentenceJob(k) : k);
-  const expected = sentences?.length ?? PANEL_COUNT;
+  const expected =
+    sentences?.length ??
+    expectedCount ??
+    mediaUnits(c.article, "paragraph").length;
   // Hanya lajur yang aktif di Pengaturan Konten buku ini.
   const lanes = IMAGE_LANES.filter(([k]) => kinds.includes(k));
   const [stock, setStock] = useState<any[] | null>(null),
@@ -4232,7 +4303,10 @@ function StockModal({
 // Modal panel: tampilan besar + thumbnail, geser dengan tombol atau ←/→.
 function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
   const m = parse(c.panels);
-  const files: string[] = [...m.panels.map((x: any) => x.file), m.closing];
+  const files: string[] = [
+    ...m.panels.map((x: any) => x.file),
+    m.closing,
+  ].filter(Boolean);
   const [i, setI] = useState(0);
   const go = (d: number) => setI((n) => (n + d + files.length) % files.length);
   useEffect(() => {
@@ -4245,7 +4319,7 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
   }, []);
   const src = (f: string) => `/api/panels/${c.id}/${f}?v=${m.renderedAt}`;
   const label = (n: number) =>
-    n < PANEL_COUNT ? `Panel ${n + 1}` : "Slide penutup";
+    n < m.panels.length ? `Panel ${n + 1}` : "Slide penutup";
   return (
     <Modal c={c} title="Panel" onClose={onClose} wide>
       <div className="panel-viewer">
@@ -4260,7 +4334,7 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
           <img src={src(files[i])} alt={label(i)} />
           <figcaption className="muted small">
             {label(i)}
-            {i < PANEL_COUNT
+            {i < m.panels.length
               ? m.mode === "direct"
                 ? " · siap posting"
                 : ` · template ${m.panels[i].template}`
@@ -4285,7 +4359,7 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
             onClick={() => setI(n)}
           >
             <img src={src(f)} alt="" />
-            <span>{n < PANEL_COUNT ? n + 1 : "CTA"}</span>
+            <span>{n < m.panels.length ? n + 1 : "CTA"}</span>
           </button>
         ))}
       </div>
@@ -4305,7 +4379,10 @@ function PostModal({
   onConfirm: () => void;
 }) {
   const m = parse(c.panels);
-  const files: string[] = [...m.panels.map((x: any) => x.file), m.closing];
+  const files: string[] = [
+    ...m.panels.map((x: any) => x.file),
+    m.closing,
+  ].filter(Boolean);
   const [caption, setCaption] = useState<string | null>(null);
   useEffect(() => {
     api(`/chapters/${c.id}/caption`)

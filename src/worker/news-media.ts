@@ -1,3 +1,4 @@
+import { mediaUnits, imageVariables } from "../server/content-contract";
 import { buildImageAudioVideo } from "../server/image-audio-video";
 import {
   generateReadyPost,
@@ -106,17 +107,23 @@ export async function runNewsMediaJob(
     const n: NewsArticle = rows[0];
     if (!n || n.state !== "completed" || n.attempts !== j.revision)
       throw Error("Snapshot artikel berita berubah");
-    const v = validateNewsArticle(n.article);
+    const settings: BookSettings = JSON.parse(j.settings);
+    const v = validateNewsArticle(n.article, settings.articleConfig);
     if (!v.ok) throw Error(v.errors.join("; "));
     const content = newsContent(n.article);
-    const settings: BookSettings = JSON.parse(j.settings);
-    const labFor = (target: string, text: string) =>
+    const labFor = (
+      target: string,
+      text: string,
+      variables: Record<string, string> = {},
+    ) =>
       productionLabPrompt(store.db, settings, target, {
+        ...imageVariables(n.article, settings.imageUnit || "paragraph", 0),
         teks: text,
-        artikel: n.article,
+        artikel: content.paragraphs.join("\n\n"),
         bab: JSON.stringify(n.title),
         buku: "",
         quote: text,
+        ...variables,
       });
     const p = await store.detail(n.id, j.revision);
     const prerequisite = newsPrerequisite(j.kind, p, settings, n.article);
@@ -124,8 +131,9 @@ export async function runNewsMediaJob(
     const renderedAt = new Date().toISOString();
     if (j.kind === "POST_IMAGE") {
       const lab = await wholeTextProductionPrompt(store.db, settings, {
+        ...imageVariables(n.article, "article", 0),
         teks: content.paragraphs.join("\n\n"),
-        artikel: n.article,
+        artikel: content.paragraphs.join("\n\n"),
         bab: n.title,
         buku: "",
         quote: "",
@@ -140,10 +148,7 @@ export async function runNewsMediaJob(
         text: content.paragraphs.join("\n\n"),
         footer: `Berita · ${n.title}`,
         kind: settings.wholeTextImageKind || "IMAGE_HORIZONTAL",
-        lab: await labFor(
-          settings.wholeTextImageKind || "IMAGE_HORIZONTAL",
-          content.paragraphs.join("\n\n"),
-        ),
+        lab,
       };
       const image =
         settings.singleImageMode === "template"
@@ -174,15 +179,14 @@ export async function runNewsMediaJob(
     if (j.kind.includes("IMAGE_")) {
       const perSentence = j.kind.startsWith("S_");
       const kind = baseKind(j.kind);
-      const items = perSentence
-        ? content.sentences.map((s) => ({ heading: s.text, paragraph: "" }))
-        : v.paragraphs.map((paragraph, i) => ({
-            heading:
-              i === 0
-                ? v.title
-                : stripMarkdownEmphasis(paragraph).split(/(?<=[.!?])\s+/)[0],
-            paragraph,
-          }));
+      const unit =
+        settings.imageUnit || (perSentence ? "sentence" : "paragraph");
+      const units = mediaUnits(n.article, unit);
+      const items = units.map((entry) => ({
+        heading:
+          unit === "paragraph" ? content.heading || content.title : entry.text,
+        paragraph: unit === "paragraph" ? entry.text : "",
+      }));
       for (const [i, item] of items.entries()) {
         const taken = (await store.detail(n.id, j.revision)).stock.filter(
           (b) => b.kind === j.kind,
@@ -191,6 +195,7 @@ export async function runNewsMediaJob(
         const lab = await labFor(
           kind,
           item.paragraph ? `${item.heading} — ${item.paragraph}` : item.heading,
+          imageVariables(n.article, unit, i),
         );
         const match =
           j.force_new || lab
@@ -222,7 +227,10 @@ export async function runNewsMediaJob(
     if (j.kind === "TTS_KALIMAT") {
       const config = newsTtsConfig();
       const sentences = [];
-      for (const [i, s] of content.sentences.entries()) {
+      for (const [i, s] of mediaUnits(
+        n.article,
+        settings.imageUnit || "sentence",
+      ).entries()) {
         const file = path.join(
           work,
           `kalimat_${String(i + 1).padStart(2, "0")}.mp3`,
@@ -251,10 +259,15 @@ export async function runNewsMediaJob(
           dir: work,
           work,
           title: content.title,
-          paragraphs: v.paragraphs.map(stripMarkdownEmphasis),
+          paragraphs: mediaUnits(
+            n.article,
+            settings.imageUnit || "paragraph",
+          ).map((entry) => stripMarkdownEmphasis(entry.text)),
           footer: `Berita Teknologi · #${n.id}`,
           kind: settings.panelVertical || settings.panelHorizontal!,
           labFor,
+          variables: (index) =>
+            imageVariables(n.article, settings.imageUnit || "paragraph", index),
         });
         await store.complete(j, {
           ...manifest,
@@ -262,7 +275,7 @@ export async function runNewsMediaJob(
             ...p,
             file: relative(p.file),
           })),
-          closing: relative(manifest.closing),
+          closing: manifest.closing ? relative(manifest.closing) : null,
           sources: {
             panelHorizontal: settings.panelHorizontal,
             panelVertical: settings.panelVertical,
@@ -272,7 +285,12 @@ export async function runNewsMediaJob(
       }
       const panels = [];
       const footer = `Berita Teknologi · #${n.id}`;
-      for (const [i, paragraph] of v.paragraphs.entries()) {
+      for (const [i, paragraph] of mediaUnits(
+        n.article,
+        settings.imageUnit || "paragraph",
+      )
+        .map((entry) => entry.text)
+        .entries()) {
         const portrait = p.stock.find(
           (b) => b.kind === settings.panelVertical && b.panel === i + 1,
         );
@@ -310,7 +328,10 @@ export async function runNewsMediaJob(
           template: t.id,
         });
       }
-      const closing = path.join(work, "05-slide-penutup.jpg");
+      const closing = path.join(
+        work,
+        `${String(panels.length + 1).padStart(2, "0")}-slide-penutup.jpg`,
+      );
       const source = path.join(
         SOURCE,
         "asset/closing-slide/slide-penutup-final.png",
@@ -338,14 +359,20 @@ export async function runNewsMediaJob(
         ? settings.sentenceVideoHKind!
         : settings.sentenceVideoKind!;
       const audio = p.outputs.TTS_KALIMAT;
-      if (audio.sentences.length !== content.sentences.length)
+      if (
+        audio.sentences.length !==
+        mediaUnits(n.article, settings.imageUnit || "sentence").length
+      )
         throw Error("Audio tidak sesuai artikel");
       const direct =
         (horizontal
           ? settings.sentenceVideoHMode
           : settings.sentenceVideoMode) === "direct";
       if (direct) {
-        const slides = content.sentences.map((_, i) => {
+        const slides = mediaUnits(
+          n.article,
+          settings.imageUnit || "sentence",
+        ).map((_, i) => {
           const binding = p.stock.find(
             (b) => b.kind === sentenceJob(source) && b.panel === i + 1,
           );
@@ -374,7 +401,10 @@ export async function runNewsMediaJob(
         return;
       }
       const panels = [];
-      for (const [i, s] of content.sentences.entries()) {
+      for (const [i, s] of mediaUnits(
+        n.article,
+        settings.imageUnit || "sentence",
+      ).entries()) {
         const binding = p.stock.find(
           (b) => b.kind === sentenceJob(source) && b.panel === i + 1,
         );
@@ -445,7 +475,9 @@ export async function runNewsMediaJob(
               imageUrls: [
                 ...p.outputs.PANEL.panels.map((x: any) => x.file),
                 p.outputs.PANEL.closing,
-              ].map(publicFile),
+              ]
+                .filter(Boolean)
+                .map(publicFile),
             }
           : { videoUrl: publicFile(p.outputs.VIDEO_KALIMAT.file) };
       const caption = newsCaption(n.article);

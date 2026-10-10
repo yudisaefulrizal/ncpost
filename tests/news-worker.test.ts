@@ -21,7 +21,7 @@ afterEach(() => {
 const store = () =>
   ({
     db: {
-      query: vi.fn(async (sql: string) => [
+      query: vi.fn(async (sql: any) => [
         sql.includes("content_types")
           ? [
               {
@@ -169,4 +169,145 @@ it("uses the enabled Lab news prompt while preserving research and output valida
   );
   expect(s.complete).toHaveBeenCalled();
   expect(s.fail).not.toHaveBeenCalled();
+});
+
+it.each(["knowledge", "manual", "web"] as const)(
+  "configured articles use %s with the common structure and no fixed technology pipeline",
+  async (source) => {
+    const article =
+      "# Topik umum\n\n## Heading\n\nSatu kalimat. Dua kalimat.\n\nParagraf kedua.\n\nSumber: https://example.com/sumber\n\nTag: umum";
+    const config = {
+      source,
+      topicMode: "ai",
+      context: "Topik umum",
+      topic: "",
+      material: source === "manual" ? "Bahan yang disediakan pengguna." : "",
+      paragraphCount: 2,
+    };
+    const s = store();
+    vi.mocked(s.db.query).mockImplementation(
+      async (sql: any) =>
+        [
+          sql.includes("content_types")
+            ? [
+                {
+                  id: 2,
+                  name: "Umum",
+                  engine: "news",
+                  outputs: ["POST_IMAGE"],
+                  settings: {
+                    managed: true,
+                    articleConfig: config,
+                    labPromptIds: [1],
+                    stockKinds: [],
+                    sentenceKinds: [],
+                    panelHorizontal: null,
+                    panelVertical: null,
+                    sentenceVideoKind: null,
+                    sentenceVideoHKind: null,
+                  },
+                },
+              ]
+            : sql.includes("lab_prompts")
+              ? [
+                  {
+                    id: 1,
+                    kind: "article",
+                    reference_key: null,
+                    prompt: "Tulis artikel tentang {{konteks}}.",
+                  },
+                ]
+              : [],
+        ] as any,
+    );
+    vi.mocked(runCli).mockResolvedValue(
+      [
+        ...(source === "web"
+          ? [
+              {
+                type: "item.completed",
+                item: {
+                  type: "web_search",
+                  action: { type: "search", query: "topik" },
+                },
+              },
+            ]
+          : []),
+        {
+          type: "item.completed",
+          item: { type: "agent_message", text: article },
+        },
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n"),
+    );
+    await runNewsJob(s, job);
+    expect(s.fail).not.toHaveBeenCalled();
+    expect(s.complete).toHaveBeenCalledWith(
+      job,
+      expect.objectContaining({ article, article_config: config }),
+      expect.objectContaining({ configured: true, source }),
+    );
+    const args = vi.mocked(runCli).mock.calls[0][1];
+    expect(args.includes("--search")).toBe(source === "web");
+    expect(args).not.toContain("--output-schema");
+    expect(readFileSync(path.join(dir, "events.jsonl"), "utf8")).toContain(
+      "agent_message",
+    );
+  },
+);
+
+it("configured web research rejects a response without a search tool event", async () => {
+  const s = store();
+  vi.mocked(s.db.query).mockImplementation(
+    async (sql: any) =>
+      [
+        sql.includes("content_types")
+          ? [
+              {
+                id: 2,
+                name: "Umum",
+                engine: "news",
+                outputs: ["POST_IMAGE"],
+                settings: {
+                  managed: true,
+                  articleConfig: {
+                    source: "web",
+                    topicMode: "ai",
+                    paragraphCount: null,
+                  },
+                  labPromptIds: [1],
+                  stockKinds: [],
+                  sentenceKinds: [],
+                  panelHorizontal: null,
+                  panelVertical: null,
+                  sentenceVideoKind: null,
+                  sentenceVideoHKind: null,
+                },
+              },
+            ]
+          : sql.includes("lab_prompts")
+            ? [
+                {
+                  id: 1,
+                  kind: "article",
+                  reference_key: null,
+                  prompt: "Riset topik.",
+                },
+              ]
+            : [],
+      ] as any,
+  );
+  vi.mocked(runCli).mockResolvedValue(
+    JSON.stringify({
+      type: "item.completed",
+      item: { type: "agent_message", text: "# Judul\n\nIsi." },
+    }),
+  );
+  await runNewsJob(s, job);
+  expect(s.complete).not.toHaveBeenCalled();
+  expect(s.fail).toHaveBeenCalledWith(
+    job,
+    expect.stringContaining("bukti pencarian web"),
+  );
 });

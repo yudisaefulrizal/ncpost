@@ -12,7 +12,7 @@ export function LabPromptSettings({
   quote = false,
   onChange,
 }: {
-  engine: "book" | "news";
+  engine: "book" | "news" | "quote";
   selected: number[];
   images: boolean;
   quote?: boolean;

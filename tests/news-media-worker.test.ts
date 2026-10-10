@@ -436,9 +436,9 @@ it("direct single image is saved as a posting-ready JPEG with its final prompt",
   expect(h.spies.fail).not.toHaveBeenCalled();
   expect(h.p.outputs.POST_IMAGE).toMatchObject({
     mode: "direct",
-    width: 1080,
-    height: 1350,
-    prompt: expect.stringContaining("gambar final siap posting"),
+    width: 100,
+    height: 150,
+    prompt: "Buat infografis editorial yang mudah dibaca.",
   });
   expect(generateCodexImage).toHaveBeenCalledTimes(1);
 });

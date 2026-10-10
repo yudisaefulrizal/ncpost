@@ -1,3 +1,4 @@
+import { validateUnifiedArticle, type ArticleConfig } from "./content-contract";
 import { newsSentences } from "./news-production-domain";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -24,12 +25,12 @@ export const NEWS_SOURCE_DOMAINS = [
   "canaltech.com.br",
   "abc.net.au",
 ];
-export function newsSourceKey(value: string) {
+export function newsSourceKey(value: string, unrestricted = false) {
   const url = new URL(value);
   if (url.protocol !== "https:" || url.username || url.password || url.port)
     throw Error("URL sumber berita harus HTTPS tanpa kredensial");
   const host = url.hostname.replace(/^www\./, "");
-  if (!NEWS_SOURCE_DOMAINS.includes(host))
+  if (!unrestricted && !NEWS_SOURCE_DOMAINS.includes(host))
     throw Error("Domain sumber berita tidak diizinkan");
   url.hostname = host;
   url.hash = "";
@@ -38,7 +39,27 @@ export function newsSourceKey(value: string) {
   url.searchParams.sort();
   return { host, url: url.href.replace(/\/$/, "") };
 }
-export function validateNewsArticle(raw: string) {
+export function validateNewsArticle(raw: string, config?: ArticleConfig) {
+  if (config) {
+    const data = validateUnifiedArticle(raw, config.paragraphCount);
+    const url = /https:\/\/[^\s)]+/.exec(data.source)?.[0] || null;
+    if (url) {
+      try {
+        newsSourceKey(url, true);
+      } catch (e) {
+        data.errors.push((e as Error).message);
+        data.ok = false;
+      }
+    }
+    return {
+      ...data,
+      headings: data.heading ? [data.heading] : [],
+      sourceUrl: url,
+      wordCount: data.counts.reduce((a, b) => a + b, 0),
+      characterCount: data.paragraphs.join("\n\n").length,
+      sentenceCounts: data.paragraphs.map((p) => newsSentences(p).length),
+    };
+  }
   const errors: string[] = [];
   const text = raw.replace(/\r\n/g, "\n").trim();
   const lines = text.split("\n");
@@ -140,6 +161,7 @@ export interface NewsCandidate {
   reason: string;
 }
 export interface NewsResult {
+  article_config?: ArticleConfig;
   article: string;
   candidate_topics: NewsCandidate[];
   article_plan: {
@@ -163,8 +185,12 @@ export function validateNewsResult(input: NewsResult) {
       `Provider tidak menghasilkan artikel${reasons.length ? `: ${reasons.join("; ")}` : ""}`,
     );
   }
-  const validation = validateNewsArticle(input?.article ?? "");
+  const validation = validateNewsArticle(
+    input?.article ?? "",
+    input.article_config,
+  );
   if (!validation.ok) throw Error(validation.errors.join("; "));
+  if (input.article_config) return validation;
   const candidates = input.candidate_topics;
   if (!Array.isArray(candidates) || candidates.length !== 3)
     throw Error("Wajib tiga kandidat berita");

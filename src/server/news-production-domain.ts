@@ -1,3 +1,4 @@
+import { articleData, mediaUnits } from "./content-contract";
 import {
   type BookSettings,
   STOCK_KINDS,
@@ -70,25 +71,12 @@ export function newsSentences(paragraph: string) {
     .filter(Boolean);
 }
 export function newsContent(article: string) {
-  const lines = article.replace(/\r\n/g, "\n").trim().split("\n");
-  const title = (lines.shift() ?? "").replace(/^#+\s*/, "");
-  const source = lines.indexOf("Sumber:");
-  const paragraphs = lines
-    .slice(0, source < 0 ? lines.length : source)
-    .filter((l) => !/^## /.test(l))
-    .join("\n")
-    .trim()
-    .split(/\n\s*\n/)
-    .filter(Boolean);
-  const tags = (lines.find((l) => l.startsWith("Tag:")) ?? "")
-    .slice(4)
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
-  const sentences = paragraphs.flatMap((p, i) =>
-    newsSentences(p).map((text) => ({ text, paragraph: i + 1 })),
-  );
-  return { title, paragraphs, tags, sentences };
+  const data = articleData(article);
+  return {
+    ...data,
+    title: data.title,
+    sentences: mediaUnits(article, "sentence"),
+  };
 }
 export function newsKinds(stage: string, s: BookSettings) {
   if (stage === "IMAGES_PANEL") return s.stockKinds;
@@ -120,7 +108,9 @@ export function newsPrerequisite(
     return (s.panelHorizontal || s.panelVertical) &&
       [s.panelHorizontal, s.panelVertical]
         .filter(Boolean)
-        .every((k) => enough(k!, 4))
+        .every((k) =>
+          enough(k!, mediaUnits(article, s.imageUnit || "paragraph").length),
+        )
       ? null
       : "Lengkapi gambar sumber panel";
   if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
@@ -128,7 +118,10 @@ export function newsPrerequisite(
       kind === "VIDEO_KALIMAT" ? s.sentenceVideoKind : s.sentenceVideoHKind;
     if (!source) return "Pilih sumber gambar video di Pengaturan Konten";
     if (!p.outputs.TTS_KALIMAT) return "Buat audio terlebih dahulu";
-    return enough(sentenceJob(source), content.sentences.length)
+    return enough(
+      sentenceJob(source),
+      mediaUnits(article, s.imageUnit || "sentence").length,
+    )
       ? null
       : "Lengkapi gambar per kalimat";
   }
@@ -150,8 +143,10 @@ export function newsStageDone(
 ) {
   if (stage === "IMAGES_PANEL" || stage === "IMAGES_VIDEO") {
     const kinds = newsKinds(stage, s);
-    const total =
-      stage === "IMAGES_PANEL" ? 4 : newsContent(article).sentences.length;
+    const total = mediaUnits(
+      article,
+      s.imageUnit || (stage === "IMAGES_PANEL" ? "paragraph" : "sentence"),
+    ).length;
     return (
       kinds.length > 0 &&
       total > 0 &&
@@ -177,7 +172,7 @@ export function newsStageDone(
 }
 export function newsCaption(article: string) {
   const c = newsContent(article);
-  const source = /^1\. \[[^\]]+\]\((https:\/\/[^\s)]+)\)$/m.exec(article)?.[1];
+  const source = c.source;
   const tags = [
     ...new Set(
       ["berita", ...c.tags].map(

@@ -1,10 +1,11 @@
+import { labConfig } from "./lab-config";
 import type mysql from "mysql2/promise";
 import type { BookSettings } from "./book-settings";
 import { labImageKind } from "./lab-image-types";
 
 export function imageSettingsFromLabels(
   settings: BookSettings,
-  rows: { id: number; image_type?: string }[],
+  rows: { id: number; image_type?: string; config?: string | null }[],
 ): BookSettings {
   const mode = (
     kind: string | null | undefined,
@@ -17,12 +18,31 @@ export function imageSettingsFromLabels(
       ? "direct"
       : "template";
   };
+  const selected = (kind: string | null | undefined) =>
+    labConfig(rows.find((row) => row.id === labImageKind(kind)?.id)?.config);
   return {
     ...settings,
-    carouselMode: mode(
-      settings.panelVertical || settings.panelHorizontal,
-      "template",
-    ),
+    ...(settings.imageUnit === undefined &&
+    selected(
+      settings.sentenceVideoKind ||
+        settings.sentenceVideoHKind ||
+        settings.panelVertical ||
+        settings.panelHorizontal,
+    )?.unit
+      ? {
+          imageUnit: selected(
+            settings.sentenceVideoKind ||
+              settings.sentenceVideoHKind ||
+              settings.panelVertical ||
+              settings.panelHorizontal,
+          )!.unit,
+        }
+      : {}),
+    carouselMode:
+      selected(settings.panelVertical || settings.panelHorizontal)?.usage ===
+      "carousel"
+        ? "direct"
+        : mode(settings.panelVertical || settings.panelHorizontal, "template"),
     singleImageMode: labImageKind(settings.wholeTextImageKind)
       ? "direct"
       : mode(settings.wholeTextImageKind, "direct"),
@@ -61,7 +81,7 @@ export async function resolveImageSettings(
   ];
   const [rows]: any = ids.length
     ? await db.query(
-        "SELECT id,image_type FROM lab_prompts WHERE kind='image' AND id IN (?)",
+        "SELECT id,image_type,config FROM lab_prompts WHERE kind='image' AND id IN (?)",
         [ids],
       )
     : [[]];

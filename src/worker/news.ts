@@ -1,3 +1,4 @@
+import { generateConfiguredArticle } from "./configured-article";
 import { NewsMediaStore } from "../server/news-media-store";
 import { productionLabPrompt } from "../server/lab-production";
 import { createHash } from "node:crypto";
@@ -80,6 +81,52 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
       store.db,
       j.content_type_id ?? 2,
     );
+    if (settings.articleConfig) {
+      const generated = await generateConfiguredArticle(
+        store.db,
+        settings,
+        "news",
+        dir,
+      );
+      const sourceUrl =
+        /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";
+      const result: NewsResult = {
+        article: generated.article,
+        article_config: settings.articleConfig,
+        candidate_topics: sourceUrl
+          ? [
+              {
+                source: generated.parsed.source,
+                url: sourceUrl,
+                original_title: generated.parsed.title,
+                summary: "",
+                selected: true,
+                reason: "",
+              },
+            ]
+          : [],
+        article_plan: {
+          title: generated.parsed.title,
+          sections: generated.parsed.paragraphs.map((p) => ({
+            heading: generated.parsed.heading,
+            summary: p,
+          })),
+        },
+        claim_source_map: [],
+        article_validation: { checks: [] },
+      };
+      writeFileSync(path.join(dir, "prompt.md"), generated.prompt, {
+        mode: 0o600,
+      });
+      writeFileSync(path.join(dir, "article.md"), generated.article, {
+        mode: 0o600,
+      });
+      await store.complete(j, result, {
+        configured: true,
+        source: settings.articleConfig.source,
+      });
+      return;
+    }
     const lab = await productionLabPrompt(store.db, settings, "news", {
       buku: "",
       bab: "",

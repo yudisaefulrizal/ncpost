@@ -1,7 +1,9 @@
+import { labConfig } from "./lab-config";
 export type LabImageType = {
   kind: string;
   name: string;
   imageType?: "illustration" | "ready_post" | "ready_video";
+  usage?: "single" | "carousel" | "video";
   orientation: "horizontal" | "vertikal" | "bebas";
 };
 export type LabImageCatalog = { stock: LabImageType[]; quote: LabImageType[] };
@@ -27,6 +29,7 @@ export function labImageCatalog(
     name: string;
     reference_key?: string | null;
     image_type?: string;
+    config?: string | null;
   }[],
 ): LabImageCatalog {
   const stock: LabImageType[] = [],
@@ -38,7 +41,11 @@ export function labImageCatalog(
         : row.image_type === "ready_post"
           ? "ready_post"
           : "illustration";
-    const typeMetadata = row.image_type ? { imageType } : {};
+    const config = labConfig(row.config);
+    const typeMetadata = {
+      ...(row.image_type ? { imageType } : {}),
+      ...(config?.usage ? { usage: config.usage } : {}),
+    };
     const key = row.reference_key || "";
     const stockOnly = key.startsWith("IMAGE_");
     const horizontal = [

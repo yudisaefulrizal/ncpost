@@ -790,14 +790,47 @@ footer {
   cursor: not-allowed;
 }
 .spinner {
+  position: relative;
   width: 28px;
   height: 28px;
   flex: none;
   display: inline-block;
   border-radius: 50%;
   border: 3px solid var(--line);
-  border-top-color: var(--brand);
+  border-top-color: var(--brand-ink);
+  border-right-color: var(--brand-ink);
   animation: spin 0.8s linear infinite;
+}
+.spinner::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--brand-ink);
+  animation: loading-pulse 1.2s ease-in-out infinite;
+}
+.lab-run-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.play .spinner,
+.lab-run-status .spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+.play .spinner::after,
+.lab-run-status .spinner::after {
+  inset: 4px;
+}
+.play:disabled:has(.spinner) {
+  opacity: 1;
+  cursor: progress;
+}
+@keyframes loading-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 @keyframes spin {
   to {
@@ -807,6 +840,9 @@ footer {
 @media (prefers-reduced-motion: reduce) {
   .spinner {
     animation-duration: 2.4s;
+  }
+  .spinner::after {
+    animation: none;
   }
 }
 .btn-danger {

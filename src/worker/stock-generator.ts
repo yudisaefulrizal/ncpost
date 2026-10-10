@@ -22,9 +22,11 @@ export async function generateStock(
   panel: number,
   lab?: ProductionLabPrompt | null,
 ) {
-  const prompt = lab
-    ? `${lab.prompt}\n\nOrientasi gambar: ${isHorizontalKind(kind) ? "horizontal 16:9" : "vertikal 9:16"}.`
-    : stockPrompt(kind, heading, paragraph);
+  const prompt = lab?.config
+    ? lab.prompt
+    : lab
+      ? `${lab.prompt}\n\nOrientasi gambar: ${isHorizontalKind(kind) ? "horizontal 16:9" : "vertikal 9:16"}.`
+      : stockPrompt(kind, heading, paragraph);
   const tmp = path.join(work, `stock-panel-${panel}.jpg`);
   let failure = "";
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -33,13 +35,15 @@ export async function generateStock(
         prompt,
         work,
         tmp,
-        lab?.imageType === "ready_video"
-          ? isHorizontalKind(kind)
-            ? "video-h"
-            : "video-v"
-          : isHorizontalKind(kind)
-            ? "horizontal"
-            : "vertikal",
+        lab?.config
+          ? "bebas"
+          : lab?.imageType === "ready_video"
+            ? isHorizontalKind(kind)
+              ? "video-h"
+              : "video-v"
+            : isHorizontalKind(kind)
+              ? "horizontal"
+              : "vertikal",
         ...(lab ? ([lab.images] as [string[]]) : []),
       );
       failure = "";

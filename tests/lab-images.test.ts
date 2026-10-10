@@ -175,9 +175,9 @@ it("snapshots multiple attachments and sends them together with the unchanged pr
   const query = vi.fn().mockResolvedValue([{ insertId: jobId }]);
   const db = new LabStore({ query } as any);
   await db.save({ ...draft, referenceImages });
-  expect(JSON.parse(query.mock.calls[0][1].at(-2))).toEqual(referenceImages);
+  expect(JSON.parse(query.mock.calls[0][1].at(-3))).toEqual(referenceImages);
   await db.enqueue({ ...draft, referenceImages });
-  expect(JSON.parse(query.mock.calls[1][1].at(-2))).toEqual(referenceImages);
+  expect(JSON.parse(query.mock.calls[1][1].at(-3))).toEqual(referenceImages);
   const generate = vi.fn().mockResolvedValue({ width: 400, height: 400 });
   const store = { heartbeat: vi.fn(), complete: vi.fn(), fail: vi.fn() } as any;
   await runLabJob(

@@ -1,5 +1,6 @@
+import { mediaUnits } from "./content-contract";
 import type { Chapter } from "./store";
-import { articleSentences, PANEL_COUNT, validateContentText } from "./domain";
+import { validateContentText } from "./domain";
 import { panelSources, sentenceJob, type BookSettings } from "./book-settings";
 
 export const CRON_TYPES = [
@@ -72,13 +73,17 @@ export function cronJobs(
 ): string[] {
   const ready =
     c.article_status === "siap" &&
-    validateContentText(c.article, c.content_engine).ok;
+    validateContentText(c.article, c.content_engine, c.article_config).ok;
   const count = (k: string) => Number(c.stock_counts?.[k] ?? 0);
   const missing = (kinds: string[], n: number) =>
     kinds.filter((k) => count(k) < n);
   if (kind === "ARTICLE") return c.article ? [] : [kind];
   if (!ready) return [];
-  const sentences = articleSentences(c.article, c.content_engine).length;
+  const sentences = mediaUnits(
+    c.article,
+    s.imageUnit || "sentence",
+    c.content_engine === "quote",
+  ).length;
   switch (kind) {
     case "QUOTE":
       return c.quote ? [] : [kind];
@@ -87,7 +92,14 @@ export function cronJobs(
     case "POST_IMAGE":
       return c.text_image ? [] : [kind];
     case "IMAGES_PANEL":
-      return missing(s.stockKinds, PANEL_COUNT);
+      return missing(
+        s.stockKinds,
+        mediaUnits(
+          c.article,
+          s.imageUnit || "paragraph",
+          c.content_engine === "quote",
+        ).length,
+      );
     case "IMAGES_VIDEO":
       return missing(s.sentenceKinds.map(sentenceJob), sentences);
     case "TTS_KALIMAT":
@@ -109,7 +121,15 @@ export function cronJobs(
       if (s.carouselMode === "direct") return c.panels ? [] : [kind];
       return !c.panels &&
         panelSources(s).length > 0 &&
-        panelSources(s).every((k) => count(k) >= PANEL_COUNT)
+        panelSources(s).every(
+          (k) =>
+            count(k) >=
+            mediaUnits(
+              c.article,
+              s.imageUnit || "paragraph",
+              c.content_engine === "quote",
+            ).length,
+        )
         ? [kind]
         : [];
     case "POST_IG":

@@ -35,6 +35,8 @@ export async function migrateDatabase(connection: Connection) {
     );
   }
   for (const [table, column, definition] of [
+    ["lab_prompts", "config", "MEDIUMTEXT NULL"],
+    ["lab_runs", "config", "MEDIUMTEXT NULL"],
     ["chapters", "text_image", "TEXT NULL"],
     ["chapters", "content_type_id", "INT NOT NULL DEFAULT 1"],
     ["news_articles", "content_type_id", "INT NOT NULL DEFAULT 2"],
@@ -65,6 +67,18 @@ export async function migrateDatabase(connection: Connection) {
         `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
       );
   }
+  for (const table of ["lab_prompts", "lab_runs"]) {
+    const [columns]: any = await connection.query(
+      `SHOW COLUMNS FROM ${table} LIKE 'config'`,
+    );
+    if (columns[0]?.Type === "text")
+      await connection.query(
+        `ALTER TABLE ${table} MODIFY COLUMN config MEDIUMTEXT NULL`,
+      );
+  }
+  await connection.query(
+    "UPDATE lab_prompts SET kind='article' WHERE kind='quote'",
+  );
   for (const [table, keys] of [
     ["book_settings", "content_type_id,book_key"],
     ["book_cron", "content_type_id,book_key,kind"],

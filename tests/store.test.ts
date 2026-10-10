@@ -519,9 +519,9 @@ it("impor JSON: satu entri salah membatalkan semua; batas dan bentuk file divali
   await expect(s.importChapters([])).rejects.toThrow(/tidak berisi/);
   await expect(
     s.importChapters(
-      Array.from({ length: 501 }, (_, i) => ({ buku: "B", tema: "T" + i })),
+      Array.from({ length: 601 }, (_, i) => ({ buku: "B", tema: "T" + i })),
     ),
-  ).rejects.toThrow(/500/);
+  ).rejects.toThrow(/600/);
   await expect(
     s.importChapters([{ buku: "B", tema: "x".repeat(501) }]),
   ).rejects.toThrow(/terlalu panjang/);

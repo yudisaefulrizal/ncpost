@@ -14,13 +14,14 @@ export async function generateStandaloneQuote(
 ) {
   const ids = settings.labPromptIds || [];
   if (!ids.length)
-    throw Error("Aktifkan prompt Lab Quote di Pengaturan Konten");
+    throw Error("Aktifkan prompt Quote dari Lab Artikel di Pengaturan Konten");
   const [rows]: any = await db.query(
     "SELECT * FROM lab_prompts WHERE id IN (?) ORDER BY id",
     [ids],
   );
   const row = selectLabPrompt(rows, "QUOTE");
-  if (!row) throw Error("Aktifkan prompt Lab Quote di Pengaturan Konten");
+  if (!row)
+    throw Error("Aktifkan prompt Quote dari Lab Artikel di Pengaturan Konten");
   return quoteText(
     await generate(quoteInstruction(standaloneQuotePrompt(row.prompt)), work),
   );

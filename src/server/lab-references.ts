@@ -3,7 +3,7 @@ import type { LabKind } from "./lab";
 const REFERENCES = [
   {
     id: "quote",
-    kind: "quote",
+    kind: "article",
     name: "Quote",
     file: "quote/mandiri.md",
     orientation: "bebas",
@@ -84,7 +84,11 @@ export function resolveLabPrompt(
   template: string,
 ) {
   if (!reference) return template;
-  const ref = REFERENCES.find((r) => r.id === reference && r.kind === kind);
+  const ref = REFERENCES.find(
+    (r) =>
+      r.id === reference &&
+      (r.kind === kind || (kind === "quote" && reference === "quote")),
+  );
   if (!ref) throw Error("Referensi prompt Lab tidak valid");
   const variables: Record<string, string> = {
     buku: JSON.stringify("How to Win Friends and Influence People"),

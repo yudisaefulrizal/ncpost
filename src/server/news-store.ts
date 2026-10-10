@@ -163,7 +163,13 @@ export class NewsStore {
             .update(
               (news.content_type_id && news.content_type_id !== 2
                 ? `${news.content_type_id}:`
-                : "") + newsSourceKey(edit.sourceUrl).url,
+                : "") +
+                (edit.sourceUrl
+                  ? newsSourceKey(
+                      edit.sourceUrl,
+                      !!currentContentType()?.settings?.articleConfig,
+                    ).url
+                  : edit.article),
             )
             .digest("hex");
           await c.query(
@@ -190,7 +196,10 @@ export class NewsStore {
     if (typeof article !== "string" || article.length > 100000)
       throw Error("Isi artikel berita tidak valid");
     const text = article.replace(/\r\n/g, "\n").trim();
-    const validation = validateNewsArticle(text);
+    const validation = validateNewsArticle(
+      text,
+      currentContentType()?.settings?.articleConfig,
+    );
     if (!validation.ok || validation.title.length > 500)
       throw Error(
         validation.errors.join("; ") || "Judul maksimal 500 karakter",
@@ -248,7 +257,10 @@ export class NewsStore {
       .update(
         (j.content_type_id && j.content_type_id !== 2
           ? `${j.content_type_id}:`
-          : "") + newsSourceKey(v.sourceUrl!).url,
+          : "") +
+          (v.sourceUrl
+            ? newsSourceKey(v.sourceUrl, !!result.article_config).url
+            : result.article),
       )
       .digest("hex");
     try {

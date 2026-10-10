@@ -1,3 +1,5 @@
+import { mediaUnits, imageVariables } from "../server/content-contract";
+import { generateConfiguredArticle } from "./configured-article";
 import { generateStandaloneQuote } from "./quote";
 import { quoteText, quoteInstruction } from "../server/quote-text";
 import { buildImageAudioVideo } from "../server/image-audio-video";
@@ -40,8 +42,6 @@ import {
   validateDraft,
   parseHook,
   mergeHook,
-  articleSentences,
-  PANEL_COUNT,
   partNumber,
   instagramCaption,
 } from "../server/domain";
@@ -149,7 +149,7 @@ async function revise(article: string, report: any, c: Chapter, work: string) {
     work,
   );
 }
-const CLOSING_FILE = `0${PANEL_COUNT + 1}-slide-penutup.jpg`;
+
 // Panel JPEG (format yang diterima Instagram); 4:4:4 agar teks tetap tajam.
 const PANEL_JPEG = { quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" };
 // Perbaiki format saja (struktur H1/H2, lima paragraf, atribusi, tag);
@@ -203,8 +203,9 @@ function publicPanels(c: Chapter) {
   const origin = process.env.PUBLIC_ORIGIN || "https://ncpost.nuscode.id";
   const dir = path.join(ROOT, "output/public");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return [...m.panels.map((p: any) => p.file), m.closing].map(
-    (file: string) => {
+  return [...m.panels.map((p: any) => p.file), m.closing]
+    .filter(Boolean)
+    .map((file: string) => {
       const name =
         createHash("sha256")
           .update(`${c.id}:${m.renderedAt}:${file}`)
@@ -212,8 +213,7 @@ function publicPanels(c: Chapter) {
           .slice(0, 32) + ".jpg";
       copyFileSync(path.join(panelDir(c), file), path.join(dir, name));
       return `${origin}/pub/${name}`;
-    },
-  );
+    });
 }
 // Video versi upload disalin ke output/public dengan nama tetap per render.
 function publicVideo(c: Chapter) {
@@ -238,20 +238,64 @@ async function runJob(job: Job) {
     const c = (await store.chapter(job.chapter_id))!;
     const work = path.join(ROOT, "output/work", String(job.id));
     mkdirSync(work, { recursive: true, mode: 0o700 });
-    const labFor = async (target: string, text = "", quote = "") =>
+    const mediaSettings = await store.bookSettings(
+      c.book,
+      store.db,
+      c.content_type_id ?? 1,
+    );
+    const labFor = async (
+      target: string,
+      text = "",
+      quote = "",
+      variables: Record<string, string> = {},
+    ) =>
       productionLabPrompt(
         store.db,
         await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
         target,
         {
+          ...(c.article
+            ? imageVariables(
+                c.article,
+                mediaSettings.imageUnit || "paragraph",
+                0,
+                c.content_engine === "quote",
+                c.book,
+                c.title,
+              )
+            : {}),
           buku: JSON.stringify(c.book),
           bab: JSON.stringify(c.title),
           teks: text,
-          artikel: c.article,
+          artikel: c.article
+            ? imageVariables(
+                c.article,
+                "article",
+                0,
+                c.content_engine === "quote",
+              ).artikel
+            : "",
           quote: quote || text,
+          ...variables,
         },
       );
-    if (job.kind === "ARTICLE" && c.content_engine === "quote") {
+    if (job.kind === "ARTICLE" && c.article_config) {
+      const generated = await generateConfiguredArticle(
+        store.db,
+        await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
+        c.content_engine || "book",
+        work,
+        c.book,
+        c.title,
+      );
+      writeFileSync(path.join(work, "prompt.md"), generated.prompt, {
+        mode: 0o600,
+      });
+      await store.complete(job.id, {
+        article: generated.article,
+        report: JSON.stringify({ lolos: true, format: "configured" }),
+      });
+    } else if (job.kind === "ARTICLE" && c.content_engine === "quote") {
       const text = await generateStandaloneQuote(
         store.db,
         await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
@@ -263,11 +307,20 @@ async function runJob(job: Job) {
         report: JSON.stringify({ lolos: true, format: "quote" }),
       });
     } else if (job.kind === "PREVIEW") {
-      const v = validateContentText(c.article, c.content_engine);
+      const v = validateContentText(
+        c.article,
+        c.content_engine,
+        c.article_config,
+      );
       if (!v.ok) throw Error(v.errors.join("; "));
       const files = [];
       const part = partNumber(await store.list(), c);
-      for (let i = 0; i < PANEL_COUNT; i++) {
+      const units = mediaUnits(
+        c.article,
+        mediaSettings.imageUnit || "paragraph",
+        c.content_engine === "quote",
+      );
+      for (let i = 0; i < units.length; i++) {
         const name = `panel-${i + 1}.png`;
         writeFileSync(
           path.join(work, name),
@@ -275,7 +328,7 @@ async function runJob(job: Job) {
             "1",
             i + 1,
             i === 0 ? v.heading : "",
-            v.paragraphs[i],
+            units[i].text,
             `${c.book} - Bagian ${part}`,
           ),
         );
@@ -285,7 +338,7 @@ async function runJob(job: Job) {
         preview: JSON.stringify({
           mode: "template-only",
           seed: job.id,
-          templates: Array(5).fill("1"),
+          templates: Array(units.length).fill("1"),
           files,
           cta: "/api/cta",
           final: false,
@@ -293,7 +346,11 @@ async function runJob(job: Job) {
       });
     } else if (job.kind === "QUOTE") {
       // Prompt = instruksi + seluruh paragraf artikel final; output apa adanya.
-      const v = validateContentText(c.article, c.content_engine);
+      const v = validateContentText(
+        c.article,
+        c.content_engine,
+        c.article_config,
+      );
       if (!v.ok) throw Error("Quote butuh artikel final yang valid");
       const lab = await labFor("QUOTE", v.paragraphs.join("\n\n"));
       const quote = quoteText(
@@ -318,10 +375,15 @@ async function runJob(job: Job) {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const sentences = [];
       // Kalimat 1 (paragraf hook) didahului heading hook, seperti panel 1.
-      const { heading } = validateContentText(c.article, c.content_engine);
-      for (const [i, s] of articleSentences(
+      const { heading } = validateContentText(
         c.article,
         c.content_engine,
+        c.article_config,
+      );
+      for (const [i, s] of mediaUnits(
+        c.article,
+        mediaSettings.imageUnit || "sentence",
+        c.content_engine === "quote",
       ).entries()) {
         const text = ttsNarration(heading, s.text, i === 0);
         const file = `kalimat_${String(i + 1).padStart(2, "0")}.mp3`;
@@ -361,10 +423,15 @@ async function runJob(job: Job) {
         );
       if (!c.sentence_audio)
         throw Error("Video kalimat butuh audio per kalimat");
-      const sentences = articleSentences(c.article, c.content_engine);
+      const sentences = mediaUnits(
+        c.article,
+        mediaSettings.imageUnit || "sentence",
+        c.content_engine === "quote",
+      );
       const hookHeading = validateContentText(
         c.article,
         c.content_engine,
+        c.article_config,
       ).heading;
       const part = partNumber(await store.list(), c);
       const audio = JSON.parse(c.sentence_audio);
@@ -462,7 +529,7 @@ async function runJob(job: Job) {
     } else if (job.kind === "POST_IMAGE") {
       if (
         c.article_status !== "siap" ||
-        !validateContentText(c.article, c.content_engine).ok
+        !validateContentText(c.article, c.content_engine, c.article_config).ok
       )
         throw Error("Gambar per seluruh teks butuh artikel lolos editor");
       const settings = await store.bookSettings(
@@ -471,7 +538,18 @@ async function runJob(job: Job) {
         c.content_type_id ?? 1,
       );
       const style = settings.wholeTextImageKind || "IMAGE_HORIZONTAL";
-      const lab = await labFor(style, c.article);
+      const lab = await wholeTextProductionPrompt(
+        store.db,
+        settings,
+        imageVariables(
+          c.article,
+          "article",
+          0,
+          c.content_engine === "quote",
+          c.book,
+          c.title,
+        ),
+      );
       const postingOptions = {
         file: path.join(
           chapterDir(c),
@@ -481,10 +559,13 @@ async function runJob(job: Job) {
         title:
           c.content_engine === "quote"
             ? ""
-            : validateContentText(c.article, c.content_engine).heading,
-        text: validateContentText(c.article, c.content_engine).paragraphs.join(
-          "\n\n",
-        ),
+            : validateContentText(c.article, c.content_engine, c.article_config)
+                .heading,
+        text: validateContentText(
+          c.article,
+          c.content_engine,
+          c.article_config,
+        ).paragraphs.join("\n\n"),
         footer:
           c.content_engine === "quote"
             ? ""
@@ -498,13 +579,7 @@ async function runJob(job: Job) {
           : settings.singleImageMode === "direct"
             ? await generateReadyPost({
                 ...postingOptions,
-                lab: await wholeTextProductionPrompt(store.db, settings, {
-                  teks: c.article,
-                  artikel: c.article,
-                  bab: c.title,
-                  buku: c.book,
-                  quote: "",
-                }),
+                lab,
               })
             : await generateWholeTextImage(
                 c,
@@ -522,7 +597,14 @@ async function runJob(job: Job) {
                   ),
                   {
                     teks: c.article,
-                    artikel: c.article,
+                    artikel: c.article
+                      ? imageVariables(
+                          c.article,
+                          "article",
+                          0,
+                          c.content_engine === "quote",
+                        ).artikel
+                      : "",
                     bab: c.title,
                     buku: c.book,
                     quote: "",
@@ -596,7 +678,7 @@ async function runJob(job: Job) {
         requestId,
         igUserId,
         imageUrls: publicPanels(c),
-        caption: instagramCaption(c.article),
+        caption: instagramCaption(c.article, c.article_config),
       });
       await store.setPost(c.id, {
         status: String(r.status),
@@ -624,7 +706,7 @@ async function runJob(job: Job) {
         requestId,
         igUserId,
         videoUrl: publicVideo(c),
-        caption: instagramCaption(c.article),
+        caption: instagramCaption(c.article, c.article_config),
       });
       await store.setReels(c.id, {
         status: String(r.status),
@@ -636,7 +718,11 @@ async function runJob(job: Job) {
       // Port render_panels_5panel.py: 5 panel + slide penutup, 1080×1350.
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
-      const v = validateContentText(c.article, c.content_engine);
+      const v = validateContentText(
+        c.article,
+        c.content_engine,
+        c.article_config,
+      );
       // Sumber gambar panel mengikuti Pengaturan Konten buku ini.
       const settings = await store.bookSettings(
         c.book,
@@ -651,7 +737,20 @@ async function runJob(job: Job) {
           work,
           filePrefix: `direct-r${job.revision}-j${job.id}-`,
           title: stripMarkdownEmphasis(v.heading),
-          paragraphs: v.paragraphs.map(stripMarkdownEmphasis),
+          paragraphs: mediaUnits(
+            c.article,
+            settings.imageUnit || "paragraph",
+            c.content_engine === "quote",
+          ).map((entry) => stripMarkdownEmphasis(entry.text)),
+          variables: (index) =>
+            imageVariables(
+              c.article,
+              settings.imageUnit || "paragraph",
+              index,
+              c.content_engine === "quote",
+              c.book,
+              c.title,
+            ),
           footer: `${c.book} - Bagian ${partNumber(await store.list(), c)}`,
           kind: settings.panelVertical || settings.panelHorizontal!,
           labFor,
@@ -663,7 +762,9 @@ async function runJob(job: Job) {
               ...p,
               file: path.relative(panelDir(c), p.file),
             })),
-            closing: path.relative(panelDir(c), manifest.closing),
+            closing: manifest.closing
+              ? path.relative(panelDir(c), manifest.closing)
+              : null,
           }),
         });
         return;
@@ -678,18 +779,41 @@ async function runJob(job: Job) {
         [settings.panelHorizontal, horizontal],
         [settings.panelVertical, vertical],
       ] as const)
-        if (source && list.length < PANEL_COUNT)
-          throw Error("Render panel butuh lima stok gambar " + source);
+        if (
+          source &&
+          list.length <
+            mediaUnits(
+              c.article,
+              settings.imageUnit || "paragraph",
+              c.content_engine === "quote",
+            ).length
+        )
+          throw Error("Render panel butuh stok untuk setiap unit: " + source);
       const part = partNumber(await store.list(), c);
       const footer = `${c.book} - Bagian ${part}`;
       const dir = panelDir(c);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const panels = [];
-      for (let i = 0; i < PANEL_COUNT; i++) {
+      for (
+        let i = 0;
+        i <
+        mediaUnits(
+          c.article,
+          settings.imageUnit || "paragraph",
+          c.content_engine === "quote",
+        ).length;
+        i++
+      ) {
         // Heading panel 1 = judul bagian (input pengguna), bukan judul artikel.
         const heading = i === 0 ? stripMarkdownEmphasis(v.heading) : "";
-        const body = stripMarkdownEmphasis(v.paragraphs[i]);
+        const body = stripMarkdownEmphasis(
+          mediaUnits(
+            c.article,
+            settings.imageUnit || "paragraph",
+            c.content_engine === "quote",
+          )[i].text,
+        );
         const portrait = vertical.find((b) => b.panel === i + 1);
         const t = pickTemplate(
           heading,
@@ -725,14 +849,13 @@ async function runJob(job: Job) {
       const meta = await sharp(closing).metadata();
       if (meta.width !== 1080 || meta.height !== 1350)
         throw Error("Slide penutup bukan 1080×1350");
-      await sharp(closing)
-        .jpeg(PANEL_JPEG)
-        .toFile(path.join(dir, CLOSING_FILE));
+      const closingFile = `${String(panels.length + 1).padStart(2, "0")}-slide-penutup.jpg`;
+      await sharp(closing).jpeg(PANEL_JPEG).toFile(path.join(dir, closingFile));
       await store.complete(job.id, {
         panels: JSON.stringify({
           footer,
           panels,
-          closing: CLOSING_FILE,
+          closing: closingFile,
           renderedAt: new Date().toISOString(),
         }),
       });
@@ -742,14 +865,34 @@ async function runJob(job: Job) {
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
       const kind = baseKind(job.kind);
-      const v = validateContentText(c.article, c.content_engine);
-      const sentences = articleSentences(c.article, c.content_engine);
+      const v = validateContentText(
+        c.article,
+        c.content_engine,
+        c.article_config,
+      );
+      const sentences = mediaUnits(
+        c.article,
+        mediaSettings.imageUnit || "sentence",
+        c.content_engine === "quote",
+      );
       let bound = true;
       for (let i = 0; i < sentences.length && bound; i++) {
         const taken = await store.stock(c.id, job.kind);
         if (taken.some((b) => b.panel === i + 1)) continue;
         const sentence = sentences[i].text;
-        const lab = await labFor(kind, sentence);
+        const lab = await labFor(
+          kind,
+          sentence,
+          "",
+          imageVariables(
+            c.article,
+            mediaSettings.imageUnit || "sentence",
+            i,
+            c.content_engine === "quote",
+            c.book,
+            c.title,
+          ),
+        );
         const match =
           job.force_new || lab
             ? undefined
@@ -767,14 +910,45 @@ async function runJob(job: Job) {
     } else if (job.kind.startsWith("IMAGE_")) {
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
-      const v = validateContentText(c.article, c.content_engine);
+      const v = validateContentText(
+        c.article,
+        c.content_engine,
+        c.article_config,
+      );
       let bound = true;
-      for (let i = 0; i < PANEL_COUNT && bound; i++) {
+      for (
+        let i = 0;
+        i <
+          mediaUnits(
+            c.article,
+            mediaSettings.imageUnit || "paragraph",
+            c.content_engine === "quote",
+          ).length && bound;
+        i++
+      ) {
         const taken = await store.stock(c.id, job.kind);
         if (taken.some((b) => b.panel === i + 1)) continue;
-        const heading = panelHeading(v.heading, v.paragraphs[i], i);
-        const paragraph = stripMarkdownEmphasis(v.paragraphs[i]);
-        const lab = await labFor(job.kind, `${heading} — ${paragraph}`);
+        const heading = v.heading;
+        const paragraph = stripMarkdownEmphasis(
+          mediaUnits(
+            c.article,
+            mediaSettings.imageUnit || "paragraph",
+            c.content_engine === "quote",
+          )[i].text,
+        );
+        const lab = await labFor(
+          job.kind,
+          `${heading} — ${paragraph}`,
+          "",
+          imageVariables(
+            c.article,
+            mediaSettings.imageUnit || "paragraph",
+            i,
+            c.content_engine === "quote",
+            c.book,
+            c.title,
+          ),
+        );
         const match =
           job.force_new || lab
             ? undefined

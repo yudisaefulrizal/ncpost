@@ -188,6 +188,7 @@ CREATE TABLE IF NOT EXISTS zernio_publications (
 
 CREATE TABLE IF NOT EXISTS lab_prompts (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  config MEDIUMTEXT NULL,
   reference_key VARCHAR(64) NULL,
   reference_image VARCHAR(40) NULL,
   logo_image VARCHAR(40) NULL,
@@ -206,6 +207,7 @@ CREATE TABLE IF NOT EXISTS lab_runs (
   logo_image VARCHAR(40) NULL,
   reference_images TEXT NULL,
   resolved_prompt MEDIUMTEXT NULL,
+  config MEDIUMTEXT NULL,
   kind VARCHAR(16) NOT NULL,
   image_type VARCHAR(16) NOT NULL DEFAULT 'illustration',
   name VARCHAR(190) NOT NULL,

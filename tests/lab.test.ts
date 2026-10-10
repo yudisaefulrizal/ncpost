@@ -61,6 +61,7 @@ it("queues a snapshot without modifying the saved production prompts", async () 
       null,
       "[]",
       "illustration",
+      null,
     ],
   );
   expect(query).toHaveBeenCalledTimes(1);

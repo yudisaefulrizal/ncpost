@@ -17,8 +17,8 @@ export function tiktokPublishInput(
   if (!options.privacy) throw Error("Atur privasi TikTok di Pengaturan Konten");
   const first = (
     source.startsWith("news:")
-      ? validateNewsArticle(article)
-      : validateContentText(article, engine)
+      ? validateNewsArticle(article, settings.articleConfig)
+      : validateContentText(article, engine, settings.articleConfig)
   ).paragraphs[0];
   const content = first?.replace(/[*_`]/g, "").trim();
   if (!content) throw Error("Paragraf pertama artikel belum tersedia");
