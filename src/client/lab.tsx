@@ -1,7 +1,7 @@
 import { ImageUploads, imageAttachments, uploadLabImage } from "./lab-uploads";
 import { Modal } from "./modal";
 import React, { useEffect, useState } from "react";
-type Kind = "article" | "image";
+type Kind = "article" | "image" | "quote";
 type Reference = {
   id: string;
   name: string;
@@ -70,7 +70,8 @@ function PreviewIcon() {
   );
 }
 export function PromptLab({ kind }: { kind: Kind }) {
-  const label = kind === "article" ? "Artikel" : "Gambar";
+  const label =
+    kind === "article" ? "Artikel" : kind === "quote" ? "Quote" : "Gambar";
   const [references, setReferences] = useState<Reference[]>([]);
   const [referenceKey, setReferenceKey] = useState("");
   const [tab, setTab] = useState<"test" | "status">("test");
@@ -466,7 +467,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 </select>
               </label>
             )}
-            {kind === "article" && (
+            {kind !== "image" && (
               <label className="field">
                 Ambil acuan (opsional)
                 <select

@@ -28,7 +28,12 @@ import {
   validSession,
   verifyPassword,
 } from "./auth";
-import { validateArticle, instagramCaption, bookKey } from "./domain";
+import {
+  validateArticle,
+  validateContentText,
+  instagramCaption,
+  bookKey,
+} from "./domain";
 import {
   STOCK_KINDS,
   normalizeBookSettings,
@@ -176,7 +181,7 @@ app.use("/api", async (req, res, next) => {
   if (
     (req.path.startsWith("/news") && type.engine !== "news") ||
     (/^\/(chapters|books|book-settings|book-crons)/.test(req.path) &&
-      type.engine !== "book")
+      !["book", "quote"].includes(type.engine))
   )
     throw Error("Sumber artikel tidak sesuai jenis konten");
   if (
@@ -412,7 +417,7 @@ app.get("/api/chapters/:id", async (req, res) => {
   if (!c) return void res.status(404).json({ error: "Bagian tidak ditemukan" });
   res.json({
     ...c,
-    validation: validateArticle(c.article),
+    validation: validateContentText(c.article, c.content_engine),
     stock: await store.stock(c.id),
   });
 });

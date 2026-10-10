@@ -112,6 +112,7 @@ export function selectLabPrompt(
 ) {
   const article = target === "book" || target === "news";
   const candidates = rows.filter((row) => {
+    if (target === "QUOTE") return row.kind === "quote";
     if (article)
       return (
         row.kind === "article" &&
@@ -138,6 +139,7 @@ export function productionLabText(
 ) {
   const fill = (text: string) =>
     text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+      if (key === "paragraf") return vars.teks || "";
       if (!(key in vars)) throw Error(`Placeholder {{${key}}} tidak dikenal`);
       return vars[key];
     });
@@ -157,7 +159,7 @@ export function productionLabText(
     return `${resolved}\n\nInput buku: ${vars.buku}; bab: ${vars.bab}.`;
   if (target === "news") return resolved;
   // A plain instruction must receive the actual production content as well.
-  return /\{\{(?:teks|artikel|quote)\}\}/.test(row.prompt)
+  return /\{\{(?:teks|artikel|quote|paragraf)\}\}/.test(row.prompt)
     ? resolved
     : `${resolved}\n\n${vars.teks || vars.quote || vars.artikel || ""}`;
 }
@@ -170,7 +172,7 @@ export async function productionLabPrompt(
   const custom = labImageKind(target);
   const ids = custom
     ? [custom.id]
-    : target === "book" || target === "news"
+    : target === "book" || target === "news" || target === "QUOTE"
       ? settings.labPromptIds || []
       : [];
   if (!ids.length) return null;

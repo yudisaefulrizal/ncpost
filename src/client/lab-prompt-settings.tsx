@@ -2,18 +2,20 @@ import React, { useEffect, useState } from "react";
 type Prompt = {
   id: number;
   name: string;
-  kind: "article" | "image";
+  kind: "article" | "image" | "quote";
   reference_key: string | null;
 };
 export function LabPromptSettings({
   engine,
   selected,
   images,
+  quote = false,
   onChange,
 }: {
   engine: "book" | "news";
   selected: number[];
   images: boolean;
+  quote?: boolean;
   onChange: (ids: number[]) => void;
 }) {
   const [prompts, setPrompts] = useState<Prompt[]>([]);
@@ -21,7 +23,7 @@ export function LabPromptSettings({
   useEffect(() => {
     let current = true;
     Promise.all(
-      ["article", "image"].map(async (kind) => {
+      (quote ? ["quote"] : ["article", "image"]).map(async (kind) => {
         const response = await fetch(`/api/lab/prompts?kind=${kind}`);
         const data = await response.json();
         if (!response.ok) throw Error(data.error || "Gagal memuat prompt Lab");
@@ -40,7 +42,7 @@ export function LabPromptSettings({
     return () => {
       current = false;
     };
-  }, [engine]);
+  }, [engine, quote]);
   return (
     <div className="settings-grid">
       {error && (
@@ -48,7 +50,7 @@ export function LabPromptSettings({
           {error}
         </p>
       )}
-      {(["article", "image"] as const)
+      {(quote ? (["quote"] as const) : (["article", "image"] as const))
         .filter((kind) => kind !== "image" || images)
         .map((kind) => {
           const list = prompts.filter(
@@ -60,7 +62,14 @@ export function LabPromptSettings({
           );
           return (
             <div className="stack-sm" key={kind}>
-              <b>Prompt {kind === "article" ? "Artikel" : "Gambar"}</b>
+              <b>
+                Prompt{" "}
+                {kind === "article"
+                  ? "Artikel"
+                  : kind === "quote"
+                    ? "Quote"
+                    : "Gambar"}
+              </b>
               {list.map((prompt) => (
                 <label className="check-row" key={prompt.id}>
                   <input

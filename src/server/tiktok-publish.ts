@@ -1,4 +1,4 @@
-import { validateArticle } from "./domain";
+import { validateArticle, validateContentText } from "./domain";
 import { validateNewsArticle } from "./news";
 import { socialTargets, type BookSettings } from "./book-settings";
 import { normalizeTikTokSettings } from "./tiktok-settings";
@@ -7,6 +7,7 @@ export function tiktokPublishInput(
   article: string,
   title: string,
   settings: BookSettings,
+  engine?: string,
 ) {
   if (!/^(book|news):[1-9]\d*$/.test(source))
     throw Error("Konten TikTok tidak valid");
@@ -17,7 +18,7 @@ export function tiktokPublishInput(
   const first = (
     source.startsWith("news:")
       ? validateNewsArticle(article)
-      : validateArticle(article)
+      : validateContentText(article, engine)
   ).paragraphs[0];
   const content = first?.replace(/[*_`]/g, "").trim();
   if (!content) throw Error("Paragraf pertama artikel belum tersedia");

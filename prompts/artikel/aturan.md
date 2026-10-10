@@ -52,14 +52,14 @@ tanpa heading).
 
 [Paragraf 5]
 
-Berdasarkan buku [Judul Buku], [Nama Penulis].
+Sumber: [Judul Buku], [Nama Penulis].
 
 Tag: tag pertama, tag kedua, tag ketiga
 ```
 
 - Tepat lima paragraf isi, tepat satu heading (paragraf 1).
 - Baris atribusi diletakkan setelah seluruh isi, format
-  `Berdasarkan buku [Judul Buku], [Nama Penulis].`
+  `Sumber: [Judul Buku], [Nama Penulis].`
 - `Tag:` diletakkan paling akhir, maksimal lima tag.
 - Jangan menaruh atribusi, URL, atau tag di dalam paragraf isi.
 - Judul tidak diawali "Kenapa"/"Mengapa".

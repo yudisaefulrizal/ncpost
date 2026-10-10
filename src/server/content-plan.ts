@@ -4,7 +4,7 @@ import {
   type ContentType,
 } from "./content-type-domain";
 import { cronJobs, type CronKind } from "./cron";
-import { validateArticle } from "./domain";
+import { validateContentText } from "./domain";
 import type { Chapter } from "./store";
 import type { BookSettings } from "./book-settings";
 import {
@@ -48,7 +48,7 @@ export function nextBookJob(
   const candidates =
     chapter.article && chapter.article_status !== "siap"
       ? chapter.article_status === "menunggu editor" &&
-        validateArticle(chapter.article).ok
+        validateContentText(chapter.article, type.engine).ok
         ? ["EDITOR"]
         : []
       : ORDER.filter((k) => stages.has(k)).flatMap((k) =>

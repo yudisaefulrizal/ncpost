@@ -2,6 +2,13 @@ import { readPrompt } from "./prompts";
 import type { LabKind } from "./lab";
 const REFERENCES = [
   {
+    id: "quote",
+    kind: "quote",
+    name: "Quote",
+    file: "quote/quote.md",
+    orientation: "bebas",
+  },
+  {
     id: "book",
     kind: "article",
     name: "Artikel buku",
@@ -83,6 +90,8 @@ export function resolveLabPrompt(
     buku: JSON.stringify("How to Win Friends and Influence People"),
     bab: JSON.stringify("Menghargai sudut pandang orang lain"),
     teks: "Menghargai sudut pandang orang lain — Dua orang bekerja sama menyelesaikan masalah dengan mendengarkan satu sama lain.",
+    paragraf:
+      "Dua orang bekerja sama dengan mendengarkan satu sama lain dan menghargai sudut pandang yang berbeda.",
     quote: "Dengarkan untuk memahami. Hargai sudut pandang orang lain.",
   };
   const fill = (text: string) =>

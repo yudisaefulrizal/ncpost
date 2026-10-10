@@ -1,5 +1,5 @@
 import type { Chapter } from "./store";
-import { articleSentences, PANEL_COUNT, validateArticle } from "./domain";
+import { articleSentences, PANEL_COUNT, validateContentText } from "./domain";
 import { panelSources, sentenceJob, type BookSettings } from "./book-settings";
 
 export const CRON_TYPES = [
@@ -70,13 +70,15 @@ export function cronJobs(
   c: Chapter,
   s: BookSettings,
 ): string[] {
-  const ready = c.article_status === "siap" && validateArticle(c.article).ok;
+  const ready =
+    c.article_status === "siap" &&
+    validateContentText(c.article, c.content_engine).ok;
   const count = (k: string) => Number(c.stock_counts?.[k] ?? 0);
   const missing = (kinds: string[], n: number) =>
     kinds.filter((k) => count(k) < n);
   if (kind === "ARTICLE") return c.article ? [] : [kind];
   if (!ready) return [];
-  const sentences = articleSentences(c.article).length;
+  const sentences = articleSentences(c.article, c.content_engine).length;
   switch (kind) {
     case "QUOTE":
       return c.quote ? [] : [kind];

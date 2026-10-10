@@ -17,7 +17,7 @@ export async function scheduleProduction(store: Store, limit = 12) {
       if (!type.settings?.managed || !type.settings.autoProcess) continue;
       await withContentType(type, async () => {
         const settings = type.settings!;
-        if (type.engine === "book") {
+        if (type.engine !== "news") {
           for (const chapter of await store.list()) {
             if (limit <= 0) break;
             if (

@@ -1,9 +1,9 @@
 import { labImageId, labImageFile, labImageIds } from "./lab-images";
 import { resolveLabPrompt } from "./lab-references";
 import type mysql from "mysql2/promise";
-export type LabKind = "article" | "image";
+export type LabKind = "article" | "image" | "quote";
 export function labKind(value: unknown): LabKind {
-  if (value !== "article" && value !== "image")
+  if (value !== "article" && value !== "image" && value !== "quote")
     throw Error("Jenis Lab tidak valid");
   return value;
 }

@@ -1,10 +1,11 @@
+import { quoteText } from "./quote-text";
 import { STOCK_KINDS, isStockKind, isSentenceKind } from "./book-settings";
 import { stripMarkdownEmphasis } from "./stock-prompts";
 // Artikel final = paragraf hook (di bawah heading hook) + lima paragraf isi.
 export const PANEL_COUNT = 6;
 // Kalimat artikel final (dipotong per . ! ?) berurutan dari paragraf 1–6.
-export function articleSentences(article: string) {
-  return validateArticle(article).paragraphs.flatMap((p, i) =>
+export function articleSentences(article: string, engine?: string) {
+  return validateContentText(article, engine).paragraphs.flatMap((p, i) =>
     stripMarkdownEmphasis(p)
       .trim()
       .split(/(?<=[.!?])\s+/)
@@ -19,6 +20,26 @@ export function validateDraft(raw: string) {
 // Artikel final: judul, heading hook, paragraf hook + lima paragraf.
 export function validateArticle(raw: string) {
   return parseArticle(raw, false);
+}
+export function validateContentText(raw: string, engine?: string) {
+  if (engine !== "quote") return validateArticle(raw);
+  let text = "",
+    errors: string[] = [];
+  try {
+    text = quoteText(raw);
+  } catch (e) {
+    errors = [(e as Error).message];
+  }
+  return {
+    ok: !errors.length,
+    errors,
+    title: "",
+    heading: "",
+    paragraphs: text ? [text] : [],
+    counts: text ? [text.split(/\s+/).length] : [],
+    attribution: "",
+    tags: [] as string[],
+  };
 }
 function parseArticle(raw: string, draft: boolean) {
   const errors: string[] = [];
@@ -42,7 +63,7 @@ function parseArticle(raw: string, draft: boolean) {
   const headingIndex = lines.findIndex((s) => s.startsWith("## "));
   if (lines.slice(1, headingIndex).some((s) => s.trim()))
     errors.push("Heading harus mendahului paragraf pertama.");
-  const at = lines.findIndex((s) => s.startsWith("Berdasarkan buku "));
+  const at = lines.findIndex((s) => /^(Sumber:|Berdasarkan buku )/.test(s));
   const paragraphs = lines
     .slice(headingIndex + 1, at < 0 ? lines.length : at)
     .join("\n")
@@ -60,10 +81,11 @@ function parseArticle(raw: string, draft: boolean) {
   const attribution = lines[at] ?? "";
   if (
     at < 0 ||
-    !/^Berdasarkan buku .+\.$/.test(attribution) ||
+    (!/^Sumber:\s*\S.*$/.test(attribution) &&
+      !/^Berdasarkan buku .+\.$/.test(attribution)) ||
     lines[at - 1]?.trim()
   )
-    errors.push("Atribusi terpisah wajib setelah isi.");
+    errors.push("Sumber: terpisah wajib setelah isi.");
   const tail = lines.slice(at + 1).filter((s) => s.trim());
   const tag = tail[0] ?? "";
   const tags = tag

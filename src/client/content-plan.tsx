@@ -52,8 +52,10 @@ export function ContentPlanFields({
   outputs,
   settings,
   onChange,
+  quote = false,
 }: {
   outputs: string[];
+  quote?: boolean;
   settings: BookSettings;
   onChange: (outputs: string[], settings: BookSettings) => void;
 }) {
@@ -136,22 +138,25 @@ export function ContentPlanFields({
       <fieldset className="output-targets">
         <legend>Target output</legend>
         <div className="output-target-options">
-          {FINAL_OUTPUTS.map(([key, label]) => (
-            <label key={key} className="check-row">
-              <input
-                type="checkbox"
-                checked={outputs.includes(key)}
-                disabled={outputs.length === 1 && outputs.includes(key)}
-                onChange={(e) => {
-                  const next = e.target.checked
-                    ? [...outputs, key]
-                    : outputs.filter((k) => k !== key);
-                  if (next.length) onChange(next, planSettings(next, settings));
-                }}
-              />
-              {label}
-            </label>
-          ))}
+          {FINAL_OUTPUTS.filter(([key]) => !quote || key === "POST_IMAGE").map(
+            ([key, label]) => (
+              <label key={key} className="check-row">
+                <input
+                  type="checkbox"
+                  checked={outputs.includes(key)}
+                  disabled={outputs.length === 1 && outputs.includes(key)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...outputs, key]
+                      : outputs.filter((k) => k !== key);
+                    if (next.length)
+                      onChange(next, planSettings(next, settings));
+                  }}
+                />
+                {label}
+              </label>
+            ),
+          )}
         </div>
       </fieldset>
       <div className="settings-grid">
@@ -226,6 +231,7 @@ export function ContentPlanCard({
       <h2 className="h3">{type.name}</h2>
       <ContentPlanFields
         outputs={outputs}
+        quote={type.engine === "quote"}
         settings={settings}
         onChange={(next, value) => {
           setOutputs(next);

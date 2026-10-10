@@ -128,7 +128,13 @@ export async function publishZernio(store: Store, input: any) {
             store.db,
             item.content_type_id ?? 2,
           );
-    input = tiktokPublishInput(source, item.article, item.title, saved);
+    input = tiktokPublishInput(
+      source,
+      item.article,
+      item.title,
+      saved,
+      item.content_engine,
+    );
   }
   const id = zernioId(input?.accountId);
   const connection = await zernioAccounts();

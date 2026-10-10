@@ -26,7 +26,7 @@ export const isFinalOutput = (key: string) =>
 export interface ContentType {
   id: number;
   name: string;
-  engine: "book" | "news";
+  engine: "book" | "news" | "quote";
   outputs: string[];
   settings: BookSettings | null;
 }
@@ -45,6 +45,7 @@ export function contentStages(
 }
 export function contentAllows(type: ContentType, kind: string) {
   const stages = contentStages(type);
+  if (type.engine === "quote") return ["ARTICLE", "POST_IMAGE"].includes(kind);
   if (kind === "POST_TIKTOK")
     return (
       type.settings?.socialTargets?.includes("tiktok") ??
@@ -67,7 +68,7 @@ export function normalizeContentType(input: any) {
   const name = typeof input?.name === "string" ? input.name.trim() : "";
   if (!name || name.length > 190)
     throw Error("Nama jenis wajib diisi, maksimal 190 karakter");
-  if (!["book", "news"].includes(input.engine))
+  if (!["book", "news", "quote"].includes(input.engine))
     throw Error("Sumber artikel tidak dikenal");
   const allowed = CONTENT_OUTPUTS.filter(
     ([key]) =>
@@ -82,6 +83,8 @@ export function normalizeContentType(input: any) {
   )
     throw Error("Pilih keluaran konten yang valid");
   const outputs = [...new Set<string>(input.outputs)];
+  if (input.engine === "quote" && outputs.some((key) => key !== "POST_IMAGE"))
+    throw Error("Target output Quote hanya 1 gambar");
   if (input.settings?.managed && outputs.some((key) => !isFinalOutput(key)))
     throw Error("Pilih target hasil akhir");
   const stages = contentStages({ outputs, settings: input.settings });

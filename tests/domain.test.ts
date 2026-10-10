@@ -171,3 +171,26 @@ it("aturan job paralel per bagian", async () => {
     ]),
   ).toBe(true);
 });
+
+it("accepts universal source metadata while retaining existing book articles", () => {
+  const article = valid.replace(
+    "Berdasarkan buku Atomic Habits.",
+    "Sumber: Atomic Habits, James Clear",
+  );
+  const parsed = validateArticle(article);
+  expect(parsed.ok).toBe(true);
+  expect(parsed.paragraphs).toHaveLength(6);
+  expect(parsed.attribution).toBe("Sumber: Atomic Habits, James Clear");
+  expect(
+    validateArticle(article.replace(parsed.attribution, "Sumber: ")).ok,
+  ).toBe(false);
+  expect(validateArticle(valid).ok).toBe(true);
+  const updatedDraft = draft.replace(
+    "Berdasarkan buku Atomic Habits.",
+    "Sumber: Atomic Habits",
+  );
+  expect(validateDraft(updatedDraft).ok).toBe(true);
+  expect(
+    mergeHook(updatedDraft, { heading: "Hook", paragraph: "Pembuka." }),
+  ).toContain("Sumber: Atomic Habits");
+});

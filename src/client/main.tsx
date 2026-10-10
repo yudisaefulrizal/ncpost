@@ -1,3 +1,5 @@
+import { QuoteProduction } from "./quote-production";
+import { FinishedVideos } from "./finished-videos";
 import {
   ProductionBatch,
   useProductionSelection,
@@ -103,6 +105,7 @@ const navGroups: [string, [string, IconName][]][] = [
     "Lab",
     [
       ["Lab Prompt Artikel", "doc"],
+      ["Lab Quote", "doc"],
       ["Lab Prompt Gambar", "image"],
     ],
   ],
@@ -197,7 +200,13 @@ function App() {
     setSearch("");
     setFilterBook("");
     setFilter("semua");
-    setPage(type.engine === "book" ? "Produksi" : "Produksi Berita");
+    setPage(
+      type.engine === "news"
+        ? "Produksi Berita"
+        : type.engine === "quote"
+          ? "Produksi Quote"
+          : "Produksi",
+    );
   };
   const activeStages = activeType
     ? contentStages(activeType)
@@ -215,7 +224,10 @@ function App() {
           ["Cronjob Berita", "gear"],
         ]
       : [
-          ["Produksi", "video"],
+          [
+            activeType?.engine === "quote" ? "Produksi Quote" : "Produksi",
+            "video",
+          ],
           ["Pengaturan Konten", "sliders"],
           ["Cronjob", "gear"],
         ];
@@ -223,7 +235,7 @@ function App() {
   const refresh = async () => {
     if (
       !activeType ||
-      activeType.engine !== "book" ||
+      activeType.engine === "news" ||
       activeTypeId.current !== activeType.id
     )
       return;
@@ -1530,6 +1542,15 @@ function App() {
         onSaved={loadContentTypes}
       />
     );
+  } else if (page === "Produksi Quote") {
+    sub = "";
+    content = activeType && (
+      <QuoteProduction
+        key={activeType.id}
+        type={activeType}
+        icon={(name) => <Icon name={name} size={14} />}
+      />
+    );
   } else if (page === "Produksi Berita") {
     sub = "";
     content = (
@@ -1579,12 +1600,22 @@ function App() {
     sub =
       "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
     content = <NewsCronSettings key={activeType?.id} />;
-  } else if (page === "Lab Prompt Artikel" || page === "Lab Prompt Gambar") {
+  } else if (
+    page === "Lab Prompt Artikel" ||
+    page === "Lab Prompt Gambar" ||
+    page === "Lab Quote"
+  ) {
     sub = "";
     content = (
       <PromptLab
         key={page}
-        kind={page === "Lab Prompt Artikel" ? "article" : "image"}
+        kind={
+          page === "Lab Prompt Artikel"
+            ? "article"
+            : page === "Lab Quote"
+              ? "quote"
+              : "image"
+        }
       />
     );
   } else if (page === "Kredensial") {
@@ -1722,11 +1753,23 @@ function App() {
               instagram={instagram}
               onChange={set}
             />
+            {activeType.engine !== "quote" && (
+              <details>
+                <summary>Prompt artikel</summary>
+                <LabPromptSettings
+                  engine="book"
+                  images={false}
+                  selected={draft.labPromptIds || []}
+                  onChange={(ids) => set({ labPromptIds: ids })}
+                />
+              </details>
+            )}
             <details>
-              <summary>Prompt artikel</summary>
+              <summary>Prompt quote</summary>
               <LabPromptSettings
                 engine="book"
                 images={false}
+                quote
                 selected={draft.labPromptIds || []}
                 onChange={(ids) => set({ labPromptIds: ids })}
               />
@@ -1756,58 +1799,8 @@ function App() {
       </div>
     );
   } else if (page === "Stok Konten Video") {
-    sub =
-      "Video final per bagian: 9:16 untuk Reels dan 16:9 untuk platform lain.";
-    const videos = rows.filter((c) => c.sentence_video || c.sentence_video_h);
-    content = videos.length ? (
-      <div className="video-grid">
-        {videos.map((c) => (
-          <section key={c.id} className="card pad stack">
-            <div className="card-title">
-              <div>
-                <h2 className="h3">{c.title}</h2>
-                <small className="muted">{c.book}</small>
-              </div>
-            </div>
-            {[
-              ["sentence_video", "video-kalimat", "tall"],
-              ["sentence_video_h", "video-kalimat-h", "wide"],
-            ].map(([column, route, shape]) => {
-              if (!c[column]) return null;
-              const m = parse(c[column]);
-              return (
-                <figure key={column} className="stack-sm">
-                  <video
-                    className={"reels-player " + shape}
-                    controls
-                    preload="metadata"
-                    src={`/api/${route}/${c.id}/${m.file}?v=${m.renderedAt}`}
-                  />
-                  <figcaption className="muted small">
-                    {m.width}×{m.height} · {Math.round(m.duration)} dtk
-                  </figcaption>
-                </figure>
-              );
-            })}
-          </section>
-        ))}
-      </div>
-    ) : (
-      <section className="card pad">
-        <div className="empty">
-          Belum ada video buku. Jalankan ▶ Video di halaman Produksi setelah
-          gambar dan audio per kalimat siap.
-        </div>
-      </section>
-    );
-    content = (
-      <div className="stack-lg">
-        {content}
-        {activeType?.engine === "news" && (
-          <NewsFinishedContent key={activeType.id} kind="VIDEO" />
-        )}
-      </div>
-    );
+    sub = "";
+    content = <FinishedVideos />;
   } else if (page === "Stok Gambar") {
     sub = "Kolam stok gambar per lajur.";
     content = <StockGallery />;
@@ -4448,7 +4441,7 @@ function ArticleModal({ c, onClose }: { c: any; onClose: () => void }) {
           <h3 key={i} className="h3">
             {b.slice(3)}
           </h3>
-        ) : b.startsWith("Berdasarkan buku") ? (
+        ) : /^(Sumber:|Berdasarkan buku )/.test(b) ? (
           <p key={i} className="muted small">
             {b}
           </p>
@@ -4486,7 +4479,7 @@ function FinishedImages({ rows }: { rows: any[] }) {
           types.map(async (type: ContentType) => ({
             engine: type.engine,
             items: await api(
-              type.engine === "book" ? "/chapters" : "/news",
+              type.engine !== "news" ? "/chapters" : "/news",
               "GET",
               undefined,
               type.id,
@@ -4496,7 +4489,7 @@ function FinishedImages({ rows }: { rows: any[] }) {
         if (current) {
           setBooks(
             results
-              .filter((result) => result.engine === "book")
+              .filter((result) => result.engine !== "news")
               .flatMap((result) => result.items),
           );
           setNews(

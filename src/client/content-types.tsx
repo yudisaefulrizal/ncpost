@@ -17,7 +17,7 @@ export function ContentTypes({
 }) {
   const [editing, setEditing] = useState<ContentType | "new" | null>(null);
   const [name, setName] = useState("");
-  const [engine, setEngine] = useState<"book" | "news">("book");
+  const [engine, setEngine] = useState<ContentType["engine"]>("book");
   const [outputs, setOutputs] = useState<string[]>(["VIDEO_KALIMAT"]);
   const [settings, setSettings] = useState<BookSettings>(() => ({
     ...planSettings(["VIDEO_KALIMAT"], null),
@@ -30,7 +30,11 @@ export function ContentTypes({
     setName(type === "new" ? "" : type.name);
     setEngine(type === "new" ? "book" : type.engine);
     const next =
-      type === "new" ? ["VIDEO_KALIMAT"] : finalTargets(type.outputs);
+      type === "new"
+        ? ["VIDEO_KALIMAT"]
+        : type.engine === "quote"
+          ? ["POST_IMAGE"]
+          : finalTargets(type.outputs);
     setOutputs(next);
     setSettings(
       type === "new"
@@ -131,19 +135,26 @@ export function ContentTypes({
               />
             </label>
             <label className="field">
-              Sumber artikel
+              Jenis teks
               <select
                 value={engine}
                 disabled={editing !== "new"}
                 onChange={(e) => {
-                  setEngine(e.target.value as "book" | "news");
+                  const next = e.target.value as ContentType["engine"];
+                  setEngine(next);
+                  if (next === "quote") {
+                    setOutputs(["POST_IMAGE"]);
+                    setSettings(planSettings(["POST_IMAGE"], settings));
+                  }
                 }}
               >
+                <option value="quote">Quote</option>
                 <option value="book">Buku</option>
                 <option value="news">Berita teknologi</option>
               </select>
             </label>
             <ContentPlanFields
+              quote={engine === "quote"}
               outputs={outputs}
               settings={settings}
               onChange={(next, value) => {

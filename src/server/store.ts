@@ -15,6 +15,7 @@ import {
 } from "./cron";
 import {
   validateArticle,
+  validateContentText,
   roundRobin,
   canStart,
   bookKey,
@@ -40,6 +41,7 @@ import {
 } from "./output-paths";
 export interface Chapter {
   content_type_id?: number;
+  content_engine?: "book" | "news" | "quote";
   id: number;
   book: string;
   title: string;
@@ -398,8 +400,8 @@ export class Store {
     const chapters = await rows<Chapter>(
       this.db,
       currentContentType()
-        ? "SELECT * FROM chapters WHERE content_type_id=? ORDER BY id"
-        : "SELECT * FROM chapters ORDER BY id",
+        ? "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.content_type_id=? ORDER BY c.id"
+        : "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id ORDER BY c.id",
       currentContentType() ? [currentContentType()!.id] : [],
     );
     const counts = await rows<{ chapter_id: number; kind: string; n: number }>(
@@ -459,7 +461,11 @@ export class Store {
   async saveBookSettings(book: string, input: unknown) {
     if (!bookKey(book)) throw Error("Judul buku wajib diisi");
     const settings = normalizeBookSettings(input);
-    await validateLabSettings(this.db, settings, "book");
+    await validateLabSettings(
+      this.db,
+      settings,
+      currentContentType()?.engine ?? "book",
+    );
     await run(
       this.db,
       "REPLACE INTO book_settings(book_key,settings,content_type_id) VALUES(?,?,?)",
@@ -639,7 +645,11 @@ export class Store {
   }
   async chapter(id: number, db: Db = this.db) {
     return (
-      await rows<Chapter>(db, "SELECT * FROM chapters WHERE id=?", [id])
+      await rows<Chapter>(
+        db,
+        "SELECT c.*,t.engine AS content_engine FROM chapters c JOIN content_types t ON t.id=c.content_type_id WHERE c.id=?",
+        [id],
+      )
     )[0];
   }
   async nextChapter() {
@@ -648,7 +658,12 @@ export class Store {
     )[0];
   }
   async save(id: number, article: string) {
-    if (!(await this.chapter(id))) throw Error("Bagian tidak ditemukan");
+    const chapter = await this.chapter(id);
+    if (!chapter) throw Error("Bagian tidak ditemukan");
+    if (chapter.content_engine === "quote") {
+      const valid = validateContentText(article, "quote");
+      if (!valid.ok) throw Error(valid.errors.join("; "));
+    }
     await this.tx(async (db) => {
       await run(
         db,
@@ -660,7 +675,11 @@ export class Store {
         "UPDATE chapters SET article=?,article_status=?,revision=revision+1,quote=NULL,quote_image=NULL,text_image=NULL,sentence_audio=NULL,sentence_video=NULL,sentence_video_h=NULL,preview=NULL,report=NULL,visual_status='belum',panel_status='belum',panels=NULL,production_status='belum' WHERE id=?",
         [
           article,
-          validateArticle(article).ok ? "menunggu editor" : "draft",
+          validateContentText(article, chapter.content_engine).ok
+            ? chapter.content_engine === "quote"
+              ? "siap"
+              : "menunggu editor"
+            : "draft",
           id,
         ],
       );
@@ -712,7 +731,7 @@ export class Store {
         ).includes(baseKind(kind))
       )
         throw Error("Jenis gambar Lab belum diaktifkan");
-      await validateLabSettings(this.db, settings, "book");
+      await validateLabSettings(this.db, settings, type.engine);
     }
     if (kind === "ARTICLE" && c.article && !replace)
       throw Error("Artikel sudah ada; regenerasi eksplisit diperlukan");
@@ -726,7 +745,10 @@ export class Store {
       );
       if (!panelSources(settings).length)
         throw Error("Pilih sumber gambar panel");
-      if (c.article_status !== "siap" || !validateArticle(c.article).ok)
+      if (
+        c.article_status !== "siap" ||
+        !validateContentText(c.article, c.content_engine).ok
+      )
         throw Error("Carousel butuh artikel lolos editor");
       for (const source of settings.carouselMode === "direct"
         ? []
@@ -736,14 +758,18 @@ export class Store {
     }
     if (
       kind === "POST_IMAGE" &&
-      (c.article_status !== "siap" || !validateArticle(c.article).ok)
+      (c.article_status !== "siap" ||
+        !validateContentText(c.article, c.content_engine).ok)
     )
       throw Error("Gambar per seluruh teks butuh artikel lolos editor");
     if (kind === "POST_IMAGE" && c.text_image && !replace)
       throw Error("Gambar sudah tersedia; gunakan regenerate");
     if (kind === "QUOTE_IMAGE" && !c.quote)
       throw Error("Gambar quote butuh quote");
-    if (kind === "QUOTE" && !validateArticle(c.article).ok)
+    if (
+      kind === "QUOTE" &&
+      !validateContentText(c.article, c.content_engine).ok
+    )
       throw Error("Quote butuh artikel final yang valid");
     if (kind === "POST_IG") {
       if (c.panel_status !== "tersedia")
@@ -773,7 +799,7 @@ export class Store {
         throw Error(
           `Pilih sumber gambar Video Kalimat${kind === "VIDEO_KALIMAT_H" ? " H" : ""} di Pengaturan Konten`,
         );
-      const n = articleSentences(c.article).length;
+      const n = articleSentences(c.article, c.content_engine).length;
       if ((await this.stock(id, "S_" + source, connection)).length < n)
         throw Error("Video kalimat butuh gambar untuk setiap kalimat");
       if (!c.sentence_audio)
@@ -791,7 +817,10 @@ export class Store {
           "Hasil Reels sebelumnya belum pasti; periksa akun Instagram dulu",
         );
     }
-    if (kind === "PREVIEW" && !validateArticle(c.article).ok)
+    if (
+      kind === "PREVIEW" &&
+      !validateContentText(c.article, c.content_engine).ok
+    )
       throw Error("Artikel belum valid");
     // Regenerate stok: ikatan lajur ini dilepas dan job memaksa gambar baru.
     const regenerate = /^(S_)?IMAGE_/.test(kind) && replace;

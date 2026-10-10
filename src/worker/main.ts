@@ -1,3 +1,5 @@
+import { generateStandaloneQuote } from "./quote";
+import { quoteText, quoteInstruction } from "../server/quote-text";
 import { buildImageAudioVideo } from "../server/image-audio-video";
 import { publishZernio } from "../server/zernio-routes";
 import {
@@ -34,6 +36,7 @@ import { Store, type Chapter, type Job } from "../server/store";
 import { codex, editorReport, reviewChecks } from "../server/providers";
 import {
   validateArticle,
+  validateContentText,
   validateDraft,
   parseHook,
   mergeHook,
@@ -248,8 +251,20 @@ async function runJob(job: Job) {
           quote: quote || text,
         },
       );
-    if (job.kind === "PREVIEW") {
-      const v = validateArticle(c.article);
+    if (job.kind === "ARTICLE" && c.content_engine === "quote") {
+      const text = await generateStandaloneQuote(
+        store.db,
+        await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
+        c.title,
+        work,
+        codex,
+      );
+      await store.complete(job.id, {
+        article: text,
+        report: JSON.stringify({ lolos: true, format: "quote" }),
+      });
+    } else if (job.kind === "PREVIEW") {
+      const v = validateContentText(c.article, c.content_engine);
       if (!v.ok) throw Error(v.errors.join("; "));
       const files = [];
       const part = partNumber(await store.list(), c);
@@ -279,9 +294,15 @@ async function runJob(job: Job) {
       });
     } else if (job.kind === "QUOTE") {
       // Prompt = instruksi + seluruh paragraf artikel final; output apa adanya.
-      const v = validateArticle(c.article);
+      const v = validateContentText(c.article, c.content_engine);
       if (!v.ok) throw Error("Quote butuh artikel final yang valid");
-      const quote = await codex(quotePrompt(v.paragraphs), work);
+      const lab = await labFor("QUOTE", v.paragraphs.join("\n\n"));
+      const quote = quoteText(
+        await codex(
+          quoteInstruction(lab?.prompt || quotePrompt(v.paragraphs)),
+          work,
+        ),
+      );
       await store.complete(job.id, { quote: quote.trim() });
     } else if (job.kind === "TTS_KALIMAT") {
       // Satu audio eleven_v3 per kalimat (teks kalimat saja, dibersihkan
@@ -298,8 +319,11 @@ async function runJob(job: Job) {
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       const sentences = [];
       // Kalimat 1 (paragraf hook) didahului heading hook, seperti panel 1.
-      const { heading } = validateArticle(c.article);
-      for (const [i, s] of articleSentences(c.article).entries()) {
+      const { heading } = validateContentText(c.article, c.content_engine);
+      for (const [i, s] of articleSentences(
+        c.article,
+        c.content_engine,
+      ).entries()) {
         const text = ttsNarration(heading, s.text, i === 0);
         const file = `kalimat_${String(i + 1).padStart(2, "0")}.mp3`;
         writeFileSync(path.join(dir, file), await tts(text, config));
@@ -338,8 +362,11 @@ async function runJob(job: Job) {
         );
       if (!c.sentence_audio)
         throw Error("Video kalimat butuh audio per kalimat");
-      const sentences = articleSentences(c.article);
-      const hookHeading = validateArticle(c.article).heading;
+      const sentences = articleSentences(c.article, c.content_engine);
+      const hookHeading = validateContentText(
+        c.article,
+        c.content_engine,
+      ).heading;
       const part = partNumber(await store.list(), c);
       const audio = JSON.parse(c.sentence_audio);
       if (audio.sentences.length !== sentences.length)
@@ -434,7 +461,10 @@ async function runJob(job: Job) {
         horizontal ? { sentenceVideoH: manifest } : { sentenceVideo: manifest },
       );
     } else if (job.kind === "POST_IMAGE") {
-      if (c.article_status !== "siap" || !validateArticle(c.article).ok)
+      if (
+        c.article_status !== "siap" ||
+        !validateContentText(c.article, c.content_engine).ok
+      )
         throw Error("Gambar per seluruh teks butuh artikel lolos editor");
       const settings = await store.bookSettings(
         c.book,
@@ -449,9 +479,17 @@ async function runJob(job: Job) {
           `gambar-teks-r${job.revision}-j${job.id}.jpg`,
         ),
         work,
-        title: validateArticle(c.article).heading,
-        text: validateArticle(c.article).paragraphs.join("\n\n"),
-        footer: `${c.book} · Bagian ${partNumber(await store.list(), c)}`,
+        title:
+          c.content_engine === "quote"
+            ? ""
+            : validateContentText(c.article, c.content_engine).heading,
+        text: validateContentText(c.article, c.content_engine).paragraphs.join(
+          "\n\n",
+        ),
+        footer:
+          c.content_engine === "quote"
+            ? ""
+            : `${c.book} · Bagian ${partNumber(await store.list(), c)}`,
         kind: style,
         lab,
       };
@@ -599,7 +637,7 @@ async function runJob(job: Job) {
       // Port render_panels_5panel.py: 5 panel + slide penutup, 1080×1350.
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
-      const v = validateArticle(c.article);
+      const v = validateContentText(c.article, c.content_engine);
       // Sumber gambar panel mengikuti Pengaturan Konten buku ini.
       const settings = await store.bookSettings(
         c.book,
@@ -705,8 +743,8 @@ async function runJob(job: Job) {
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
       const kind = baseKind(job.kind);
-      const v = validateArticle(c.article);
-      const sentences = articleSentences(c.article);
+      const v = validateContentText(c.article, c.content_engine);
+      const sentences = articleSentences(c.article, c.content_engine);
       let bound = true;
       for (let i = 0; i < sentences.length && bound; i++) {
         const taken = await store.stock(c.id, job.kind);
@@ -730,7 +768,7 @@ async function runJob(job: Job) {
     } else if (job.kind.startsWith("IMAGE_")) {
       if (c.article_status !== "siap")
         throw Error("Artikel belum lolos editor");
-      const v = validateArticle(c.article);
+      const v = validateContentText(c.article, c.content_engine);
       let bound = true;
       for (let i = 0; i < PANEL_COUNT && bound; i++) {
         const taken = await store.stock(c.id, job.kind);
