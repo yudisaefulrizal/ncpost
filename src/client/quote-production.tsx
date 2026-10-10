@@ -166,8 +166,16 @@ export function QuoteProduction({
                   return (
                     <td key={kind}>
                       <div className="stage-cell">
+                        {done && !active && (
+                          <span
+                            className="done"
+                            aria-label={`${label} tersedia`}
+                          >
+                            {icon("check")}
+                          </span>
+                        )}
                         <button
-                          className="play"
+                          className={done ? "play redo" : "play"}
                           title={
                             active
                               ? `${label} sedang diproses`
@@ -206,7 +214,7 @@ export function QuoteProduction({
                         </button>
                         {done && kind !== "IMAGES_VIDEO" && (
                           <button
-                            className="btn btn-sec btn-sm"
+                            className="play redo"
                             title={`Lihat ${label}`}
                             aria-label={`Lihat ${label}: ${row.title}`}
                             onClick={() => setView({ row, kind })}
@@ -216,7 +224,7 @@ export function QuoteProduction({
                         )}
                         {kind === "ARTICLE" && row.article && (
                           <button
-                            className="btn btn-sec btn-sm"
+                            className="play redo"
                             title="Sunting quote"
                             onClick={() => {
                               setEditing(row);
@@ -225,14 +233,6 @@ export function QuoteProduction({
                           >
                             {icon("edit")}
                           </button>
-                        )}
-                        {done && (
-                          <span
-                            className="done"
-                            aria-label={`${label} tersedia`}
-                          >
-                            {icon("check")}
-                          </span>
                         )}
                       </div>
                     </td>
