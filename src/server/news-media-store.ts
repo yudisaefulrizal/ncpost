@@ -165,9 +165,12 @@ export class NewsMediaStore {
         const reason = newsPrerequisite(kind, p, settings, n.article);
         if (reason) throw Error(reason);
         if (["POST_IG", "REELS_IG"].includes(kind)) {
-          if (replace) throw Error("Publikasi tidak dapat diregenerasi");
           const status = p.outputs[kind]?.status;
-          if (status && status !== "failed")
+          if (
+            status &&
+            status !== "failed" &&
+            !(replace && status === "published")
+          )
             throw Error("Publikasi sudah dikirim; periksa status Instagram");
         }
         if (replace && kind.includes("IMAGE_"))

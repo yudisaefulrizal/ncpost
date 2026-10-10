@@ -744,7 +744,12 @@ function App() {
       )
         return { title: "Sedang diposting ke Instagram", busy: true };
       if (c.post_status === "published")
-        return { title: "Sudah terbit di Instagram", done: true };
+        return {
+          title: "Sudah terbit di Instagram",
+          done: true,
+          redoTitle: "Post ulang",
+          redo: c.panels ? () => setPosting(c) : undefined,
+        };
       if (c.post_status === "unknown")
         return {
           title:
@@ -765,7 +770,12 @@ function App() {
     )
       return { title: "Reels sedang diposting ke Instagram", busy: true };
     if (c.reels_status === "published")
-      return { title: "Reels sudah terbit di Instagram", done: true };
+      return {
+        title: "Reels sudah terbit di Instagram",
+        done: true,
+        redoTitle: "Post ulang",
+        redo: c.sentence_video ? () => setPostingReels(c) : undefined,
+      };
     if (c.reels_status === "unknown")
       return {
         title:
@@ -2104,7 +2114,14 @@ function App() {
               onConfirm={() => {
                 const c = postingReels;
                 setPostingReels(null);
-                runStage(c, ["REELS_IG"], "Reels IG");
+                runStage(
+                  c,
+                  ["REELS_IG"],
+                  c.reels_status === "published"
+                    ? "Post ulang Reels IG"
+                    : "Reels IG",
+                  c.reels_status === "published",
+                );
               }}
             />
           )}
@@ -2116,7 +2133,12 @@ function App() {
               onConfirm={() => {
                 const c = posting;
                 setPosting(null);
-                runStage(c, ["POST_IG"], "Post IG");
+                runStage(
+                  c,
+                  ["POST_IG"],
+                  c.post_status === "published" ? "Post ulang IG" : "Post IG",
+                  c.post_status === "published",
+                );
               }}
             />
           )}
@@ -2743,6 +2765,7 @@ type PlayProps = {
   busy?: boolean;
   done?: boolean;
   redo?: () => void;
+  redoTitle?: string;
   view?: () => void;
   viewTitle?: string;
 };
@@ -3014,7 +3037,7 @@ function NewsProduction({
         );
         if (
           !confirm(
-            `Kirim ${stage === "POST_IG" ? "carousel panel" : "Reels video"} berita "${n.title}" ke @${account.username}?`,
+            `${replace ? "Post ulang" : "Kirim"} ${stage === "POST_IG" ? "carousel panel" : "Reels video"} berita "${n.title}" ke @${account.username}?`,
           )
         )
           return;
@@ -3070,11 +3093,12 @@ function NewsProduction({
           : undefined,
       redo:
         done &&
-        !publication &&
+        (!publication || output?.status === "published") &&
         !busy &&
         !p.jobs.some((j) => ["queued", "running"].includes(j.state))
           ? () => runMedia(n, stage, true)
           : undefined,
+      redoTitle: publication ? "Post ulang" : undefined,
       view: hasView ? () => setMediaView({ id: n.id, stage }) : undefined,
       viewTitle: `Lihat ${stages.find(([k]) => k === stage)?.[1]} berita #${n.id}`,
     };
@@ -4104,8 +4128,8 @@ function StageCell({ play }: { play: PlayProps }) {
         {play.redo && (
           <button
             className="play redo"
-            title="Regenerate"
-            aria-label={"Regenerate · " + play.title}
+            title={play.redoTitle || "Regenerate"}
+            aria-label={(play.redoTitle || "Regenerate") + " · " + play.title}
             onClick={play.redo}
           >
             <Icon name="redo" size={14} />
@@ -4390,7 +4414,16 @@ function PostModal({
       .catch((e) => setCaption("Gagal memuat caption: " + e.message));
   }, [c.id]);
   return (
-    <Modal c={c} title="Post carousel ke Instagram" onClose={onClose} wide>
+    <Modal
+      c={c}
+      title={
+        c.post_status === "published"
+          ? "Post ulang carousel ke Instagram"
+          : "Post carousel ke Instagram"
+      }
+      onClose={onClose}
+      wide
+    >
       {target.account ? (
         <p>
           Tujuan: <b>@{target.account.username}</b>
@@ -4422,7 +4455,9 @@ function PostModal({
           disabled={!caption || !target.account}
           onClick={onConfirm}
         >
-          Posting sekarang
+          {c.post_status === "published"
+            ? "Post ulang sekarang"
+            : "Posting sekarang"}
         </button>
         <small className="muted">
           {files.length} gambar akan terbit sebagai satu carousel melalui NC-WA.
@@ -4450,7 +4485,16 @@ function ReelsModal({
       .catch((e) => setCaption("Gagal memuat caption: " + e.message));
   }, [c.id]);
   return (
-    <Modal c={c} title="Post Reels ke Instagram" onClose={onClose} wide>
+    <Modal
+      c={c}
+      title={
+        c.reels_status === "published"
+          ? "Post ulang Reels ke Instagram"
+          : "Post Reels ke Instagram"
+      }
+      onClose={onClose}
+      wide
+    >
       {target.account ? (
         <p>
           Tujuan: <b>@{target.account.username}</b>
@@ -4479,7 +4523,9 @@ function ReelsModal({
           disabled={!caption || !target.account}
           onClick={onConfirm}
         >
-          Posting sekarang
+          {c.reels_status === "published"
+            ? "Post ulang sekarang"
+            : "Posting sekarang"}
         </button>
         <small className="muted">
           Video {Math.round(m.duration)} dtk ({m.width}×{m.height}) akan terbit
@@ -4717,23 +4763,33 @@ function ZernioCell({
 }) {
   const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [repostOf, setRepostOf] = useState<number | undefined>();
   const [latest, setLatest] = useState<any>(null);
   const [error, setError] = useState("");
   useEffect(() => {
     let current = true;
     const refresh = () =>
       loadZernioHistory()
-        .then((rows) => {
+        .then(async (rows) => {
+          const match = rows.find(
+            (p) =>
+              p.source_key.startsWith(source + ":") &&
+              p.platform === platform &&
+              p.account_id === accountId,
+          );
+          const latest =
+            match ||
+            (accountId
+              ? (
+                  await api(
+                    "/zernio/posts?" +
+                      new URLSearchParams({ source, platform, accountId }),
+                  )
+                )[0]
+              : null);
           if (current) {
             setError("");
-            setLatest(
-              rows.find(
-                (p) =>
-                  p.source_key.startsWith(source + ":") &&
-                  p.platform === platform &&
-                  p.account_id === accountId,
-              ),
-            );
+            setLatest(latest);
           }
         })
         .catch((e) => {
@@ -4746,7 +4802,7 @@ function ZernioCell({
       window.removeEventListener("zernio-publication", refresh);
     };
   }, [source, platform, accountId]);
-  const publishTikTok = async () => {
+  const publishTikTok = async (repostId?: number) => {
     if (publishing) return;
     setPublishing(true);
     setError("");
@@ -4754,6 +4810,7 @@ function ZernioCell({
       const result = await api("/zernio/posts", "POST", {
         quickTikTok: true,
         source,
+        ...(repostId ? { repostOf: repostId } : {}),
       });
       setLatest(result);
       zernioHistory = null;
@@ -4784,11 +4841,36 @@ function ZernioCell({
                 : `Publikasi ${platform}`
           }
           onClick={() =>
-            platform === "tiktok" ? void publishTikTok() : setOpen(true)
+            platform === "tiktok"
+              ? void publishTikTok()
+              : (setRepostOf(undefined), setOpen(true))
           }
         >
           {publishing ? <span className="spinner" /> : latest ? "◉" : "▶"}
         </button>
+        {latest?.status === "published" && (
+          <button
+            className="play redo"
+            title="Post ulang"
+            aria-label={`Post ulang ${platform} ${title}`}
+            disabled={publishing || !ready || !accountId}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Post ulang "${title}" ke ${platform}? Ini akan membuat postingan baru.`,
+                )
+              )
+                return;
+              if (platform === "tiktok") void publishTikTok(latest.id);
+              else {
+                setRepostOf(latest.id);
+                setOpen(true);
+              }
+            }}
+          >
+            <Icon name="redo" size={14} />
+          </button>
+        )}
         <small>
           {error
             ? "Gagal memuat status"
@@ -4806,7 +4888,7 @@ function ZernioCell({
           wide
         >
           <ZernioPanel
-            publication={{ source, platform, accountId }}
+            publication={{ source, platform, accountId, repostOf }}
             onPublished={() => {
               zernioHistory = null;
               window.dispatchEvent(new Event("zernio-publication"));

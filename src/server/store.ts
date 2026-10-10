@@ -778,7 +778,7 @@ export class Store {
         throw Error("Post IG butuh panel yang sudah dirender");
       if (["preparing", "processing", "publishing"].includes(c.post_status))
         throw Error("Posting sedang diproses Instagram");
-      if (c.post_status === "published")
+      if (c.post_status === "published" && !replace)
         throw Error("Bagian ini sudah diposting");
       if (c.post_status === "unknown")
         throw Error(
@@ -816,7 +816,7 @@ export class Store {
         throw Error("Reels IG butuh Video yang sudah dirender");
       if (["preparing", "processing", "publishing"].includes(c.reels_status))
         throw Error("Reels sedang diproses Instagram");
-      if (c.reels_status === "published")
+      if (c.reels_status === "published" && !replace)
         throw Error("Reels bagian ini sudah diposting");
       if (c.reels_status === "unknown")
         throw Error(
@@ -836,7 +836,14 @@ export class Store {
           await run(
             db,
             "INSERT INTO jobs(chapter_id,kind,state,revision,force_new) VALUES(?,?,'queued',?,?)",
-            [id, kind, c.revision, regenerate ? 1 : 0],
+            [
+              id,
+              kind,
+              c.revision,
+              regenerate || (replace && ["POST_IG", "REELS_IG"].includes(kind))
+                ? 1
+                : 0,
+            ],
           )
         ).insertId;
         if (

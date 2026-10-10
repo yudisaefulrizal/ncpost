@@ -462,7 +462,11 @@ export async function runNewsMediaJob(
     }
     if (j.kind === "POST_IG" || j.kind === "REELS_IG") {
       const old = p.outputs[j.kind];
-      if (old && old.status !== "failed")
+      if (
+        old &&
+        old.status !== "failed" &&
+        !(j.force_new && old.status === "published")
+      )
         throw Error("Publikasi sudah dikirim; periksa Instagram");
       const account = selectInstagramAccount(
         settings.instagramAccountId,

@@ -429,7 +429,7 @@ app.post("/api/books/renumber", async (req, res) => {
 app.get("/api/chapters/:id/caption", async (req, res) => {
   const c = await store.chapter(Number(req.params.id));
   if (!c) return void res.status(404).json({ error: "Bagian tidak ditemukan" });
-  res.json({ caption: instagramCaption(c.article) });
+  res.json({ caption: instagramCaption(c.article, c.article_config) });
 });
 app.get("/api/chapters/:id", async (req, res) => {
   const c = await store.chapter(Number(req.params.id));

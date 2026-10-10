@@ -484,3 +484,45 @@ it("ready-video rendering uses original images and audio without invoking subtit
   expect(buildReels).not.toHaveBeenCalled();
   expect(h.spies.fail).not.toHaveBeenCalled();
 });
+
+it("explicit repost sends a published news carousel with a new request and still blocks uncertain attempts", async () => {
+  const h = harness();
+  for (let panel = 1; panel <= 4; panel++)
+    for (const kind of ["IMAGE_HORIZONTAL", "IMAGE_VERTICAL"])
+      h.p.stock.push({
+        kind,
+        panel,
+        asset_id: panel,
+        file: "output/stock/test.jpg",
+        description: "Test",
+      });
+  await runNewsMediaJob(h.store, h.assets, job("PANEL"));
+  const source = h.p.outputs.PANEL;
+  h.p.outputs.POST_IG = { status: "published", requestId: "previous-request" };
+  await runNewsMediaJob(h.store, h.assets, job("POST_IG"));
+  expect(publishCarousel).not.toHaveBeenCalled();
+  const repost = { ...job("POST_IG"), id: -904, force_new: 1 };
+  vi.mocked(publishCarousel).mockResolvedValue({
+    status: "publishing",
+    mediaId: "new-media",
+  } as any);
+  await runNewsMediaJob(h.store, h.assets, repost);
+  expect(publishCarousel).toHaveBeenCalledWith(
+    expect.objectContaining({ requestId: "ncpost-news-post--902--904" }),
+  );
+  expect(h.p.outputs.POST_IG.requestId).not.toBe("previous-request");
+  h.p.outputs.POST_IG.status = "unknown";
+  await runNewsMediaJob(h.store, h.assets, { ...repost, id: -905 });
+  expect(publishCarousel).toHaveBeenCalledTimes(1);
+  const { createHash } = await import("node:crypto");
+  for (const file of [...source.panels.map((p: any) => p.file), source.closing])
+    rmSync(
+      path.join(
+        process.cwd(),
+        "output/public",
+        createHash("sha256").update(file).digest("hex").slice(0, 32) +
+          path.extname(file),
+      ),
+      { force: true },
+    );
+});

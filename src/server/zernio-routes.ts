@@ -100,6 +100,12 @@ async function mediaLibrary(store: Store) {
   return videos;
 }
 export async function publishZernio(store: Store, input: any) {
+  const repostOf = input?.repostOf;
+  if (
+    repostOf !== undefined &&
+    (!Number.isSafeInteger(repostOf) || repostOf < 1)
+  )
+    throw Error("ID post ulang tidak valid");
   if (input?.quickTikTok === true) {
     const source = String(input.source);
     if (!/^(book|news):[1-9]\d*$/.test(source))
@@ -194,8 +200,25 @@ export async function publishZernio(store: Store, input: any) {
     video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
     account,
   );
+  if (repostOf !== undefined) {
+    const [history]: any = await store.db.query(
+      "SELECT id,status FROM zernio_publications WHERE source_key LIKE ? AND account_id=? AND platform=? ORDER BY id DESC LIMIT 1",
+      [`${sourceType}:${sourceId}:%`, account.id, account.platform],
+    );
+    if (history[0]?.id !== repostOf || history[0]?.status !== "published")
+      throw Error(
+        "Post ulang hanya tersedia untuk publikasi terakhir yang sudah terbit",
+      );
+  }
   const fingerprint = createHash("sha256")
-    .update(JSON.stringify([video.key, video.version, account.id]))
+    .update(
+      JSON.stringify([
+        video.key,
+        video.version,
+        account.id,
+        ...(repostOf !== undefined ? [repostOf] : []),
+      ]),
+    )
     .digest("hex");
   mkdirSync(path.join(ROOT, "output/public"), {
     recursive: true,
@@ -329,9 +352,24 @@ export function zernioRouter(getStore: () => Store) {
       (await mediaLibrary(getStore())).map(({ files, version, ...v }) => v),
     ),
   );
-  router.get("/posts", async (_, res) => {
+  router.get("/posts", async (req, res) => {
+    let filter = "",
+      params: string[] = [];
+    if (req.query.source !== undefined) {
+      const source = String(req.query.source);
+      if (!/^(book|news):[1-9]\d*$/.test(source))
+        throw Error("Sumber publikasi tidak valid");
+      const platform = zernioPlatform(req.query.platform);
+      const accountId = zernioId(req.query.accountId);
+      filter = " WHERE source_key LIKE ? AND platform=? AND account_id=?";
+      params = [source + ":%", platform, accountId];
+    }
     const [rows]: any = await getStore().db.query(
-      "SELECT id,source_key,title,platform,account_id,post_id,status,result,created_at FROM zernio_publications ORDER BY id DESC LIMIT 100",
+      "SELECT id,source_key,title,platform,account_id,post_id,status,result,created_at FROM zernio_publications" +
+        filter +
+        " ORDER BY id DESC LIMIT " +
+        (filter ? "1" : "100"),
+      params,
     );
     res.json(
       rows.map((r: any) => ({

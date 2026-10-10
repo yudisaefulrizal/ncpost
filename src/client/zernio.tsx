@@ -47,6 +47,7 @@ export function ZernioPanel({
   }) => void;
   publication?: {
     source: string;
+    repostOf?: number;
     platform: "youtube" | "tiktok";
     accountId: string | null;
   };
@@ -374,6 +375,9 @@ export function ZernioPanel({
               void action(async () => {
                 const result = await api("/posts", {
                   mediaKey: videoKey,
+                  ...(publication?.repostOf
+                    ? { repostOf: publication.repostOf }
+                    : {}),
                   autoMusic,
                   accountId,
                   content,
@@ -628,9 +632,11 @@ export function ZernioPanel({
                 (account.platform === "tiktok" && !creator?.canPostMore)
               }
             >
-              {mediaType === "photo" && synthetic
-                ? "Kirim ke draft TikTok"
-                : "Kirim konten"}
+              {publication?.repostOf
+                ? "Post ulang"
+                : mediaType === "photo" && synthetic
+                  ? "Kirim ke draft TikTok"
+                  : "Kirim konten"}
             </button>
           </form>
         </section>

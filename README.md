@@ -278,3 +278,8 @@ Form Lab Gambar menyediakan penggunaan **1 gambar**, **Carousel**, atau **Gambar
 **Unit gambar** di Pengaturan Konten menentukan jumlah gambar, audio, dan panel: seluruh artikel satu unit, per paragraf sejumlah paragraf, atau per kalimat sejumlah kalimat. Nomor kalimat berurutan secara global; variabel paragraf kosong ketika unit kalimat digunakan. Pilihan kosong mengikuti penggunaan prompt. Gambar dari form baru memakai prompt yang sama di Lab dan produksi tanpa instruksi rasio tambahan, pemaksaan ukuran, atau slide penutup otomatis. Lampiran referensi tetap statis. Pilihan Pakai teks mengatur penambahan template/subtitle saat render video.
 
 Jalankan `npm run migrate` sebelum memakai revisi ini untuk menambahkan konfigurasi pada `lab_prompts` dan snapshot `lab_runs`. Cronjob tetap menjalankan tahap yang dipilih, bukan seluruh pipeline.
+
+
+## Post ulang
+
+Konten dengan status **published** menyediakan aksi **Post ulang** pada kolom Instagram, YouTube, dan TikTok. Aksi ini memakai hasil gambar/video yang tersedia dan membuat postingan baru setelah konfirmasi, misalnya ketika postingan sebelumnya sudah dihapus dari akun tujuan. Pengiriman ulang memakai ID permintaan baru; klik ganda pada percobaan Zernio yang sama tetap ditolak. Riwayat Zernio lama tetap tersimpan. Konten yang masih diproses atau berstatus unknown tidak dapat diposting ulang sampai status pengiriman sebelumnya dipastikan. Cronjob tidak memicu post ulang pada konten yang sudah terbit.

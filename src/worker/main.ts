@@ -1,3 +1,4 @@
+import { sendInstagramPublication } from "./instagram-publication";
 import { mediaUnits, imageVariables } from "../server/content-contract";
 import { generateConfiguredArticle } from "./configured-article";
 import { generateStandaloneQuote } from "./quote";
@@ -670,21 +671,20 @@ async function runJob(job: Job) {
         await accounts(),
       ).id;
       // Percobaan setelah gagal memakai requestId baru; selain itu ID lama dipakai ulang.
-      const requestId =
-        c.post_request_id && c.post_status !== "failed"
+      const requestId = job.force_new
+        ? `ncpost-${c.id}-repost-j${job.id}`
+        : c.post_request_id && c.post_status !== "failed"
           ? c.post_request_id
           : `ncpost-${c.id}-${Date.now().toString(36)}`;
-      const r = await publishCarousel({
+      const payload = {
         requestId,
         igUserId,
         imageUrls: publicPanels(c),
         caption: instagramCaption(c.article, c.article_config),
-      });
-      await store.setPost(c.id, {
-        status: String(r.status),
-        requestId,
-        mediaId: r.mediaId,
-      });
+      };
+      await sendInstagramPublication(store, c.id, "POST_IG", requestId, () =>
+        publishCarousel(payload),
+      );
       await store.complete(job.id, {});
     } else if (job.kind === "REELS_IG") {
       if (!c.sentence_video)
@@ -698,21 +698,20 @@ async function runJob(job: Job) {
         bookSettings.instagramAccountId,
         await accounts(),
       ).id;
-      const requestId =
-        c.reels_request_id && c.reels_status !== "failed"
+      const requestId = job.force_new
+        ? `ncpost-reels-${c.id}-repost-j${job.id}`
+        : c.reels_request_id && c.reels_status !== "failed"
           ? c.reels_request_id
           : `ncpost-reels-${c.id}-${Date.now().toString(36)}`;
-      const r = await publish({
+      const payload = {
         requestId,
         igUserId,
         videoUrl: publicVideo(c),
         caption: instagramCaption(c.article, c.article_config),
-      });
-      await store.setReels(c.id, {
-        status: String(r.status),
-        requestId,
-        mediaId: r.mediaId,
-      });
+      };
+      await sendInstagramPublication(store, c.id, "REELS_IG", requestId, () =>
+        publish(payload),
+      );
       await store.complete(job.id, {});
     } else if (job.kind === "PANEL") {
       // Port render_panels_5panel.py: 5 panel + slide penutup, 1080×1350.

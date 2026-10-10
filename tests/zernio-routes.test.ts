@@ -263,3 +263,99 @@ it("publishes a panel carousel in slide order including the closing slide", asyn
   ).toEqual(["slide-0", "slide-1", "slide-2"]);
   expect(body.tiktokSettings.media_type).toBe("photo");
 });
+
+it("explicit repost preserves the old record and uses a new idempotency fingerprint", async () => {
+  const query = queryMock();
+  const base = query.getMockImplementation()!;
+  query.mockImplementation(async (sql: string) =>
+    sql.startsWith("SELECT id,status FROM zernio_publications")
+      ? [[{ id: 6, status: "published" }]]
+      : base(sql),
+  );
+  vi.mocked(zernioRequest).mockResolvedValue({
+    post: { _id: postId, status: "publishing", platforms: [] },
+  });
+  const { handler, request, response } = setup(query);
+  (request.body as any).repostOf = 6;
+  await handler(request, response);
+  const firstFingerprint = query.mock.calls.find((call) =>
+    call[0].startsWith("INSERT INTO zernio_publications"),
+  )!;
+  expect(firstFingerprint).toBeTruthy();
+  const { createHash } = await import("node:crypto");
+  const expected = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "news:1:v",
+        "1:2026-10-08:output/.test/zernio-route/video-v.mp4",
+        accountId,
+        6,
+      ]),
+    )
+    .digest("hex");
+  expect(zernioRequest).toHaveBeenCalledWith(
+    "/posts",
+    expect.objectContaining({ headers: { "x-request-id": expected } }),
+  );
+  expect(
+    query.mock.calls.some((call) =>
+      call[0].startsWith("DELETE FROM zernio_publications"),
+    ),
+  ).toBe(false);
+  expect(zernioRequest).toHaveBeenCalledTimes(1);
+});
+it.each(["unknown", "publishing", "failed"])(
+  "does not repost a latest publication with status %s",
+  async (status) => {
+    const query = queryMock();
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string) =>
+      sql.startsWith("SELECT id,status FROM zernio_publications")
+        ? [[{ id: 6, status }]]
+        : base(sql),
+    );
+    const { handler, request, response } = setup(query);
+    (request.body as any).repostOf = 6;
+    await expect(handler(request, response)).rejects.toThrow("sudah terbit");
+    expect(zernioRequest).not.toHaveBeenCalled();
+  },
+);
+it("does not repost using an older history entry after another attempt was created", async () => {
+  const query = queryMock();
+  const base = query.getMockImplementation()!;
+  query.mockImplementation(async (sql: string) =>
+    sql.startsWith("SELECT id,status FROM zernio_publications")
+      ? [[{ id: 7, status: "published" }]]
+      : base(sql),
+  );
+  const { handler, request, response } = setup(query);
+  (request.body as any).repostOf = 6;
+  await expect(handler(request, response)).rejects.toThrow(
+    "publikasi terakhir",
+  );
+  expect(zernioRequest).not.toHaveBeenCalled();
+});
+
+it("can load a content's last publication beyond the recent history limit", async () => {
+  const query = vi
+    .fn()
+    .mockResolvedValue([
+      [{ id: 4, source_key: "news:1:v", status: "published", result: null }],
+    ]);
+  const router = zernioRouter(() => ({ db: { query } }) as any);
+  const layer = (router as any).stack.find(
+    (l: any) => l.route?.path === "/posts" && l.route.methods.get,
+  );
+  const res = { json: vi.fn() };
+  await layer.route.stack[0].handle(
+    { query: { source: "news:1", platform: "youtube", accountId } },
+    res,
+  );
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining("ORDER BY id DESC LIMIT 1"),
+    ["news:1:%", "youtube", accountId],
+  );
+  expect(res.json).toHaveBeenCalledWith([
+    expect.objectContaining({ id: 4, status: "published" }),
+  ]);
+});
