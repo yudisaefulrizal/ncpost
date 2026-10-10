@@ -1,5 +1,9 @@
+import {
+  connectionSummaries,
+  saveZernioConnection,
+  zernioConnection,
+} from "./zernio-connections";
 import { tiktokPublishInput } from "./tiktok-publish";
-import { writeEnvValue } from "./credentials";
 import { NewsMediaStore } from "./news-media-store";
 import { Router } from "express";
 import path from "node:path";
@@ -199,6 +203,7 @@ export async function publishZernio(store: Store, input: any) {
     input,
     video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
     account,
+    (id, mediaType) => zernioCreatorInfo(id, mediaType, account.connectionId),
   );
   if (repostOf !== undefined) {
     const [history]: any = await store.db.query(
@@ -258,12 +263,20 @@ export async function publishZernio(store: Store, input: any) {
     throw error;
   }
   try {
-    const data = await zernioRequest("/posts", {
-      method: "POST",
-      headers: { "x-request-id": fingerprint },
-      body: JSON.stringify(body),
-    });
-    const result = zernioPostSummary(data);
+    const data = await zernioRequest(
+      "/posts",
+      {
+        method: "POST",
+        headers: { "x-request-id": fingerprint },
+        body: JSON.stringify(body),
+      },
+      fetch,
+      account.connectionId,
+    );
+    const result = {
+      ...zernioPostSummary(data),
+      connectionId: account.connectionId || "legacy",
+    };
     await store.db.query(
       "UPDATE zernio_publications SET post_id=?,status=?,result=? WHERE id=?",
       [result.id, result.status, JSON.stringify(result), publicationId],
@@ -282,11 +295,19 @@ export async function publishZernio(store: Store, input: any) {
 
 export function zernioRouter(getStore: () => Store) {
   const router = Router();
+  router.get("/connections", (_, res) => res.json(connectionSummaries()));
+  router.post("/connections", (req, res) => {
+    saveZernioConnection(req.body);
+    res.json(connectionSummaries());
+  });
   router.get("/accounts", async (_, res) => res.json(await zernioAccounts()));
-  router.get("/profiles", async (_, res) => {
-    const data = await zernioRequest("/profiles");
+  router.get("/profiles", async (req, res) => {
+    const connection = zernioConnection(
+      String(req.query.connectionId || "legacy"),
+    );
+    const data = await zernioRequest("/profiles", {}, fetch, connection.id);
     res.json({
-      selectedProfileId: process.env.ZERNIO_PROFILE_ID || null,
+      selectedProfileId: connection.profileId,
       profiles: (data.profiles || []).map((p: any) => ({
         id: zernioId(p._id),
         name: String(p.name),
@@ -295,24 +316,29 @@ export function zernioRouter(getStore: () => Store) {
   });
   router.post("/profile", async (req, res) => {
     const id = zernioId(req.body?.profileId);
-    const data = await zernioRequest("/profiles");
+    const connection = zernioConnection(req.body?.connectionId || "legacy");
+    const data = await zernioRequest("/profiles", {}, fetch, connection.id);
     if (
       !Array.isArray(data.profiles) ||
       !data.profiles.some((p: any) => p._id === id)
     )
       throw Error("Profil Zernio tidak tersedia");
-    writeEnvValue(path.join(ROOT, ".env"), "ZERNIO_PROFILE_ID", id);
-    process.env.ZERNIO_PROFILE_ID = id;
+    saveZernioConnection({ id: connection.id, profileId: id });
     res.json({ selectedProfileId: id });
   });
   router.post("/profiles", async (req, res) => {
     const name = req.body?.name;
     if (typeof name !== "string" || !name.trim() || name.length > 100)
       throw Error("Nama profil wajib diisi, maksimal 100 karakter");
-    const data = await zernioRequest("/profiles", {
-      method: "POST",
-      body: JSON.stringify({ name: name.trim() }),
-    });
+    const data = await zernioRequest(
+      "/profiles",
+      {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim() }),
+      },
+      fetch,
+      req.body?.connectionId || "legacy",
+    );
     res.json({
       id: zernioId(data.profile?._id),
       name: String(data.profile?.name),
@@ -320,13 +346,17 @@ export function zernioRouter(getStore: () => Store) {
   });
   router.post("/connect", async (req, res) => {
     const platform = zernioPlatform(req.body?.platform);
-    const profileId = zernioId(process.env.ZERNIO_PROFILE_ID);
+    const connection = zernioConnection(req.body?.connectionId || "legacy");
+    const profileId = zernioId(connection.profileId);
     if (req.body?.profileId !== profileId)
       throw Error(
         "Pilih dan simpan profil Zernio di Kredensial terlebih dahulu",
       );
     const data = await zernioRequest(
       `/connect/${platform}?${new URLSearchParams({ profileId })}`,
+      {},
+      fetch,
+      connection.id,
     );
     const url = new URL(data.authUrl);
     if (url.protocol !== "https:" || url.username || url.password)
@@ -344,6 +374,7 @@ export function zernioRouter(getStore: () => Store) {
       await zernioCreatorInfo(
         id,
         req.query.mediaType === "photo" ? "photo" : "video",
+        connection.accounts.find((a) => a.id === id)!.connectionId,
       ),
     );
   });
@@ -386,17 +417,32 @@ export function zernioRouter(getStore: () => Store) {
     if (!Number.isSafeInteger(id) || id < 1)
       throw Error("ID publikasi tidak valid");
     const [rows]: any = await getStore().db.query(
-      "SELECT post_id FROM zernio_publications WHERE id=?",
+      "SELECT post_id,account_id,result FROM zernio_publications WHERE id=?",
       [id],
     );
     if (!rows[0]?.post_id)
       throw Error("ID posting belum tersedia; periksa dashboard Zernio");
+    const savedConnection = rows[0].result
+      ? JSON.parse(rows[0].result).connectionId
+      : null;
+    const accounts = savedConnection ? null : await zernioAccounts();
+    const connectionId =
+      savedConnection ||
+      accounts?.accounts.find((a) => a.id === rows[0].account_id)
+        ?.connectionId ||
+      "legacy";
+    zernioConnection(connectionId);
     const result = zernioPostSummary(
-      await zernioRequest(`/posts/${zernioId(rows[0].post_id)}`),
+      await zernioRequest(
+        `/posts/${zernioId(rows[0].post_id)}`,
+        {},
+        fetch,
+        connectionId,
+      ),
     );
     await getStore().db.query(
       "UPDATE zernio_publications SET status=?,result=? WHERE id=?",
-      [result.status, JSON.stringify(result), id],
+      [result.status, JSON.stringify({ ...result, connectionId }), id],
     );
     res.json(result);
   });

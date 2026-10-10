@@ -58,6 +58,12 @@ export function ZernioPanel({
     reason?: string;
     accounts: Account[];
   }>({ state: "loading", accounts: [] });
+  const [connections, setConnections] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [connectionId, setConnectionId] = useState("legacy");
+  const [newName, setNewName] = useState("");
+  const [newKey, setNewKey] = useState("");
   const [profiles, setProfiles] = useState<{ id: string; name: string }[]>([]);
   const [profile, setProfile] = useState("");
   const [profileName, setProfileName] = useState("");
@@ -84,8 +90,17 @@ export function ZernioPanel({
     const c = await api("/accounts");
     setConnection(c);
     if (credentials) {
-      if (c.state === "connected") {
-        const p = await api("/profiles");
+      {
+        const list = await api("/connections");
+        setConnections(list);
+        const selected = list.some((c: any) => c.id === connectionId)
+          ? connectionId
+          : list[0]?.id;
+        setConnectionId(selected || "legacy");
+        if (!selected) return;
+        const p = await api(
+          "/profiles?" + new URLSearchParams({ connectionId: selected }),
+        );
         setProfiles(p.profiles);
         setProfile(p.selectedProfileId || "");
       }
@@ -161,7 +176,11 @@ export function ZernioPanel({
   async function connect(platform: string) {
     await action(async () => {
       if (!profile) throw Error("Pilih profil Zernio terlebih dahulu");
-      const result = await api("/connect", { platform, profileId: profile });
+      const result = await api("/connect", {
+        platform,
+        profileId: profile,
+        connectionId,
+      });
       window.location.assign(result.authUrl);
     });
   }
@@ -184,12 +203,97 @@ export function ZernioPanel({
               Perbarui akun dan status
             </button>
           </div>
+          <div className="field-row">
+            <input
+              placeholder="Nama koneksi Zernio"
+              aria-label="Nama koneksi Zernio"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="API key Zernio"
+              aria-label="API key koneksi baru"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              autoComplete="new-password"
+            />
+            <button
+              className="btn btn-pri"
+              disabled={busy || !newName.trim() || !newKey}
+              onClick={() =>
+                void action(async () => {
+                  const list = await api("/connections", {
+                    name: newName,
+                    key: newKey,
+                  });
+                  setConnections(list);
+                  setNewName("");
+                  setNewKey("");
+                  await load();
+                })
+              }
+            >
+              Tambah koneksi
+            </button>
+          </div>
           <p className="muted">
             {connection.reason || "Memeriksa koneksi…"} Masukkan Key Zernio di
             halaman Kredensial.
           </p>
-          {connection.state === "connected" && (
+          {connections.length > 0 && (
             <>
+              <label className="field">
+                Koneksi Zernio
+                <select
+                  value={connectionId}
+                  disabled={busy}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setConnectionId(id);
+                    void action(async () => {
+                      const p = await api(
+                        "/profiles?" +
+                          new URLSearchParams({ connectionId: id }),
+                      );
+                      setProfiles(p.profiles);
+                      setProfile(p.selectedProfileId || "");
+                    });
+                  }}
+                >
+                  {connections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="field-row">
+                <input
+                  type="password"
+                  aria-label="API key pengganti"
+                  placeholder="API key pengganti"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  className="btn btn-sec"
+                  disabled={busy || !newKey}
+                  onClick={() =>
+                    void action(async () => {
+                      await api("/connections", {
+                        id: connectionId,
+                        key: newKey,
+                      });
+                      setNewKey("");
+                      await load();
+                    })
+                  }
+                >
+                  Perbarui key koneksi
+                </button>
+              </div>
               <label className="field">
                 Profil Zernio
                 <select
@@ -197,7 +301,7 @@ export function ZernioPanel({
                   onChange={(e) => {
                     const profileId = e.target.value;
                     void action(async () => {
-                      await api("/profile", { profileId });
+                      await api("/profile", { profileId, connectionId });
                       await load();
                     });
                   }}
@@ -225,8 +329,11 @@ export function ZernioPanel({
                   disabled={busy || !profileName.trim()}
                   onClick={() =>
                     void action(async () => {
-                      const p = await api("/profiles", { name: profileName });
-                      await api("/profile", { profileId: p.id });
+                      const p = await api("/profiles", {
+                        name: profileName,
+                        connectionId,
+                      });
+                      await api("/profile", { profileId: p.id, connectionId });
                       await load();
                       setProfileName("");
                     })

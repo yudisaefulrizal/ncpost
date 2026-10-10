@@ -1,3 +1,4 @@
+import { zernioConnections, zernioConnection } from "./zernio-connections";
 const BASE = "https://zernio.com/api/v1";
 export const ZERNIO_PLATFORMS = ["youtube", "tiktok"] as const;
 export type ZernioPlatform = (typeof ZERNIO_PLATFORMS)[number];
@@ -15,8 +16,9 @@ export async function zernioRequest(
   endpoint: string,
   init: RequestInit = {},
   request = fetch,
+  connectionId = "legacy",
 ) {
-  const key = process.env.ZERNIO_API_KEY;
+  const key = zernioConnection(connectionId).key;
   if (!key) throw Error("Key Zernio belum diatur di Kredensial");
   const response = await request(BASE + endpoint, {
     ...init,
@@ -34,46 +36,58 @@ export interface ZernioAccount {
   id: string;
   platform: ZernioPlatform;
   username: string;
+  connectionId?: string;
 }
 export async function zernioAccounts(
   request = fetch,
 ): Promise<{ state: string; reason: string; accounts: ZernioAccount[] }> {
-  if (!process.env.ZERNIO_API_KEY)
+  const connections = zernioConnections();
+  if (!connections.length)
     return {
       state: "disconnected",
       reason: "Key Zernio belum diatur",
       accounts: [],
     };
-  try {
-    const profileId = process.env.ZERNIO_PROFILE_ID;
-    const endpoint = profileId
-      ? `/accounts?${new URLSearchParams({ profileId: zernioId(profileId) })}`
-      : "/accounts";
-    const data = await zernioRequest(endpoint, {}, request);
-    if (!Array.isArray(data.accounts))
-      throw Error("Respons akun Zernio tidak valid");
-    return {
-      state: "connected",
-      reason: "YouTube dan TikTok melalui Zernio",
-      accounts: data.accounts
-        .filter(
-          (a: any) =>
-            ZERNIO_PLATFORMS.includes(a.platform) && a.isActive !== false,
-        )
-        .map((a: any) => ({
-          id: zernioId(a._id),
-          platform: a.platform as ZernioPlatform,
-          username: String(a.username || a.displayName || a.platform),
-        })),
-    };
-  } catch {
-    return {
-      state: "error",
-      reason: "Tidak dapat mengambil akun Zernio. Periksa key dan koneksi.",
-      accounts: [],
-    };
-  }
+  const results = await Promise.all(
+    connections.map(async (connection) => {
+      try {
+        const endpoint = connection.profileId
+          ? `/accounts?${new URLSearchParams({ profileId: zernioId(connection.profileId) })}`
+          : "/accounts";
+        const data = await zernioRequest(endpoint, {}, request, connection.id);
+        if (!Array.isArray(data.accounts))
+          throw Error("Respons akun tidak valid");
+        return data.accounts
+          .filter(
+            (a: any) =>
+              ZERNIO_PLATFORMS.includes(a.platform) && a.isActive !== false,
+          )
+          .map(
+            (a: any): ZernioAccount => ({
+              id: zernioId(a._id),
+              platform: a.platform,
+              username: String(a.username || a.displayName || a.platform),
+              connectionId: connection.id,
+            }),
+          );
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const accounts = [
+    ...new Map(results.flatMap((a) => a || []).map((a) => [a.id, a])).values(),
+  ];
+  const failed = results.filter((a) => a === null).length;
+  return {
+    state: failed === connections.length ? "error" : "connected",
+    reason: failed
+      ? "Sebagian koneksi Zernio tidak tersedia. Periksa Kredensial."
+      : "YouTube dan TikTok melalui Zernio",
+    accounts,
+  };
 }
+
 export function zernioPostSummary(data: any) {
   const post = data?.post;
   if (!post || typeof post._id !== "string")
@@ -103,9 +117,13 @@ export function zernioPostSummary(data: any) {
 export async function zernioCreatorInfo(
   accountId: string,
   mediaType: "video" | "photo" = "video",
+  connectionId = "legacy",
 ) {
   const data = await zernioRequest(
     `/accounts/${zernioId(accountId)}/tiktok/creator-info?mediaType=${mediaType}`,
+    {},
+    fetch,
+    connectionId,
   );
   return {
     nickname: String(data.creator?.nickname || "TikTok"),

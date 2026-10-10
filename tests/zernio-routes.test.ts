@@ -23,7 +23,14 @@ beforeEach(() => {
   vi.mocked(zernioAccounts).mockResolvedValue({
     state: "connected",
     reason: "",
-    accounts: [{ id: accountId, platform: "youtube", username: "channel" }],
+    accounts: [
+      {
+        id: accountId,
+        platform: "youtube",
+        username: "channel",
+        connectionId: "second",
+      },
+    ],
   });
 });
 afterEach(() => {
@@ -125,6 +132,8 @@ it("records the provider post id and status after sending a server-owned video",
       method: "POST",
       headers: { "x-request-id": expect.stringMatching(/^[a-f0-9]{64}$/) },
     }),
+    fetch,
+    "second",
   );
 });
 it("does not submit or copy another public video for an existing fingerprint", async () => {
@@ -296,6 +305,8 @@ it("explicit repost preserves the old record and uses a new idempotency fingerpr
   expect(zernioRequest).toHaveBeenCalledWith(
     "/posts",
     expect.objectContaining({ headers: { "x-request-id": expected } }),
+    fetch,
+    "second",
   );
   expect(
     query.mock.calls.some((call) =>

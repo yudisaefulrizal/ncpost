@@ -215,3 +215,69 @@ it("filters account requests using the profile saved in credentials", async () =
     `https://zernio.com/api/v1/accounts?profileId=${id}`,
   );
 });
+
+it("merges accounts from multiple keys and retains their owning connection", async () => {
+  vi.stubEnv("ZERNIO_API_KEY", "first-key");
+  vi.stubEnv("ZERNIO_PROFILE_ID", "");
+  vi.stubEnv(
+    "ZERNIO_CONNECTIONS",
+    Buffer.from(
+      JSON.stringify([
+        { id: "second", name: "Second", key: "second-key", profileId: null },
+      ]),
+    ).toString("base64"),
+  );
+  const request = vi
+    .fn()
+    .mockImplementation(
+      async (_url, init) =>
+        new Response(
+          JSON.stringify({
+            accounts: [
+              {
+                _id:
+                  init.headers.Authorization === "Bearer first-key"
+                    ? id
+                    : "66b2e19d8c3f5a7e9d0b1c2e",
+                platform: "tiktok",
+                username: "creator",
+              },
+            ],
+          }),
+        ),
+    );
+  const result = await zernioAccounts(request);
+  expect(result.accounts.map((a) => a.connectionId)).toEqual([
+    "legacy",
+    "second",
+  ]);
+  expect(JSON.stringify(result)).not.toMatch(/first-key|second-key/);
+  await zernioRequest("/posts", {}, request, "second");
+  expect(request.mock.calls.at(-1)?.[1].headers.Authorization).toBe(
+    "Bearer second-key",
+  );
+});
+it("keeps healthy connection accounts when another key fails", async () => {
+  vi.stubEnv("ZERNIO_API_KEY", "broken-key");
+  vi.stubEnv(
+    "ZERNIO_CONNECTIONS",
+    Buffer.from(
+      JSON.stringify([
+        { id: "second", name: "Second", key: "working-key", profileId: null },
+      ]),
+    ).toString("base64"),
+  );
+  const request = vi
+    .fn()
+    .mockImplementation(async (_url, init) =>
+      init.headers.Authorization === "Bearer broken-key"
+        ? new Response("", { status: 401 })
+        : new Response(
+            JSON.stringify({ accounts: [{ _id: id, platform: "youtube" }] }),
+          ),
+    );
+  const result = await zernioAccounts(request);
+  expect(result.state).toBe("connected");
+  expect(result.accounts).toHaveLength(1);
+  expect(result.accounts[0].connectionId).toBe("second");
+});
