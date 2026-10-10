@@ -15,7 +15,7 @@ export function readyPostPrompt(
   total = 1,
   context = "",
 ) {
-  return `${style}\n\nInstruksi hasil akhir ini menggantikan aturan gambar ilustrasi tanpa teks: buat gambar final siap posting, termasuk teks dan desain. Ukuran 1080 × 1350, rasio 4:5. Sisakan margin aman; seluruh teks harus terbaca dan tidak terpotong. Ikuti gaya, referensi, dan logo dari prompt/lampiran; jangan menambahkan logo yang tidak diberikan.\n${total > 1 ? `Slide ${index} dari ${total}. Pertahankan gaya, warna, tipografi dan identitas yang sama di semua slide.\n` : ""}Judul: ${title}\n${total > 1 ? "Teks yang wajib ditampilkan pada slide ini" : "Bahan konten: ringkas menjadi teks visual yang akurat dan mudah dibaca"}:\n${text}\n${context ? `\nKonteks seluruh carousel, bukan teks untuk disalin seluruhnya pada slide ini:\n${context}` : ""}`;
+  return `${style}\n\nInstruksi hasil akhir ini menggantikan aturan gambar ilustrasi tanpa teks: buat gambar final siap posting, termasuk teks dan desain. ${total > 1 ? "Ukuran 1080 × 1350, rasio 4:5." : "Gunakan rasio sesuai prompt gaya; tidak ada rasio tambahan yang dipaksakan."} Sisakan margin aman; seluruh teks harus terbaca dan tidak terpotong. Ikuti gaya, referensi, dan logo dari prompt/lampiran; jangan menambahkan logo yang tidak diberikan.\n${total > 1 ? `Slide ${index} dari ${total}. Pertahankan gaya, warna, tipografi dan identitas yang sama di semua slide.\n` : ""}Judul: ${title}\n${total > 1 ? "Teks yang wajib ditampilkan pada slide ini" : "Bahan konten: ringkas menjadi teks visual yang akurat dan mudah dibaca"}:\n${text}\n${context ? `\nKonteks seluruh carousel, bukan teks untuk disalin seluruhnya pada slide ini:\n${context}` : ""}`;
 }
 export async function generateReadyPost({
   file,
@@ -41,14 +41,19 @@ export async function generateReadyPost({
   generate?: typeof generateCodexImage;
 }) {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const prompt = readyPostPrompt(
-    lab?.prompt || style || "Desain editorial yang rapi dan mudah dibaca.",
-    title,
-    text,
-    index,
-    total,
-    context,
-  );
+  const prompt =
+    (total ?? 1) === 1
+      ? lab?.prompt || style || text
+      : readyPostPrompt(
+          lab?.prompt ||
+            style ||
+            "Desain editorial yang rapi dan mudah dibaca.",
+          title,
+          text,
+          index,
+          total,
+          context,
+        );
   const raw = path.join(work, `${path.basename(file)}.original.jpg`);
   await generate(
     prompt,
@@ -57,17 +62,18 @@ export async function generateReadyPost({
     "bebas",
     ...(lab ? ([lab.images] as [string[]]) : []),
   );
-  // Contain preserves generated text instead of cropping it to fit the canvas.
-  await sharp(raw)
-    .rotate()
-    .resize(1080, 1350, { fit: "contain", background: "#ffffff" })
+  // Only carousel slides share a fixed canvas; single images keep their native size.
+  const image = sharp(raw).rotate();
+  if ((total ?? 1) > 1)
+    image.resize(1080, 1350, { fit: "contain", background: "#ffffff" });
+  const meta = await image
     .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
     .toFile(file);
   return {
     file,
     prompt,
-    width: 1080,
-    height: 1350,
+    width: meta.width,
+    height: meta.height,
     mode: "direct",
     renderedAt: new Date().toISOString(),
   };

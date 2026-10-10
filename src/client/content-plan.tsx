@@ -68,6 +68,7 @@ export function ContentPlanFields({
         ? "direct"
         : "template";
     next.singleImageMode =
+      next.wholeTextImageKind?.startsWith("IMAGE_LAB_") ||
       imageType(next.wholeTextImageKind ?? null) === "ready_post"
         ? "direct"
         : "template";

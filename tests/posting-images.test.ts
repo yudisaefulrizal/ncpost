@@ -114,7 +114,7 @@ it("rejects unknown generation modes and preserves chosen modes during normaliza
     singleImageMode: "template",
   });
 });
-it("direct image includes text, Lab attachments and safe posting dimensions without cropping", async () => {
+it("single direct image preserves native dimensions and text without padding or cropping", async () => {
   const { work, generate } = await fixture();
   const file = path.join(work, "final.jpg");
   const lab = {
@@ -130,21 +130,23 @@ it("direct image includes text, Lab attachments and safe posting dimensions with
     lab,
     generate,
   });
-  expect(result).toMatchObject({ width: 1080, height: 1350, mode: "direct" });
-  expect(generate.mock.calls[0][0]).toContain("Konten penting");
-  expect(generate.mock.calls[0][0]).toContain("1080 × 1350");
+  expect(result).toMatchObject({ width: 400, height: 300, mode: "direct" });
+  expect(generate.mock.calls[0][0]).toBe(lab.prompt);
+  expect(generate.mock.calls[0][0]).not.toContain("1080 × 1350");
   expect(generate.mock.calls[0][0]).toContain(lab.prompt);
   expect((generate.mock.calls[0] as any)[4]).toEqual(lab.images);
   expect(await sharp(file).metadata()).toMatchObject({
-    width: 1080,
-    height: 1350,
+    width: 400,
+    height: 300,
     format: "jpeg",
   });
   const pixel = await sharp(file)
     .extract({ left: 0, top: 0, width: 1, height: 1 })
     .raw()
     .toBuffer();
-  expect([...pixel]).toEqual([255, 255, 255]);
+  expect(pixel[0]).toBeGreaterThan(240);
+  expect(pixel[1]).toBeLessThan(10);
+  expect(pixel[2]).toBeLessThan(10);
 });
 it("carousel generates each paragraph and a closing slide with the same static references", async () => {
   const { work, generate } = await fixture();

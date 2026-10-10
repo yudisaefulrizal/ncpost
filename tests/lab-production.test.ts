@@ -184,10 +184,27 @@ it("single-image styles include the full text even when the built-in style usual
     vars,
   );
   expect(result?.prompt).toContain(vars.teks);
-  expect(result?.prompt).toContain("vertikal 9:16");
+  expect(result?.prompt).not.toContain("Orientasi:");
+  expect(result?.prompt).not.toContain("Buat satu gambar yang merangkum");
   expect(result?.images).toEqual([]);
   expect(db.query).not.toHaveBeenCalled();
   expect(
     await wholeTextProductionPrompt(db, DEFAULT_BOOK_SETTINGS, vars),
   ).toBeNull();
+});
+
+it("uses the selected Lab single-image prompt without extra production instructions", async () => {
+  const row = {
+    id: 5,
+    kind: "image",
+    prompt: "Desain persegi dengan teks {{teks}}",
+    reference_key: null,
+  };
+  const db = { query: vi.fn().mockResolvedValue([[row]]) } as any;
+  const result = await wholeTextProductionPrompt(
+    db,
+    { ...DEFAULT_BOOK_SETTINGS, wholeTextImageKind: "IMAGE_LAB_5_V" },
+    vars,
+  );
+  expect(result?.prompt).toBe(`Desain persegi dengan teks ${vars.teks}`);
 });

@@ -23,7 +23,9 @@ export function imageSettingsFromLabels(
       settings.panelVertical || settings.panelHorizontal,
       "template",
     ),
-    singleImageMode: mode(settings.wholeTextImageKind, "direct"),
+    singleImageMode: labImageKind(settings.wholeTextImageKind)
+      ? "direct"
+      : mode(settings.wholeTextImageKind, "direct"),
     sentenceVideoMode:
       settings.sentenceVideoMode ??
       (rows.find(

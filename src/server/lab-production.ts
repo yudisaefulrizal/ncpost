@@ -213,16 +213,11 @@ export async function wholeTextProductionPrompt(
   const kind = settings.wholeTextImageKind;
   if (!kind) return null;
   const lab = await productionLabPrompt(db, settings, kind, variables);
+  if (lab) return lab;
   const text = variables.teks || variables.artikel || "";
-  const orientation =
-    kind.endsWith("_H") ||
-    kind === "IMAGE_HORIZONTAL" ||
-    kind === "IMAGE_PAPERCUT_HORIZONTAL"
-      ? "horizontal 16:9"
-      : "vertikal 9:16";
   return {
-    id: lab?.id ?? 0,
-    prompt: `${lab?.prompt || stockPrompt(kind, variables.bab || "", text)}\n\nBuat satu gambar yang merangkum seluruh teks berikut. Orientasi: ${orientation}.\n\n${text}`,
-    images: lab?.images || [],
+    id: 0,
+    prompt: `${stockPrompt(kind, variables.bab || "", text)}\n\n${text}`,
+    images: [],
   };
 }

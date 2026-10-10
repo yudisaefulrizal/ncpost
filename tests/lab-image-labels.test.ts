@@ -44,7 +44,7 @@ it("labels determine production automatically even if submitted modes contradict
     { id: 6, image_type: "illustration" },
   ]);
   expect(settings.carouselMode).toBe("direct");
-  expect(settings.singleImageMode).toBe("template");
+  expect(settings.singleImageMode).toBe("direct");
   const type = {
     id: 8,
     ...normalizeContentType({
