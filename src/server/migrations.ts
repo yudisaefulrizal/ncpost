@@ -1,3 +1,4 @@
+import { CONTENT_CRON_KEY } from "./cron";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { Connection } from "mysql2/promise";
@@ -35,6 +36,9 @@ export async function migrateDatabase(connection: Connection) {
     );
   }
   for (const [table, column, definition] of [
+    ["book_cron", "batch_size", "INT NOT NULL DEFAULT 1"],
+    ["book_cron", "last_item_id", "INT NOT NULL DEFAULT 0"],
+    ["news_cron", "batch_size", "INT NOT NULL DEFAULT 1"],
     ["lab_prompts", "config", "MEDIUMTEXT NULL"],
     ["lab_runs", "config", "MEDIUMTEXT NULL"],
     ["chapters", "text_image", "TEXT NULL"],
@@ -91,6 +95,18 @@ export async function migrateDatabase(connection: Connection) {
         `ALTER TABLE ${table} DROP PRIMARY KEY, ADD PRIMARY KEY(${keys})`,
       );
   }
+  // Merge old per-context schedules once; subsequent migrations preserve user edits.
+  await connection.query(
+    `INSERT IGNORE INTO book_cron(book_key,kind,content_type_id,enabled,interval_hours,next_run,last_tick,last_result)
+    SELECT ?,kind,content_type_id,MAX(enabled),COALESCE(MAX(CASE WHEN enabled=1 THEN interval_hours END),24),
+      MAX(CASE WHEN enabled=1 THEN next_run END),MAX(last_tick),'Jadwal konteks digabung; interval terpanjang dipertahankan'
+    FROM book_cron WHERE book_key<>? GROUP BY content_type_id,kind`,
+    [CONTENT_CRON_KEY, CONTENT_CRON_KEY],
+  );
+  await connection.query(
+    "UPDATE book_cron SET enabled=0,next_run=NULL WHERE book_key<>?",
+    [CONTENT_CRON_KEY],
+  );
   for (const table of ["lab_prompts", "lab_runs"]) {
     await connection.query(
       `INSERT IGNORE INTO lab_images(id,name,role) SELECT DISTINCT reference_image,'Referensi tersimpan','reference' FROM ${table} WHERE reference_image IS NOT NULL`,

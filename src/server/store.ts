@@ -1,3 +1,4 @@
+import { CONTENT_CRON_KEY } from "./cron";
 import { contentImportItems } from "./content-import";
 import { mediaUnits } from "./content-contract";
 import { labImageKind } from "./lab-image-types";
@@ -462,7 +463,6 @@ export class Store {
     return settings;
   }
   async bookCrons(): Promise<BookCron[]> {
-    const chapters = await this.list();
     let saved: any[];
     let migrationNeeded = false;
     try {
@@ -476,60 +476,55 @@ export class Store {
       saved = [];
       migrationNeeded = true;
     }
-    const books = new Map(chapters.map((c) => [bookKey(c.book), c.book]));
-    return [...books].flatMap(([key, book]) =>
-      CRON_TYPES.map(([kind]) => {
-        const row = saved.find((r) => r.book_key === key && r.kind === kind);
-        return {
-          book,
-          kind,
-          enabled: !!row?.enabled,
-          intervalHours: Number(row?.interval_hours ?? 24),
-          next_run: row?.next_run == null ? null : Number(row.next_run),
-          last_tick: row?.last_tick == null ? null : Number(row.last_tick),
-          last_result: migrationNeeded
-            ? "Tabel cron belum tersedia. Jalankan db:setup dengan akses admin MySQL."
-            : (row?.last_result ?? null),
-        };
-      }),
-    );
+    return CRON_TYPES.map(([kind]) => {
+      const row = saved.find(
+        (r) => r.book_key === CONTENT_CRON_KEY && r.kind === kind,
+      );
+      return {
+        book: currentContentType()?.name || "Semua topik",
+        kind,
+        enabled: !!row?.enabled,
+        intervalHours: Number(row?.interval_hours ?? 24),
+        batchSize: Number(row?.batch_size ?? 1),
+        next_run: row?.next_run == null ? null : Number(row.next_run),
+        last_tick: row?.last_tick == null ? null : Number(row.last_tick),
+        last_result: migrationNeeded
+          ? "Tabel cron belum tersedia. Jalankan npm run migrate."
+          : (row?.last_result ?? null),
+      };
+    });
   }
-  async saveBookCron(book: string, input: unknown, now = Date.now()) {
-    const key = bookKey(book);
-    if (
-      key.length > 255 ||
-      !(await this.list()).some((c) => bookKey(c.book) === key)
-    )
-      throw Error("Buku tidak ditemukan");
+  async saveBookCron(_book: string, input: unknown, now = Date.now()) {
     const c = normalizeCron(input);
     try {
       await run(
         this.db,
-        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run,content_type_id) VALUES(?,?,?,?,?,?)
-      ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run)`,
+        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run,content_type_id,batch_size) VALUES(?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run),batch_size=VALUES(batch_size)`,
         [
-          key,
+          CONTENT_CRON_KEY,
           c.kind,
           c.enabled ? 1 : 0,
           c.intervalHours,
           c.enabled ? now + c.intervalHours * 3600000 : null,
           currentContentType()?.id ?? 1,
+          c.batchSize,
         ],
       );
     } catch (e) {
       if ((e as { code?: string }).code === "ER_NO_SUCH_TABLE")
-        throw Error(
-          "Tabel cron belum tersedia. Jalankan db:setup dengan akses admin MySQL.",
-        );
+        throw Error("Tabel cron belum tersedia. Jalankan npm run migrate.");
       throw e;
     }
     return c;
   }
+
   async scheduleCrons(now = Date.now()) {
     const tick = Math.floor(now / 60000) * 60000;
     const due = await rows<any>(
       this.db,
-      "SELECT * FROM book_cron WHERE enabled=1",
+      "SELECT * FROM book_cron WHERE enabled=1 AND book_key=?",
+      [CONTENT_CRON_KEY],
     );
     for (const cron of due) {
       try {
@@ -562,14 +557,19 @@ export class Store {
             )
           )
             return;
-          const chapters = (
-            await rows<Chapter>(
-              db,
-              "SELECT * FROM chapters WHERE content_type_id=? ORDER BY COALESCE(part_number,id),id",
-              [cron.content_type_id ?? 1],
-            )
-          ).filter((c) => bookKey(c.book) === cron.book_key);
-          let result = "Tidak ada bagian yang siap / belum selesai";
+          const chapters = await rows<Chapter>(
+            db,
+            "SELECT * FROM chapters WHERE content_type_id=? ORDER BY COALESCE(part_number,id),id",
+            [cron.content_type_id ?? 1],
+          );
+          const cursor = Number(current.last_item_id || 0);
+          chapters.sort(
+            (a, b) =>
+              Number(a.id <= cursor) - Number(b.id <= cursor) || a.id - b.id,
+          );
+          let queued = 0,
+            lastItemId = cursor;
+          let result = "Tidak ada topik yang siap / belum selesai";
           for (const c of chapters) {
             const active = await rows<Job>(
               db,
@@ -596,16 +596,19 @@ export class Store {
             );
             if (!kinds.length) continue;
             for (const k of kinds) await this.enqueue(c.id, k, false, db);
-            result = `Bagian ${c.part_number ?? c.id}: ${kinds.join(", ")} masuk antrean`;
-            break;
+            queued++;
+            lastItemId = c.id;
+            result = `${queued} topik: ${cron.kind} masuk antrean`;
+            if (queued >= Number(current.batch_size || 1)) break;
           }
           await run(
             db,
-            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=? WHERE book_key=? AND kind=? AND content_type_id=?",
+            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=?,last_item_id=? WHERE book_key=? AND kind=? AND content_type_id=?",
             [
               tick,
               result,
               now + Number(current.interval_hours) * 3600000,
+              lastItemId,
               cron.book_key,
               cron.kind,
               cron.content_type_id ?? 1,

@@ -3,6 +3,7 @@ import type { Chapter } from "./store";
 import { validateContentText } from "./domain";
 import { panelSources, sentenceJob, type BookSettings } from "./book-settings";
 
+export const CONTENT_CRON_KEY = "@content-type";
 export const CRON_TYPES = [
   ["ARTICLE", "Artikel"],
   ["QUOTE", "Quote"],
@@ -23,6 +24,7 @@ export interface BookCron<K extends string = CronKind> {
   kind: K;
   enabled: boolean;
   intervalHours: number;
+  batchSize?: number;
   next_run: number | null;
   last_tick: number | null;
   last_result: string | null;
@@ -41,7 +43,7 @@ export function intervalDue(nextRun: number | null, now: number) {
 }
 type CronInput<K extends string> = Pick<
   BookCron<K>,
-  "kind" | "enabled" | "intervalHours"
+  "kind" | "enabled" | "intervalHours" | "batchSize"
 >;
 export function normalizeCron(input: any): CronInput<CronKind>;
 export function normalizeCron<K extends string>(
@@ -51,7 +53,7 @@ export function normalizeCron<K extends string>(
 export function normalizeCron(
   input: any,
   kinds: readonly string[] = CRON_TYPES.map(([k]) => k),
-) {
+): CronInput<string> {
   if (!kinds.includes(input?.kind)) throw Error("Jenis cron tidak dikenal");
   if (typeof input.enabled !== "boolean")
     throw Error("Status cron tidak valid");
@@ -59,7 +61,11 @@ export function normalizeCron(
     throw Error(
       `Interval harus berupa angka bulat 1–${MAX_INTERVAL_HOURS} jam`,
     );
+  const batchSize = input.batchSize ?? 1;
+  if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 100)
+    throw Error("Jumlah konten harus 1–100");
   return {
+    batchSize,
     kind: input.kind as string,
     enabled: input.enabled,
     intervalHours: input.intervalHours,

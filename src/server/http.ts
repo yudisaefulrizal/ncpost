@@ -460,8 +460,7 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
 app.put("/api/book-crons", async (req, res) => {
-  if (typeof req.body?.book !== "string") throw Error("Konteks wajib diisi");
-  res.json(await store.saveBookCron(req.body.book, req.body));
+  res.json(await store.saveBookCron("", req.body));
 });
 
 // Pengaturan Konten: satu baris per judul buku yang ada di daftar bagian.

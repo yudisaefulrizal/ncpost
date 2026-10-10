@@ -36,7 +36,12 @@ it("validasi interval jam menolak kosong, pecahan, teks dan nilai di luar batas"
   ).toThrow();
   expect(
     normalizeCron({ kind: "ARTICLE", enabled: false, intervalHours: 2 }),
-  ).toEqual({ kind: "ARTICLE", enabled: false, intervalHours: 2 });
+  ).toEqual({
+    kind: "ARTICLE",
+    enabled: false,
+    intervalHours: 2,
+    batchSize: 1,
+  });
 });
 const article =
   "# Judul\n\n## Hook\n\nHook.\n\nSatu.\n\nDua.\n\nTiga.\n\nEmpat.\n\nLima.\n\nBerdasarkan buku Buku, Penulis.\n\nTag: buku";
@@ -132,4 +137,17 @@ it("publikasi otomatis hanya untuk hasil siap dengan status awal", () => {
   expect(cronJobs("REELS_IG", chapter({ sentence_video: "{}" }), s)).toEqual([
     "REELS_IG",
   ]);
+});
+
+it("validates batch sizes", () => {
+  for (const batchSize of [0, 101, 1.5, "2"]) {
+    expect(() =>
+      normalizeCron({
+        kind: "ARTICLE",
+        enabled: true,
+        intervalHours: 2,
+        batchSize,
+      }),
+    ).toThrow("Jumlah konten");
+  }
 });

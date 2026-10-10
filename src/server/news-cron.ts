@@ -41,6 +41,7 @@ export class NewsCronStore {
         kind,
         enabled: !!r?.enabled,
         intervalHours: r?.interval_hours ?? 24,
+        batchSize: r?.batch_size ?? 1,
         next_run: r?.next_run ?? null,
         last_tick: r?.last_tick ?? null,
         last_result: r?.last_result ?? null,
@@ -56,13 +57,14 @@ export class NewsCronStore {
       NEWS_CRON_TYPES.map(([k]) => k),
     );
     await this.db.query(
-      "INSERT INTO news_cron(category,kind,enabled,interval_hours,next_run) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run)",
+      "INSERT INTO news_cron(category,kind,enabled,interval_hours,next_run,batch_size) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run),batch_size=VALUES(batch_size)",
       [
         this.category,
         v.kind,
         v.enabled ? 1 : 0,
         v.intervalHours,
         v.enabled ? now + v.intervalHours * 3600000 : null,
+        v.batchSize,
       ],
     );
     return this.list();
@@ -106,10 +108,12 @@ export class NewsCronStore {
       let message = "Belum ada berita yang memenuhi prasyarat";
       try {
         const articles = await news.list();
+        let processed = 0;
+        const batchSize = cron.batchSize || 1;
         if (cron.kind === "ARTICLE") {
           if (!articles.some((n) => ["queued", "running"].includes(n.state))) {
-            await news.create();
-            message = "Pencarian artikel baru masuk antrean";
+            for (let i = 0; i < batchSize; i++) await news.create();
+            message = `${batchSize} artikel baru masuk antrean`;
           } else message = "Artikel masih dalam proses";
         } else if (cron.kind === "POST_TIKTOK") {
           const settings = await media.settings();
@@ -147,8 +151,9 @@ export class NewsCronStore {
             );
             if (previous.length) continue;
             const result = await this.publishTikTok(source);
-            message = `Berita #${n.id}: TikTok ${result.status}`;
-            break;
+            processed++;
+            message = `${processed} artikel: TikTok ${result.status}`;
+            if (processed >= batchSize) break;
           }
         } else {
           const settings = await media.settings();
@@ -171,8 +176,9 @@ export class NewsCronStore {
             )
               continue;
             const ids = await media.enqueueMany(n.id, kinds);
-            message = `Berita #${n.id}: ${ids.length} job masuk antrean`;
-            break;
+            processed++;
+            message = `${processed} artikel: ${cron.kind} masuk antrean`;
+            if (processed >= batchSize) break;
           }
         }
       } catch (e) {

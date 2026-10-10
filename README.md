@@ -126,6 +126,8 @@ Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `
 
 Jenis konten menentukan target akhir dan gaya gambar. Produksi dijalankan lewat tombol manual (termasuk aksi batch) atau cronjob yang diaktifkan dengan jadwal. Worker tidak lagi mengantrekan semua bahan secara otomatis di luar cronjob; pengaturan lama `autoProcess` dinonaktifkan.
 
+Cronjob diatur sekali per jenis konten dan berlaku untuk seluruh konteks/topiknya. Setiap putaran memilih topik yang memenuhi prasyarat secara bergiliran; jumlah konten per putaran 1–100 (bawaan 1). Akun tujuan mengikuti Pengaturan Konten. Migrasi menggabungkan jadwal lama per konteks dengan interval aktif terpanjang, lalu menonaktifkan jadwal lama agar tidak berjalan ganda.
+
 Setiap tahap memiliki cronjob dan interval sendiri: artikel, gambar, audio, render, atau publikasi. Cronjob hanya mengantrekan tahap yang dipilih saat prasyarat sudah siap; tidak membuat prasyarat dan tidak menjalankan tahap berikutnya. Interval tetap 1–8760 jam, bawaan 24 jam dan nonaktif. Job yang sudah diantrekan tetap diproses; perubahan ini menghentikan pemicu otomatis yang menambahkan job baru tanpa jadwal.
 
 ## Akun Instagram per buku

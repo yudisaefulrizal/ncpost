@@ -2781,48 +2781,38 @@ function CronSettings({
     ([key]) => !type || contentAllows(type, key),
   );
 
-  const books = [...new Set(items.map((c) => c.book))];
   return (
-    <div className="stack-lg">
-      {!books.length && (
-        <section className="card pad">
-          Belum ada konteks. Tambahkan topik di halaman Produksi.
-        </section>
-      )}
-      {books.map((book) => (
-        <section key={book} className="card pad stack">
-          <h2 className="h3">{book}</h2>
-          <div className="table">
-            <table className="cron-table">
-              <thead>
-                <tr>
-                  {stages.map(([kind, label]) => (
-                    <th key={kind}>{label}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  {stages.map(([kind, label]) => (
-                    <td key={kind}>
-                      <CronCell
-                        cron={
-                          items.find((c) => c.book === book && c.kind === kind)!
-                        }
-                        label={label}
-                        onSave={onSave}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ))}
-    </div>
+    <section className="card pad stack">
+      <h2 className="h3">{type?.name || "Semua topik"}</h2>
+      <div className="table">
+        <table className="cron-table">
+          <thead>
+            <tr>
+              {stages.map(([kind, label]) => (
+                <th key={kind}>{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {stages.map(([kind, label]) => {
+                const cron = items.find((c) => c.kind === kind);
+                return (
+                  <td key={kind}>
+                    {cron && (
+                      <CronCell cron={cron} label={label} onSave={onSave} />
+                    )}
+                  </td>
+                );
+              })}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
+
 function CronCell<K extends string>({
   cron,
   label,
@@ -2837,14 +2827,20 @@ function CronCell<K extends string>({
   const [error, setError] = useState("");
   useEffect(
     () => setDraft(cron),
-    [cron.book, cron.kind, cron.enabled, cron.intervalHours],
+    [cron.book, cron.kind, cron.enabled, cron.intervalHours, cron.batchSize],
   );
-  const invalid = validIntervalHours(draft.intervalHours)
-    ? ""
-    : `Isi angka bulat 1–${MAX_INTERVAL_HOURS} jam`;
+  const invalid =
+    !Number.isInteger(draft.batchSize ?? 1) ||
+    (draft.batchSize ?? 1) < 1 ||
+    (draft.batchSize ?? 1) > 100
+      ? "Isi jumlah konten 1–100"
+      : validIntervalHours(draft.intervalHours)
+        ? ""
+        : `Isi angka bulat 1–${MAX_INTERVAL_HOURS} jam`;
   const changed =
     draft.enabled !== cron.enabled ||
-    draft.intervalHours !== cron.intervalHours;
+    draft.intervalHours !== cron.intervalHours ||
+    (draft.batchSize ?? 1) !== (cron.batchSize ?? 1);
   return (
     <div className="stack-sm">
       <label className="check-row">
@@ -2869,6 +2865,21 @@ function CronCell<K extends string>({
           disabled={saving}
           onChange={(e) =>
             setDraft({ ...draft, intervalHours: e.target.valueAsNumber })
+          }
+        />
+      </label>
+      <label className="field">
+        Konten per putaran
+        <input
+          type="number"
+          min={1}
+          max={100}
+          step={1}
+          disabled={saving}
+          value={Number.isNaN(draft.batchSize) ? "" : (draft.batchSize ?? 1)}
+          aria-label={`Jumlah konten ${label} ${cron.book}`}
+          onChange={(e) =>
+            setDraft({ ...draft, batchSize: e.target.valueAsNumber })
           }
         />
       </label>
