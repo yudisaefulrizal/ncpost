@@ -5,7 +5,7 @@ const REFERENCES = [
     id: "quote",
     kind: "quote",
     name: "Quote",
-    file: "quote/quote.md",
+    file: "quote/mandiri.md",
     orientation: "bebas",
   },
   {

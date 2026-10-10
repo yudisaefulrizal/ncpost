@@ -1,3 +1,4 @@
+import { standaloneQuotePrompt } from "./quote-text";
 import { labImageKind, labImageCatalog } from "./lab-image-types";
 import type mysql from "mysql2/promise";
 import type { BookSettings } from "./book-settings";
@@ -48,10 +49,14 @@ export async function validateLabSettings(
   ];
   if (!ids.length) return;
   const [rows]: any = await db.query(
-    "SELECT id,name,kind,reference_key,image_type FROM lab_prompts WHERE id IN (?)",
+    "SELECT id,name,kind,prompt,reference_key,image_type FROM lab_prompts WHERE id IN (?)",
     [ids],
   );
   if (rows.length !== ids.length) throw Error("Prompt Lab tidak ditemukan");
+  if (engine === "quote") {
+    for (const row of rows.filter((row: SavedPrompt) => row.kind === "quote"))
+      standaloneQuotePrompt(row.prompt);
+  }
   const illustrationIds = new Set(
     [...settings.stockKinds, ...settings.sentenceKinds]
       .map((kind) => labImageKind(kind)?.id)

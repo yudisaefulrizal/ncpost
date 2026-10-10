@@ -384,6 +384,21 @@ app.post("/api/news/:id/regenerate", async (req, res) => {
 });
 app.get("/api/chapters", async (_, res) => res.json(await store.list()));
 app.post("/api/chapters", async (req, res) => {
+  const type = currentContentType();
+  if (type?.engine === "quote") {
+    const ids = type.settings?.labPromptIds || [];
+    const [prompts]: any = ids.length
+      ? await store.db.query(
+          "SELECT id FROM lab_prompts WHERE kind='quote' AND id IN (?)",
+          [ids],
+        )
+      : [[]];
+    if (!prompts.length)
+      throw Error("Aktifkan prompt Lab Quote di Pengaturan Konten");
+    return void res
+      .status(201)
+      .json({ id: await store.create(type.name, "Quote") });
+  }
   const { book, title } = req.body ?? {};
   if (typeof book !== "string" || typeof title !== "string")
     throw Error("Judul buku dan judul bagian wajib diisi");

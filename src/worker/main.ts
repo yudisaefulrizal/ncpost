@@ -255,7 +255,6 @@ async function runJob(job: Job) {
       const text = await generateStandaloneQuote(
         store.db,
         await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),
-        c.title,
         work,
         codex,
       );

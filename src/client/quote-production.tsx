@@ -16,7 +16,6 @@ export function QuoteProduction({
 }) {
   const [rows, setRows] = useState<Chapter[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
-  const [theme, setTheme] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<{ row: Chapter; kind: string } | null>(null);
@@ -118,29 +117,15 @@ export function QuoteProduction({
       : null;
   return (
     <section className="card pad stack">
-      <form
-        className="row-gap"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void run(async () => {
-            await call("/chapters", "POST", { book: type.name, title: theme });
-            setTheme("");
-          });
-        }}
-      >
-        <label className="field">
-          Tema quote
-          <input
-            required
-            maxLength={500}
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-          />
-        </label>
-        <button className="btn btn-pri" disabled={busy || !theme.trim()}>
+      <div>
+        <button
+          className="btn btn-pri"
+          disabled={busy}
+          onClick={() => void run(() => call("/chapters", "POST"))}
+        >
           Tambah quote
         </button>
-      </form>
+      </div>
       {error && (
         <p role="alert" className="warn">
           {error}
@@ -150,7 +135,7 @@ export function QuoteProduction({
         <table>
           <thead>
             <tr>
-              <th>Tema</th>
+              <th>Konten</th>
               {stages.map(([kind, label]) => (
                 <th key={kind}>{label}</th>
               ))}
@@ -160,7 +145,7 @@ export function QuoteProduction({
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td>{row.title}</td>
+                <td>Quote {row.part_number || row.id}</td>
                 {stages.map(([kind, label, column]) => {
                   const done = completed(row, kind, column);
                   const active = jobs.some(
@@ -278,7 +263,7 @@ export function QuoteProduction({
             <p>{current.article}</p>
           ) : view.kind === "POST_IMAGE" ? (
             <img
-              className="reels-player"
+              className="content-image-preview"
               src={`/api/text-image/${current.id}?v=${encodeURIComponent(manifest?.renderedAt || "")}`}
               alt={current.title}
             />

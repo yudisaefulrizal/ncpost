@@ -9,3 +9,12 @@ export function quoteText(raw: string) {
 export function quoteInstruction(prompt: string) {
   return `${prompt}\n\nFormat hasil: hanya satu paragraf quote. Tanpa judul, heading, sumber, tag, daftar, atau penjelasan tambahan.`;
 }
+
+export function standaloneQuotePrompt(prompt: string) {
+  if (/\{\{\w+\}\}/.test(prompt))
+    throw Error(
+      "Prompt Quote mandiri harus lengkap tanpa placeholder artikel atau tema tambahan",
+    );
+  if (!prompt.trim()) throw Error("Prompt Quote wajib diisi");
+  return prompt;
+}

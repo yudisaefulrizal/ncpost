@@ -4533,7 +4533,7 @@ function FinishedImages({ rows }: { rows: any[] }) {
       {!images.length ? (
         <div className="empty">Belum ada konten gambar siap posting.</div>
       ) : (
-        <div className="gallery">
+        <div className="gallery finished-images">
           {images.map((image) => (
             <figure key={image.key}>
               <a href={image.url} target="_blank" rel="noreferrer">

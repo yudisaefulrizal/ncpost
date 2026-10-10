@@ -73,13 +73,13 @@ it("adapts quote text for media without relaxing the book article contract", () 
   ]);
   expect(cronJobs("VIDEO_KALIMAT", row, DEFAULT_BOOK_SETTINGS)).toEqual([]);
 });
-it("generates an independent quote using its active Lab prompt and theme", async () => {
+it("generates an independent quote exclusively from its active Lab prompt", async () => {
   const query = vi.fn().mockResolvedValue([
     [
       {
         id: 3,
         kind: "quote",
-        prompt: "Buat renungan: {{paragraf}}",
+        prompt: "Buat renungan tentang mendengarkan.",
         reference_key: "quote",
       },
     ],
@@ -88,13 +88,12 @@ it("generates an independent quote using its active Lab prompt and theme", async
   const result = await generateStandaloneQuote(
     { query } as any,
     { ...DEFAULT_BOOK_SETTINGS, labPromptIds: [3] },
-    "Mendengarkan",
     "/tmp/quote",
     generate,
   );
   expect(result).toBe("Dengarkan untuk memahami.");
   expect(generate).toHaveBeenCalledWith(
-    expect.stringContaining("Buat renungan: Mendengarkan"),
+    expect.stringContaining("Buat renungan tentang mendengarkan."),
     "/tmp/quote",
   );
   generate.mockResolvedValue("# Judul\nQuote.");
@@ -102,9 +101,41 @@ it("generates an independent quote using its active Lab prompt and theme", async
     generateStandaloneQuote(
       { query } as any,
       { ...DEFAULT_BOOK_SETTINGS, labPromptIds: [3] },
-      "Tema",
       "/tmp/quote",
       generate,
     ),
   ).rejects.toThrow("satu paragraf");
+});
+
+it("requires an active self-contained Lab Quote prompt instead of falling back to a theme", async () => {
+  const generate = vi.fn();
+  const query = vi
+    .fn()
+    .mockResolvedValue([
+      [
+        {
+          id: 3,
+          kind: "quote",
+          prompt: "Ringkas {{artikel}}",
+          reference_key: "quote",
+        },
+      ],
+    ]);
+  await expect(
+    generateStandaloneQuote(
+      { query } as any,
+      DEFAULT_BOOK_SETTINGS,
+      "/tmp/quote",
+      generate,
+    ),
+  ).rejects.toThrow("Aktifkan prompt Lab Quote");
+  await expect(
+    generateStandaloneQuote(
+      { query } as any,
+      { ...DEFAULT_BOOK_SETTINGS, labPromptIds: [3] },
+      "/tmp/quote",
+      generate,
+    ),
+  ).rejects.toThrow("tanpa placeholder");
+  expect(generate).not.toHaveBeenCalled();
 });

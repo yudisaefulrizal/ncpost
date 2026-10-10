@@ -1640,3 +1640,18 @@ dialog.app-dialog::backdrop {
 .production-actions .play {
   border-radius: 6px;
 }
+
+.content-image-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.gallery.finished-images img {
+  aspect-ratio: auto;
+  height: auto;
+  object-fit: contain;
+}
