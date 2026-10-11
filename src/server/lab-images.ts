@@ -7,7 +7,10 @@ import { outputRoot } from "./output-paths";
 export const LAB_IMAGE_LIMIT = 10 * 1024 * 1024;
 export function labImageId(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !/^[a-f0-9-]{36}\.(?:jpg|png)$/.test(value))
+  if (
+    typeof value !== "string" ||
+    !/^[a-f0-9-]{36}\.(?:jpg|png|webp)$/.test(value)
+  )
     throw Error("Gambar referensi tidak valid");
   return value;
 }
@@ -36,15 +39,11 @@ export async function saveLabImage(data: Buffer) {
     (meta.pages || 1) > 1
   )
     throw Error("Gunakan gambar JPG, PNG, atau WebP statis");
-  const normalized = await image
-    .rotate()
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" })
-    .toBuffer();
   const root = path.join(outputRoot(), "lab-references");
   await mkdir(root, { recursive: true, mode: 0o700 });
-  const id = `${randomUUID()}.jpg`;
-  await writeFile(path.join(root, id), normalized, { mode: 0o600, flag: "wx" });
+  const extension = meta.format === "jpeg" ? "jpg" : meta.format;
+  const id = `${randomUUID()}.${extension}`;
+  await writeFile(path.join(root, id), data, { mode: 0o600, flag: "wx" });
   return id;
 }
 

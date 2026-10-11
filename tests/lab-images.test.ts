@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { rm, stat, symlink } from "node:fs/promises";
+import { rm, stat, symlink, readFile } from "node:fs/promises";
 import sharp from "sharp";
 import {
   labImageId,
@@ -41,10 +41,11 @@ async function upload() {
   const id = await saveLabImage(bytes);
   const file = await labImageFile(id);
   files.push(file);
-  return { id, file };
+  return { id, file, bytes };
 }
-it("stores a private normalized image and rejects invalid uploads and paths", async () => {
-  const { file } = await upload();
+it("stores original upload bytes privately and rejects invalid uploads and paths", async () => {
+  const { file, bytes } = await upload();
+  expect(await readFile(file)).toEqual(bytes);
   expect(file).toMatch(/\.jpg$/);
   expect((await stat(file)).mode & 0o777).toBe(0o600);
   expect(await sharp(file).metadata()).toMatchObject({
@@ -65,7 +66,7 @@ it("stores a private normalized image and rejects invalid uploads and paths", as
   files.push(link);
   await expect(labImageFile(path.basename(link))).rejects.toThrow();
 });
-it("converts transparent PNG uploads to JPEG without changing dimensions", async () => {
+it("preserves transparency and dimensions of PNG references and logos", async () => {
   const bytes = await sharp({
     create: { width: 17, height: 23, channels: 4, background: "#00000000" },
   })
@@ -74,19 +75,20 @@ it("converts transparent PNG uploads to JPEG without changing dimensions", async
   const id = await saveLabImage(bytes);
   const file = await labImageFile(id);
   files.push(file);
-  expect(id).toMatch(/\.jpg$/);
+  expect(await readFile(file)).toEqual(bytes);
+  expect(id).toMatch(/\.png$/);
   expect(await sharp(file).metadata()).toMatchObject({
-    format: "jpeg",
+    format: "png",
     width: 17,
     height: 23,
-    hasAlpha: false,
+    hasAlpha: true,
   });
   const { data } = await sharp(file)
     .raw()
     .toBuffer({ resolveWithObject: true });
-  expect([...data.subarray(0, 3)]).toEqual([255, 255, 255]);
-  expect(labImageId("00000000-0000-4000-8000-000000000001.png")).toBe(
-    "00000000-0000-4000-8000-000000000001.png",
+  expect(data[3]).toBe(0);
+  expect(labImageId("00000000-0000-4000-8000-000000000001.jpg")).toBe(
+    "00000000-0000-4000-8000-000000000001.jpg",
   );
 });
 it("snapshots the reference on a run and passes its private file to the image adapter", async () => {
@@ -176,10 +178,10 @@ it("accepts binary uploads through the same JSON parsers as the app and serves t
     const preview = await fetch(`${base}/${id}`);
     expect(preview.status).toBe(200);
     expect(preview.headers.get("cache-control")).toBe("private, no-store");
-    expect(preview.headers.get("content-type")).toContain("image/jpeg");
+    expect(preview.headers.get("content-type")).toContain("image/webp");
     expect(
       await sharp(Buffer.from(await preview.arrayBuffer())).metadata(),
-    ).toMatchObject({ width: 12, height: 16 });
+    ).toMatchObject({ format: "webp", width: 12, height: 16 });
     const invalid = await fetch(base, {
       method: "POST",
       headers: { "Content-Type": "image/png" },
