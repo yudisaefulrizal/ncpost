@@ -1,3 +1,4 @@
+import { UpcomingCronsPage } from "./cron-upcoming";
 import { QueuePage } from "./queue";
 import { mediaUnits } from "../server/content-contract";
 import { QuoteProduction } from "./quote-production";
@@ -92,6 +93,7 @@ const navGroups: [string, [string, IconName][]][] = [
     [
       ["Kreat Konten", "grid"],
       ["List Antrian", "doc"],
+      ["List Cronjob Berikutnya", "gear"],
     ],
   ],
   [
@@ -1587,6 +1589,10 @@ function App() {
         }
       />
     );
+  } else if (page === "List Cronjob Berikutnya") {
+    heading = "List Cronjob Berikutnya";
+    sub = "";
+    content = <UpcomingCronsPage />;
   } else if (page === "List Antrian") {
     heading = "List Antrian";
     sub = "";

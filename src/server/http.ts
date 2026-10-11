@@ -1,3 +1,4 @@
+import { listUpcomingCrons } from "./cron-upcoming";
 import { listQueue, queueAction } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
@@ -458,6 +459,9 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
   );
   res.status(202).json({ id });
 });
+app.get("/api/cron-upcoming", async (_, res) =>
+  res.json(await listUpcomingCrons(store)),
+);
 app.get("/api/queue", async (req, res) =>
   res.json(
     await listQueue(

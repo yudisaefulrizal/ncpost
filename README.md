@@ -124,6 +124,8 @@ Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `
 
 ## Produksi dan cronjob
 
+Menu **List Cronjob Berikutnya** menggabungkan jadwal aktif dari seluruh jenis konten, diurutkan berdasarkan waktu terdekat dalam WIB. Daftar menampilkan aksi dan jumlah konten per putaran serta diperbarui setiap 15 detik. Pengaturan jadwal tetap di submenu Cronjob jenis konten. Jadwal yang waktunya sudah lewat tetap ditampilkan sebagai menunggu scheduler.
+
 Menu **List Antrian** menampilkan pekerjaan artikel dan produksi dari semua jenis konten, baik dari aksi manual maupun cronjob. Daftar diperbarui setiap 5 detik, dengan filter status/jenis konten dan pencarian. Pekerjaan menunggu bisa dibatalkan; pekerjaan gagal terbaru dapat dicoba ulang jika revisi konten belum berubah. Pekerjaan berjalan tidak dapat dibatalkan dari daftar ini. Waktu masuk antrean tersedia untuk pekerjaan baru setelah migrasi; pekerjaan lama tanpa catatan waktu menampilkan `—`.
 
 Jenis konten menentukan target akhir dan gaya gambar. Produksi dijalankan lewat tombol manual (termasuk aksi batch) atau cronjob yang diaktifkan dengan jadwal. Worker tidak lagi mengantrekan semua bahan secara otomatis di luar cronjob; pengaturan lama `autoProcess` dinonaktifkan.
