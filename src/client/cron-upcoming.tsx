@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import { paginateRows } from "./pagination";
 import type { UpcomingCron } from "../server/cron-upcoming";
+import { CronChart } from "./cron-chart";
 import { CronTable } from "./cron-settings";
 import { ContentTypeContext } from "./content-types";
 import { contentAllows, type ContentType } from "../server/content-type-domain";
@@ -14,6 +15,7 @@ const cronStages = (type: ContentType) =>
     contentAllows(type, kind),
   );
 export function UpcomingCronsPage() {
+  const [tab, setTab] = useState<"list" | "chart">("list");
   const [types, setTypes] = useState<ContentType[]>([]);
   const [selected, setSelected] = useState<ContentType | null>(null);
   const [adding, setAdding] = useState(false);
@@ -124,194 +126,252 @@ export function UpcomingCronsPage() {
   const paged = paginateRows(filtered, page);
   return (
     <section className="card pad stack cron-upcoming">
-      <div className="upcoming-toolbar">
-        <div className="cron-heading">
-          <h2 className="h3">Semua cronjob</h2>
-          <span className="cron-count">{items.length}</span>
-        </div>
-        <div className="upcoming-controls">
-          <div className="upcoming-search">
-            <UpcomingIcon name="search" />
-            <input
-              aria-label="Cari cronjob"
-              placeholder="Cari jenis konten atau aksi"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-            />
-          </div>
-          <button
-            className="btn btn-sec"
-            disabled={loading}
-            onClick={() => setRefresh((v) => v + 1)}
-          >
-            {loading ? (
-              <span className="spinner" aria-hidden="true" />
-            ) : (
-              <UpcomingIcon name="refresh" />
-            )}{" "}
-            Perbarui
-          </button>
-          <button
-            className="btn btn-pri"
-            disabled={adding}
-            onClick={() => void add()}
-          >
-            {adding && <span className="spinner" aria-hidden="true" />} Tambah
-            Cronjob
-          </button>
-        </div>
+      <div
+        className="cron-page-tabs"
+        role="tablist"
+        aria-label="Tampilan cronjob"
+      >
+        <button
+          role="tab"
+          id="cron-list-tab"
+          aria-selected={tab === "list"}
+          aria-controls="cron-list-panel"
+          onClick={() => setTab("list")}
+        >
+          List Cronjob
+        </button>
+        <button
+          role="tab"
+          id="cron-chart-tab"
+          aria-selected={tab === "chart"}
+          aria-controls="cron-chart-panel"
+          onClick={() => setTab("chart")}
+        >
+          Grafik
+        </button>
       </div>
-      {error && (
-        <p role="alert" className="warn">
-          {error}
-        </p>
-      )}
-      {loading && !items.length ? (
-        <p className="lab-run-status">
-          <span className="spinner" aria-hidden="true" />
-          Memuat jadwal…
-        </p>
-      ) : (
-        <>
-          <div className="table">
-            <table className="cron-table global-cron-table">
-              <thead>
-                <tr>
-                  <th>Konten</th>
-                  <th>Proses</th>
-                  <th>Jadwal</th>
-                  <th>Status</th>
-                  <th>Waktu berikutnya</th>
-                  <th className="right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paged.items.map((c) => (
-                  <tr key={`${c.contentTypeId}:${c.id || c.kind}`}>
-                    <td className="cron-content">{c.contentType}</td>
-                    <td>{c.label}</td>
-                    <td>
-                      {c.cron?.schedule
-                        ? scheduleLabel(c.cron.schedule)
-                        : `Setiap ${c.cron?.intervalHours || 24} jam`}
-                    </td>
-                    <td>
-                      <span
-                        className={`queue-state ${c.cron?.enabled ? "queue-state-completed" : "queue-state-cancelled"}`}
-                      >
-                        {c.cron?.enabled ? "Aktif" : "Nonaktif"}
-                      </span>
-                    </td>
-                    <td>
-                      {c.cron?.enabled && c.nextRun !== null ? (
-                        <div className="cron-next">
-                          <strong>
-                            {new Date(c.nextRun).toLocaleTimeString("id-ID", {
-                              timeZone: "Asia/Jakarta",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}{" "}
-                            <small>WIB</small>
-                          </strong>
-                          <span>
-                            {new Date(c.nextRun).toLocaleDateString("id-ID", {
-                              timeZone: "Asia/Jakarta",
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </span>
-                          {c.nextRun <= Date.now() && (
-                            <span className="upcoming-waiting">Menunggu</span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="cron-actions">
-                        <button
-                          className="btn btn-sec btn-sm cron-icon-btn"
-                          aria-label="Sunting"
-                          title="Sunting cronjob"
-                          disabled={!!busy}
-                          onClick={() => void edit(c)}
-                        >
-                          <UpcomingIcon name="edit" />
-                        </button>
-                        <button
-                          className="btn btn-sec btn-sm cron-icon-btn"
-                          aria-label="Duplikasi"
-                          title="Duplikasi cronjob"
-                          disabled={!!busy}
-                          onClick={() => void edit(c, true)}
-                        >
-                          <UpcomingIcon name="copy" />
-                        </button>
-                        <button
-                          className="btn btn-sec btn-sm cron-icon-btn cron-delete"
-                          aria-label="Hapus"
-                          title="Hapus cronjob"
-                          disabled={!!busy}
-                          onClick={() => void remove(c)}
-                        >
-                          {busy === `${c.contentTypeId}:${c.id}` ? (
-                            <span className="spinner" />
-                          ) : (
-                            <UpcomingIcon name="delete" />
-                          )}
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {!paged.total && (
-                  <tr>
-                    <td colSpan={6} className="cron-empty">
-                      {search
-                        ? "Tidak ada jadwal yang sesuai pencarian."
-                        : "Belum ada cronjob. Tambahkan jadwal melalui tombol Tambah Cronjob."}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="upcoming-footer">
-            <small className="muted">
-              {paged.total
-                ? `Menampilkan ${(paged.page - 1) * 20 + 1}–${Math.min(paged.page * 20, paged.total)} dari ${paged.total} jadwal`
-                : "0 jadwal"}
-            </small>
-            <div className="upcoming-pagination">
+      {tab === "list" && (
+        <div
+          id="cron-list-panel"
+          role="tabpanel"
+          aria-labelledby="cron-list-tab"
+        >
+          <div className="upcoming-toolbar">
+            <div className="cron-heading">
+              <h2 className="h3">Semua cronjob</h2>
+              <span className="cron-count">{items.length}</span>
+            </div>
+            <div className="upcoming-controls">
+              <div className="upcoming-search">
+                <UpcomingIcon name="search" />
+                <input
+                  aria-label="Cari cronjob"
+                  placeholder="Cari jenis konten atau aksi"
+                  value={search}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </div>
               <button
-                className="btn btn-sec btn-sm cron-icon-btn"
-                aria-label="Sebelumnya"
-                title="Halaman sebelumnya"
-                disabled={paged.page <= 1}
-                onClick={() => setPage(paged.page - 1)}
+                className="btn btn-sec"
+                disabled={loading}
+                onClick={() => setRefresh((v) => v + 1)}
               >
-                <UpcomingIcon name="left" />
+                {loading ? (
+                  <span className="spinner" aria-hidden="true" />
+                ) : (
+                  <UpcomingIcon name="refresh" />
+                )}{" "}
+                Perbarui
               </button>
-              <span>
-                {paged.page} / {paged.pages}
-              </span>
               <button
-                className="btn btn-sec btn-sm cron-icon-btn"
-                aria-label="Berikutnya"
-                title="Halaman berikutnya"
-                disabled={paged.page >= paged.pages}
-                onClick={() => setPage(paged.page + 1)}
+                className="btn btn-pri"
+                disabled={adding}
+                onClick={() => void add()}
               >
-                <UpcomingIcon name="right" />
+                {adding && <span className="spinner" aria-hidden="true" />}{" "}
+                Tambah Cronjob
               </button>
             </div>
           </div>
-        </>
+          {error && (
+            <p role="alert" className="warn">
+              {error}
+            </p>
+          )}
+          {loading && !items.length ? (
+            <p className="lab-run-status">
+              <span className="spinner" aria-hidden="true" />
+              Memuat jadwal…
+            </p>
+          ) : (
+            <>
+              <div className="table">
+                <table className="cron-table global-cron-table">
+                  <thead>
+                    <tr>
+                      <th>Konten</th>
+                      <th>Proses</th>
+                      <th>Jadwal</th>
+                      <th>Status</th>
+                      <th>Waktu berikutnya</th>
+                      <th className="right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paged.items.map((c) => (
+                      <tr key={`${c.contentTypeId}:${c.id || c.kind}`}>
+                        <td className="cron-content">{c.contentType}</td>
+                        <td>{c.label}</td>
+                        <td>
+                          {c.cron?.schedule
+                            ? scheduleLabel(c.cron.schedule)
+                            : `Setiap ${c.cron?.intervalHours || 24} jam`}
+                        </td>
+                        <td>
+                          <span
+                            className={`queue-state ${c.cron?.enabled ? "queue-state-completed" : "queue-state-cancelled"}`}
+                          >
+                            {c.cron?.enabled ? "Aktif" : "Nonaktif"}
+                          </span>
+                        </td>
+                        <td>
+                          {c.cron?.enabled && c.nextRun !== null ? (
+                            <div className="cron-next">
+                              <strong>
+                                {new Date(c.nextRun).toLocaleTimeString(
+                                  "id-ID",
+                                  {
+                                    timeZone: "Asia/Jakarta",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  },
+                                )}{" "}
+                                <small>WIB</small>
+                              </strong>
+                              <span>
+                                {new Date(c.nextRun).toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    timeZone: "Asia/Jakarta",
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  },
+                                )}
+                              </span>
+                              {c.nextRun <= Date.now() && (
+                                <span className="upcoming-waiting">
+                                  Menunggu
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="cron-actions">
+                            <button
+                              className="btn btn-sec btn-sm cron-icon-btn"
+                              aria-label="Sunting"
+                              title="Sunting cronjob"
+                              disabled={!!busy}
+                              onClick={() => void edit(c)}
+                            >
+                              <UpcomingIcon name="edit" />
+                            </button>
+                            <button
+                              className="btn btn-sec btn-sm cron-icon-btn"
+                              aria-label="Duplikasi"
+                              title="Duplikasi cronjob"
+                              disabled={!!busy}
+                              onClick={() => void edit(c, true)}
+                            >
+                              <UpcomingIcon name="copy" />
+                            </button>
+                            <button
+                              className="btn btn-sec btn-sm cron-icon-btn cron-delete"
+                              aria-label="Hapus"
+                              title="Hapus cronjob"
+                              disabled={!!busy}
+                              onClick={() => void remove(c)}
+                            >
+                              {busy === `${c.contentTypeId}:${c.id}` ? (
+                                <span className="spinner" />
+                              ) : (
+                                <UpcomingIcon name="delete" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {!paged.total && (
+                      <tr>
+                        <td colSpan={6} className="cron-empty">
+                          {search
+                            ? "Tidak ada jadwal yang sesuai pencarian."
+                            : "Belum ada cronjob. Tambahkan jadwal melalui tombol Tambah Cronjob."}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="upcoming-footer">
+                <small className="muted">
+                  {paged.total
+                    ? `Menampilkan ${(paged.page - 1) * 20 + 1}–${Math.min(paged.page * 20, paged.total)} dari ${paged.total} jadwal`
+                    : "0 jadwal"}
+                </small>
+                <div className="upcoming-pagination">
+                  <button
+                    className="btn btn-sec btn-sm cron-icon-btn"
+                    aria-label="Sebelumnya"
+                    title="Halaman sebelumnya"
+                    disabled={paged.page <= 1}
+                    onClick={() => setPage(paged.page - 1)}
+                  >
+                    <UpcomingIcon name="left" />
+                  </button>
+                  <span>
+                    {paged.page} / {paged.pages}
+                  </span>
+                  <button
+                    className="btn btn-sec btn-sm cron-icon-btn"
+                    aria-label="Berikutnya"
+                    title="Halaman berikutnya"
+                    disabled={paged.page >= paged.pages}
+                    onClick={() => setPage(paged.page + 1)}
+                  >
+                    <UpcomingIcon name="right" />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {tab === "chart" && (
+        <div
+          id="cron-chart-panel"
+          role="tabpanel"
+          aria-labelledby="cron-chart-tab"
+        >
+          {error && (
+            <p className="warn" role="alert">
+              {error}
+            </p>
+          )}
+          <CronChart
+            items={items}
+            loading={loading}
+            onRefresh={() => setRefresh((v) => v + 1)}
+          />
+        </div>
       )}
       {selected && (
         <ContentTypeContext.Provider value={selected}>

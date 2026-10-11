@@ -18,6 +18,7 @@ export interface UpcomingCron {
   nextRun: number | null;
   cron?: BookCron<string>;
   engine?: ContentType["engine"];
+  available?: boolean;
 }
 const labels: Record<string, string> = Object.fromEntries([
   ...CRON_TYPES,
@@ -48,7 +49,13 @@ export function upcomingForType(
         c.next_run === null || !Number.isFinite(Number(c.next_run))
           ? null
           : Number(c.next_run),
-      ...(all ? { cron: c, engine: type.engine } : {}),
+      ...(all
+        ? {
+            cron: c,
+            engine: type.engine,
+            available: contentAllows(type, c.kind),
+          }
+        : {}),
     }));
 }
 export async function listUpcomingCrons(store: Store, all = false) {
