@@ -31,13 +31,13 @@ export class ContentTypeStore {
   constructor(readonly db: mysql.Pool) {}
   async list() {
     const [rows]: any = await this.db.query(
-      "SELECT * FROM content_types ORDER BY id",
+      "SELECT * FROM content_types WHERE deleted_at IS NULL ORDER BY id",
     );
     return Promise.all(rows.map((row: any) => this.resolve(decode(row))));
   }
   async get(id: number) {
     const [rows]: any = await this.db.query(
-      "SELECT * FROM content_types WHERE id=?",
+      "SELECT * FROM content_types WHERE id=? AND deleted_at IS NULL",
       [id],
     );
     if (!rows[0]) throw Error("Jenis konten tidak ditemukan");
@@ -47,6 +47,45 @@ export class ContentTypeStore {
     if (!type.settings?.managed) return type;
     const settings = await resolveImageSettings(this.db, type.settings);
     return { ...type, ...normalizeContentType({ ...type, settings }) };
+  }
+  async remove(id: number) {
+    const connection = await this.db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [types]: any = await connection.query(
+        "SELECT id FROM content_types WHERE id=? AND deleted_at IS NULL FOR UPDATE",
+        [id],
+      );
+      if (!types.length) throw Error("Jenis konten tidak ditemukan");
+      const [contents]: any = await connection.query(
+        "SELECT id FROM chapters WHERE content_type_id=? UNION ALL SELECT id FROM news_articles WHERE content_type_id=? LIMIT 1",
+        [id, id],
+      );
+      if (contents.length)
+        throw Error(
+          "Jenis konten masih memiliki topik atau artikel. Hapus kontennya terlebih dahulu melalui Produksi.",
+        );
+      await connection.query("DELETE FROM book_cron WHERE content_type_id=?", [
+        id,
+      ]);
+      await connection.query(
+        "DELETE FROM book_settings WHERE content_type_id=?",
+        [id],
+      );
+      await connection.query("DELETE FROM news_cron WHERE category=?", [
+        id === 2 ? "teknologi" : `type-${id}`,
+      ]);
+      await connection.query(
+        "UPDATE content_types SET deleted_at=CURRENT_TIMESTAMP WHERE id=?",
+        [id],
+      );
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
   async save(input: unknown, id?: number) {
     const existing = id ? await this.get(id) : undefined;

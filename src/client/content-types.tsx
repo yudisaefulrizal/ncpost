@@ -27,6 +27,22 @@ export function ContentTypes({
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState<ContentType | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+  const remove = async () => {
+    if (!deleting) return;
+    setBusy(true);
+    setDeleteError("");
+    try {
+      await api(`/content-types/${deleting.id}`, "DELETE");
+      await onSaved();
+      setDeleting(null);
+    } catch (e) {
+      setDeleteError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const edit = (type: ContentType | "new") => {
     setEditing(type);
     setName(type === "new" ? "" : type.name);
@@ -113,6 +129,15 @@ export function ContentTypes({
                     >
                       Edit
                     </button>
+                    <button
+                      className="btn btn-sec btn-sm"
+                      onClick={() => {
+                        setDeleting(type);
+                        setDeleteError("");
+                      }}
+                    >
+                      Hapus
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -120,6 +145,46 @@ export function ContentTypes({
           </tbody>
         </table>
       </div>
+      {deleting && (
+        <Modal
+          title="Hapus jenis konten"
+          onClose={() => {
+            if (!busy) setDeleting(null);
+          }}
+        >
+          <div className="stack">
+            <p>
+              Hapus jenis konten <strong>{deleting.name}</strong> beserta
+              pengaturan dan cronjobnya?
+            </p>
+            <p className="muted">
+              Jenis konten harus kosong. Topik atau artikel dapat dihapus
+              melalui Produksi.
+            </p>
+            {deleteError && (
+              <p className="warn" role="alert">
+                {deleteError}
+              </p>
+            )}
+            <div className="toolbar">
+              <button
+                className="btn btn-sec"
+                disabled={busy}
+                onClick={() => setDeleting(null)}
+              >
+                Batal
+              </button>
+              <button
+                className="btn btn-pri"
+                disabled={busy}
+                onClick={() => void remove()}
+              >
+                {busy ? "Menghapus…" : "Hapus jenis konten"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {editing && (
         <Modal
           title={

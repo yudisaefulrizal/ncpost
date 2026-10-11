@@ -149,6 +149,13 @@ app.put("/api/content-types/:id", async (req, res) => {
     selectInstagramAccount(value.settings.instagramAccountId, await accounts());
   res.json(await new ContentTypeStore(store.db).save(req.body, id));
 });
+app.delete("/api/content-types/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw Error("ID jenis konten tidak valid");
+  await new ContentTypeStore(store.db).remove(id);
+  res.json({ ok: true });
+});
 app.use("/api", async (req, res, next) => {
   if (
     !/^\/(chapters|books|book-settings|book-crons|jobs|news|news-settings|news-crons)(\/|$)/.test(

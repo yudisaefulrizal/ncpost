@@ -36,6 +36,7 @@ export async function migrateDatabase(connection: Connection) {
     );
   }
   for (const [table, column, definition] of [
+    ["content_types", "deleted_at", "DATETIME NULL"],
     ["jobs", "created_at", "DATETIME NULL DEFAULT NULL"],
     ["news_media_jobs", "created_at", "DATETIME NULL DEFAULT NULL"],
     ["book_cron", "batch_size", "INT NOT NULL DEFAULT 1"],

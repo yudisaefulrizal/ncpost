@@ -239,7 +239,8 @@ CREATE TABLE IF NOT EXISTS content_types (
  name VARCHAR(190) NOT NULL,
  engine VARCHAR(16) NOT NULL,
  outputs TEXT NOT NULL,
- settings TEXT NULL
+ settings TEXT NULL,
+ deleted_at DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 INSERT IGNORE INTO content_types(id,name,engine,outputs) VALUES
  (1,'Buku','book','["ARTICLE","QUOTE","QUOTE_IMAGE","IMAGES_PANEL","IMAGES_VIDEO","TTS_KALIMAT","VIDEO_KALIMAT","VIDEO_KALIMAT_H","PANEL"]'),
