@@ -1,3 +1,4 @@
+import { QueuePage } from "./queue";
 import { mediaUnits } from "../server/content-contract";
 import { QuoteProduction } from "./quote-production";
 import { FinishedVideos } from "./finished-videos";
@@ -86,7 +87,13 @@ const importJsonExample =
     2,
   ) + "\n";
 const navGroups: [string, [string, IconName][]][] = [
-  ["Konten", [["Kreat Konten", "grid"]]],
+  [
+    "Konten",
+    [
+      ["Kreat Konten", "grid"],
+      ["List Antrian", "doc"],
+    ],
+  ],
   [
     "Aset",
     [
@@ -1580,6 +1587,10 @@ function App() {
         }
       />
     );
+  } else if (page === "List Antrian") {
+    heading = "List Antrian";
+    sub = "";
+    content = <QueuePage />;
   } else if (page === "Kreat Konten") {
     heading = "Kreat Konten";
     content = (

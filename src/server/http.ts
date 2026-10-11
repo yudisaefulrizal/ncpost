@@ -1,3 +1,4 @@
+import { listQueue, queueAction } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
   ContentTypeStore,
@@ -456,6 +457,18 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
     req.body.replace === true,
   );
   res.status(202).json({ id });
+});
+app.get("/api/queue", async (req, res) =>
+  res.json(
+    await listQueue(
+      store,
+      req.query.state === undefined ? undefined : String(req.query.state),
+    ),
+  ),
+);
+app.post("/api/queue/:source/:id/:action", async (req, res) => {
+  await queueAction(store, req.params.source, req.params.id, req.params.action);
+  res.json({ ok: true });
 });
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));

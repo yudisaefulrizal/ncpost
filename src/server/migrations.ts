@@ -36,6 +36,8 @@ export async function migrateDatabase(connection: Connection) {
     );
   }
   for (const [table, column, definition] of [
+    ["jobs", "created_at", "DATETIME NULL DEFAULT NULL"],
+    ["news_media_jobs", "created_at", "DATETIME NULL DEFAULT NULL"],
     ["book_cron", "batch_size", "INT NOT NULL DEFAULT 1"],
     ["book_cron", "last_item_id", "INT NOT NULL DEFAULT 0"],
     ["news_cron", "batch_size", "INT NOT NULL DEFAULT 1"],
@@ -69,6 +71,15 @@ export async function migrateDatabase(connection: Connection) {
     if (!columns.length)
       await connection.query(
         `ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,
+      );
+  }
+  for (const table of ["jobs", "news_media_jobs"]) {
+    const [columns]: any = await connection.query(
+      `SHOW COLUMNS FROM ${table} LIKE 'created_at'`,
+    );
+    if (columns[0]?.Default == null)
+      await connection.query(
+        `ALTER TABLE ${table} MODIFY COLUMN created_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP`,
       );
   }
   for (const table of ["lab_prompts", "lab_runs"]) {

@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     IF(state IN ('queued', 'running'), CONCAT(chapter_id, ':', kind), NULL)
   ) STORED,
   UNIQUE KEY active_job (active_key),
+  created_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
   KEY jobs_state (state),
   KEY jobs_chapter (chapter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -144,6 +145,7 @@ CREATE TABLE IF NOT EXISTS news_media_jobs (
  error TEXT NULL,
  active_key VARCHAR(80) AS (IF(state IN ('queued','running'),CONCAT(news_id,':',kind),NULL)) STORED,
  UNIQUE KEY news_media_active(active_key),
+ created_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP,
  KEY news_media_state(state), KEY news_media_owner(news_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS news_media_outputs (
