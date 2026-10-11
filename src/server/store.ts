@@ -907,7 +907,7 @@ export class Store {
         throw Error("Reels sedang diproses Instagram");
       if (c.reels_status === "published" && !replace)
         throw Error("Reels bagian ini sudah diposting");
-      if (c.reels_status === "unknown")
+      if (c.reels_status === "unknown" && !replace)
         throw Error(
           "Hasil Reels sebelumnya belum pasti; periksa akun Instagram dulu",
         );

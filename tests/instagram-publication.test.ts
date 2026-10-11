@@ -74,7 +74,11 @@ it.each(["POST_IG", "REELS_IG"] as const)(
     );
     chapter.post_status = "unknown";
     chapter.reels_status = "unknown";
-    await expect(store.enqueue(1, kind, true)).rejects.toThrow("belum pasti");
+    await expect(store.enqueue(1, kind)).rejects.toThrow("belum pasti");
+    if (kind === "REELS_IG")
+      expect(await store.enqueue(1, kind, true)).toBe(12);
+    else
+      await expect(store.enqueue(1, kind, true)).rejects.toThrow("belum pasti");
     chapter.post_status = "processing";
     chapter.reels_status = "processing";
     await expect(store.enqueue(1, kind, true)).rejects.toThrow(

@@ -789,6 +789,8 @@ function App() {
       return {
         title:
           "Hasil Reels belum pasti — periksa akun Instagram sebelum mencoba lagi",
+        redoTitle: "Post ulang",
+        redo: c.sentence_video ? () => setPostingReels(c) : undefined,
       };
     if (!c.sentence_video) return { title: "Butuh Video" };
     return {
@@ -2141,10 +2143,10 @@ function App() {
                 runStage(
                   c,
                   ["REELS_IG"],
-                  c.reels_status === "published"
+                  ["published", "unknown"].includes(c.reels_status)
                     ? "Post ulang Reels IG"
                     : "Reels IG",
-                  c.reels_status === "published",
+                  ["published", "unknown"].includes(c.reels_status),
                 );
               }}
             />
@@ -2969,8 +2971,10 @@ function NewsProduction({
           ? () => runMedia(n, stage)
           : undefined,
       redo:
-        done &&
-        (!publication || output?.status === "published") &&
+        (done || (stage === "REELS_IG" && output?.status === "unknown")) &&
+        (!publication ||
+          output?.status === "published" ||
+          (stage === "REELS_IG" && output?.status === "unknown")) &&
         !busy &&
         !p.jobs.some((j) => ["queued", "running"].includes(j.state))
           ? () => runMedia(n, stage, true)
@@ -3989,6 +3993,17 @@ function StageCell({ play }: { play: PlayProps }) {
         )}
       </>
     );
+  else if (play.redo)
+    main = (
+      <button
+        className="play redo"
+        title={play.redoTitle || "Regenerate"}
+        aria-label={(play.redoTitle || "Regenerate") + " · " + play.title}
+        onClick={play.redo}
+      >
+        <Icon name="redo" size={14} />
+      </button>
+    );
   else
     main = (
       <button
@@ -4340,7 +4355,7 @@ function ReelsModal({
     <Modal
       c={c}
       title={
-        c.reels_status === "published"
+        ["published", "unknown"].includes(c.reels_status)
           ? "Post ulang Reels ke Instagram"
           : "Post Reels ke Instagram"
       }
@@ -4354,6 +4369,12 @@ function ReelsModal({
       ) : (
         <p role="alert" className="warn">
           {target.error}
+        </p>
+      )}
+      {c.reels_status === "unknown" && (
+        <p className="warn">
+          Hasil publikasi sebelumnya belum pasti. Periksa akun Instagram; post
+          ulang akan membuat permintaan publikasi baru.
         </p>
       )}
       <video
@@ -4375,7 +4396,7 @@ function ReelsModal({
           disabled={!caption || !target.account}
           onClick={onConfirm}
         >
-          {c.reels_status === "published"
+          {["published", "unknown"].includes(c.reels_status)
             ? "Post ulang sekarang"
             : "Posting sekarang"}
         </button>

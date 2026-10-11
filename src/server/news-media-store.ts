@@ -169,7 +169,11 @@ export class NewsMediaStore {
           if (
             status &&
             status !== "failed" &&
-            !(replace && status === "published")
+            !(
+              replace &&
+              (status === "published" ||
+                (kind === "REELS_IG" && status === "unknown"))
+            )
           )
             throw Error("Publikasi sudah dikirim; periksa status Instagram");
         }
