@@ -11,7 +11,7 @@ export function CronChart({
   onRefresh: () => void;
 }) {
   const [date, setDate] = useState(wibDate);
-  const [interval, setInterval] = useState(15);
+  const [interval, setInterval] = useState(10);
   const [type, setType] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   let buckets: ReturnType<typeof cronDistribution> = [],
@@ -56,7 +56,7 @@ export function CronChart({
               setSelected(null);
             }}
           >
-            {[5, 15, 30, 60].map((value) => (
+            {[5, 10, 15, 30, 60].map((value) => (
               <option key={value} value={value}>
                 {value} menit
               </option>

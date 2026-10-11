@@ -13,7 +13,7 @@ export function cronDistribution(
   interval: number,
   typeId = "",
 ): CronBucket[] {
-  if (![5, 15, 30, 60].includes(interval))
+  if (![5, 10, 15, 30, 60].includes(interval))
     throw Error("Rentang waktu tidak valid");
   const midnight = Date.parse(`${date}T00:00:00+07:00`);
   if (
