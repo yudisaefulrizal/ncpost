@@ -16,6 +16,7 @@ export function CronTable<K extends string>({
   onSave,
   onDelete,
   createOnly = false,
+  initialCron,
   typeOptions,
   onTypeChange,
   onClose,
@@ -25,6 +26,7 @@ export function CronTable<K extends string>({
   onSave: (cron: BookCron<K>) => Promise<void>;
   onDelete: (cron: BookCron<K>) => Promise<void>;
   createOnly?: boolean;
+  initialCron?: BookCron<K>;
   typeOptions?: ContentType[];
   onTypeChange?: (id: number) => void;
   onClose?: () => void;
@@ -87,7 +89,7 @@ export function CronTable<K extends string>({
   };
   const schedule = draft?.schedule;
   useEffect(() => {
-    if (createOnly && stages.length) edit();
+    if (createOnly && (stages.length || initialCron)) edit(initialCron);
   }, [createOnly, type?.id]);
   const changeSchedule = (value: Partial<CronSchedule>) => {
     if (draft && schedule)
@@ -317,7 +319,7 @@ export function CronTable<K extends string>({
                 Jenis konten
                 {typeOptions ? (
                   <select
-                      aria-label="Jenis konten"
+                    aria-label="Jenis konten"
                     value={type?.id}
                     onChange={(e) => onTypeChange?.(Number(e.target.value))}
                   >

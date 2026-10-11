@@ -89,3 +89,27 @@ it("merges all source engines, reads each type's own scope, and sorts earliest f
   ]);
   expect(currentContentType()).toBeUndefined();
 });
+
+it("lists disabled and unavailable stages with full records for global management", () => {
+  const disabled = cron({
+    id: "disabled",
+    enabled: false,
+    next_run: null,
+    schedule: { mode: "daily", times: ["09:00"], days: [] },
+  });
+  const removedStage = cron({
+    id: "old",
+    kind: "VIDEO_KALIMAT",
+    enabled: false,
+    next_run: null,
+  });
+  const result = upcomingForType(type, [disabled, removedStage], true);
+  expect(result).toHaveLength(2);
+  expect(result[0]).toMatchObject({
+    id: "disabled",
+    engine: "book",
+    nextRun: null,
+    cron: disabled,
+  });
+  expect(result[1].cron).toEqual(removedStage);
+});

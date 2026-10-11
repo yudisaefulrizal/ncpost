@@ -7,6 +7,7 @@ import { ContentTypeContext } from "./content-types";
 import { contentAllows, type ContentType } from "../server/content-type-domain";
 import { CRON_TYPES } from "../server/cron";
 import { NEWS_CRON_TYPES } from "../server/news-production-domain";
+import { scheduleLabel } from "../server/cron-schedule";
 const cronStages = (type: ContentType) =>
   (type.engine === "news" ? NEWS_CRON_TYPES : CRON_TYPES).filter(([kind]) =>
     contentAllows(type, kind),
@@ -15,7 +16,49 @@ export function UpcomingCronsPage() {
   const [types, setTypes] = useState<ContentType[]>([]);
   const [selected, setSelected] = useState<ContentType | null>(null);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<UpcomingCron | null>(null);
+  const [busy, setBusy] = useState("");
+  async function edit(item: UpcomingCron) {
+    setBusy(`${item.contentTypeId}:${item.id}`);
+    try {
+      const available: ContentType[] = await api(
+        "/content-types",
+        "GET",
+        undefined,
+        null,
+      );
+      const type = available.find((t) => t.id === item.contentTypeId);
+      if (!type) throw Error("Jenis konten tidak ditemukan");
+      setEditing(item);
+      setSelected(type);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+  async function remove(item: UpcomingCron) {
+    if (
+      !window.confirm(`Hapus cronjob ${item.label} untuk ${item.contentType}?`)
+    )
+      return;
+    setBusy(`${item.contentTypeId}:${item.id}`);
+    try {
+      await api(
+        item.engine === "news" ? "/news-crons" : "/book-crons",
+        "DELETE",
+        { id: item.id },
+        item.contentTypeId,
+      );
+      setRefresh((v) => v + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
   async function add() {
+    setEditing(null);
     setAdding(true);
     setError("");
     try {
@@ -52,7 +95,7 @@ export function UpcomingCronsPage() {
       if (fetching) return;
       fetching = true;
       try {
-        const data = await api("/cron-upcoming", "GET", undefined, null);
+        const data = await api("/crons", "GET", undefined, null);
         if (current) {
           setItems(data);
           setError("");
@@ -79,7 +122,7 @@ export function UpcomingCronsPage() {
     <section className="card pad stack cron-upcoming">
       <div className="upcoming-toolbar">
         <div className="cron-heading">
-          <h2 className="h3">Jadwal aktif</h2>
+          <h2 className="h3">Semua cronjob</h2>
           <span className="cron-count">{items.length}</span>
         </div>
         <div className="upcoming-controls">
@@ -130,12 +173,15 @@ export function UpcomingCronsPage() {
       ) : (
         <>
           <div className="table">
-            <table className="cron-table upcoming-table">
+            <table className="cron-table global-cron-table">
               <thead>
                 <tr>
                   <th>Konten</th>
                   <th>Proses</th>
+                  <th>Jadwal</th>
+                  <th>Status</th>
                   <th>Waktu berikutnya</th>
+                  <th className="right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -144,36 +190,78 @@ export function UpcomingCronsPage() {
                     <td className="cron-content">{c.contentType}</td>
                     <td>{c.label}</td>
                     <td>
-                      <div className="cron-next">
-                        <strong>
-                          {new Date(c.nextRun).toLocaleTimeString("id-ID", {
-                            timeZone: "Asia/Jakarta",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}{" "}
-                          <small>WIB</small>
-                        </strong>
-                        <span>
-                          {new Date(c.nextRun).toLocaleDateString("id-ID", {
-                            timeZone: "Asia/Jakarta",
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </span>
-                        {c.nextRun <= Date.now() && (
-                          <span className="upcoming-waiting">Menunggu</span>
-                        )}
+                      {c.cron?.schedule
+                        ? scheduleLabel(c.cron.schedule)
+                        : `Setiap ${c.cron?.intervalHours || 24} jam`}
+                    </td>
+                    <td>
+                      <span
+                        className={`queue-state ${c.cron?.enabled ? "queue-state-completed" : "queue-state-cancelled"}`}
+                      >
+                        {c.cron?.enabled ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </td>
+                    <td>
+                      {c.cron?.enabled && c.nextRun !== null ? (
+                        <div className="cron-next">
+                          <strong>
+                            {new Date(c.nextRun).toLocaleTimeString("id-ID", {
+                              timeZone: "Asia/Jakarta",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}{" "}
+                            <small>WIB</small>
+                          </strong>
+                          <span>
+                            {new Date(c.nextRun).toLocaleDateString("id-ID", {
+                              timeZone: "Asia/Jakarta",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })}
+                          </span>
+                          {c.nextRun <= Date.now() && (
+                            <span className="upcoming-waiting">Menunggu</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="cron-actions">
+                        <button
+                          className="btn btn-sec btn-sm cron-icon-btn"
+                          aria-label="Sunting"
+                          title="Sunting cronjob"
+                          disabled={!!busy}
+                          onClick={() => void edit(c)}
+                        >
+                          <UpcomingIcon name="edit" />
+                        </button>
+                        <button
+                          className="btn btn-sec btn-sm cron-icon-btn cron-delete"
+                          aria-label="Hapus"
+                          title="Hapus cronjob"
+                          disabled={!!busy}
+                          onClick={() => void remove(c)}
+                        >
+                          {busy === `${c.contentTypeId}:${c.id}` ? (
+                            <span className="spinner" />
+                          ) : (
+                            <UpcomingIcon name="delete" />
+                          )}
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ))}
                 {!paged.total && (
                   <tr>
-                    <td colSpan={3} className="cron-empty">
+                    <td colSpan={6} className="cron-empty">
                       {search
                         ? "Tidak ada jadwal yang sesuai pencarian."
-                        : "Belum ada cronjob aktif. Tambahkan jadwal melalui tombol Tambah Cronjob."}
+                        : "Belum ada cronjob. Tambahkan jadwal melalui tombol Tambah Cronjob."}
                     </td>
                   </tr>
                 )}
@@ -217,9 +305,10 @@ export function UpcomingCronsPage() {
           <CronTable<string>
             key={selected.id}
             createOnly
+            initialCron={editing?.cron}
             items={[]}
             stages={cronStages(selected)}
-            typeOptions={types}
+            typeOptions={editing ? undefined : types}
             onTypeChange={(id) =>
               setSelected(types.find((type) => type.id === id) || null)
             }
@@ -244,7 +333,7 @@ export function UpcomingCronsPage() {
 function UpcomingIcon({
   name,
 }: {
-  name: "search" | "refresh" | "left" | "right";
+  name: "search" | "refresh" | "left" | "right" | "edit" | "delete";
 }) {
   return (
     <svg
@@ -258,7 +347,16 @@ function UpcomingIcon({
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {name === "search" ? (
+      {name === "edit" ? (
+        <>
+          <path d="m16 3 5 5-12 12-6 1 1-6Z" />
+          <path d="m14 5 5 5" />
+        </>
+      ) : name === "delete" ? (
+        <>
+          <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" />
+        </>
+      ) : name === "search" ? (
         <>
           <circle cx="10.5" cy="10.5" r="6.5" />
           <path d="m16 16 4 4" />

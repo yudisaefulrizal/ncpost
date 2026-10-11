@@ -89,7 +89,7 @@ const navGroups: [string, [string, IconName][]][] = [
     [
       ["Kreat Konten", "grid"],
       ["List Antrian", "doc"],
-      ["List Cronjob Berikutnya", "gear"],
+      ["List Cronjob", "gear"],
     ],
   ],
   [
@@ -1589,8 +1589,8 @@ function App() {
         }
       />
     );
-  } else if (page === "List Cronjob Berikutnya") {
-    heading = "List Cronjob Berikutnya";
+  } else if (page === "List Cronjob") {
+    heading = "List Cronjob";
     sub = "";
     content = <UpcomingCronsPage />;
   } else if (page === "List Antrian") {

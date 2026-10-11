@@ -2140,3 +2140,19 @@ dialog.app-dialog::backdrop {
   height: auto;
   object-fit: contain;
 }
+
+.global-cron-table {
+  min-width: 850px;
+}
+.global-cron-table th:first-child {
+  width: 18%;
+}
+.global-cron-table th:nth-child(2) {
+  width: 18%;
+}
+.global-cron-table th:nth-child(3) {
+  width: 25%;
+}
+.global-cron-table th:last-child {
+  width: 100px;
+}

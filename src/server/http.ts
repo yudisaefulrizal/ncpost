@@ -469,6 +469,9 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
   );
   res.status(202).json({ id });
 });
+app.get("/api/crons", async (_, res) =>
+  res.json(await listUpcomingCrons(store, true)),
+);
 app.get("/api/cron-upcoming", async (_, res) =>
   res.json(await listUpcomingCrons(store)),
 );
