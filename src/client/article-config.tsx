@@ -22,7 +22,7 @@ export function ArticleConfigFields({
   const set = (patch: Partial<ArticleConfig>) =>
     onChange({ ...value, ...patch });
   return (
-    <div className="settings-grid">
+    <div className="settings-grid article-config-grid">
       <label className="field">
         Sumber bahan
         <select
@@ -56,7 +56,7 @@ export function ArticleConfigFields({
         />
       </label>
       {value.topicMode === "manual" && (
-        <label className="field">
+        <label className="field article-topic">
           Topik
           <input
             value={value.topic}
@@ -65,7 +65,7 @@ export function ArticleConfigFields({
         </label>
       )}
       {!quote && (
-        <label className="field">
+        <label className="field article-paragraphs">
           Jumlah paragraf
           <input
             type="number"
@@ -82,7 +82,7 @@ export function ArticleConfigFields({
         </label>
       )}
       {value.source === "manual" && (
-        <label className="field">
+        <label className="field article-material">
           Bahan manual
           <textarea
             rows={6}

@@ -1649,15 +1649,6 @@ function App() {
               instagram={instagram}
               onChange={set}
             />
-            <details>
-              <summary>Prompt artikel</summary>
-              <LabPromptSettings
-                engine="news"
-                images={false}
-                selected={draft.labPromptIds || []}
-                onChange={(ids) => set({ labPromptIds: ids })}
-              />
-            </details>
           </>
         )}
       </ContentPlanCard>
@@ -1816,17 +1807,6 @@ function App() {
               instagram={instagram}
               onChange={set}
             />
-            {
-              <details>
-                <summary>Prompt artikel</summary>
-                <LabPromptSettings
-                  engine={activeType.engine}
-                  images={false}
-                  selected={draft.labPromptIds || []}
-                  onChange={(ids) => set({ labPromptIds: ids })}
-                />
-              </details>
-            }
           </>
         )}
       </ContentPlanCard>

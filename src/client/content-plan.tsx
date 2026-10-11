@@ -11,6 +11,7 @@ import {
   isHorizontalKind,
   type BookSettings,
 } from "../server/book-settings";
+import { LabPromptSettings } from "./lab-prompt-settings";
 import { useImageCatalog } from "./image-catalog";
 
 export function finalTargets(outputs: string[]) {
@@ -156,34 +157,38 @@ export function ContentPlanFields({
                       onChange(next, planSettings(next, settings));
                   }}
                 />
-                {label}
+                <OutputIcon kind={key} />
+                <span>{label}</span>
               </label>
             ),
           )}
         </div>
       </fieldset>
-      {!quote &&
-        outputs.some((key) => key === "PANEL" || key.startsWith("VIDEO_")) && (
-          <label className="field">
-            Unit gambar
-            <select
-              value={settings.imageUnit || ""}
-              onChange={(e) =>
-                set({
-                  imageUnit: e.target.value
-                    ? (e.target.value as BookSettings["imageUnit"])
-                    : undefined,
-                })
-              }
-            >
-              <option value="">Mengikuti penggunaan prompt</option>
-              <option value="article">Seluruh artikel</option>
-              <option value="paragraph">Per paragraf</option>
-              <option value="sentence">Per kalimat</option>
-            </select>
-          </label>
-        )}
       <div className="settings-grid">
+        {!quote &&
+          outputs.some(
+            (key) => key === "PANEL" || key.startsWith("VIDEO_"),
+          ) && (
+            <label className="field">
+              Unit gambar
+              <select
+                value={settings.imageUnit || ""}
+                onChange={(e) =>
+                  set({
+                    imageUnit: e.target.value
+                      ? (e.target.value as BookSettings["imageUnit"])
+                      : undefined,
+                  })
+                }
+              >
+                <option value="">Mengikuti penggunaan prompt</option>
+                <option value="article">Seluruh artikel</option>
+                <option value="paragraph">Per paragraf</option>
+                <option value="sentence">Per kalimat</option>
+              </select>
+            </label>
+          )}
+
         {outputs.includes("VIDEO_KALIMAT") &&
           select(
             "Gaya gambar video vertikal",
@@ -250,78 +255,158 @@ export function ContentPlanCard({
     setOutputs(next);
     setSettings(planSettings(next, type.settings));
   }, [JSON.stringify(type)]);
+  const originalOutputs = finalTargets(type.outputs);
+  const originalSettings = planSettings(originalOutputs, type.settings);
+  const dirty =
+    JSON.stringify(outputs) !== JSON.stringify(originalOutputs) ||
+    JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  const reset = () => {
+    setOutputs(originalOutputs);
+    setSettings(originalSettings);
+    setError("");
+  };
   return (
-    <section className="card pad stack">
-      <h2 className="h3">{type.name}</h2>
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={!!settings.articleConfig}
-          onChange={(e) =>
-            setSettings((s) => ({
-              ...s,
-              articleConfig: e.target.checked
-                ? {
-                    ...defaultArticleConfig(type.engine),
-                    paragraphCount:
-                      type.engine === "book"
-                        ? 6
-                        : type.engine === "quote"
-                          ? 1
-                          : null,
-                  }
-                : undefined,
-            }))
-          }
-        />
-        Konfigurasi bahan dan struktur artikel
-      </label>
-      {settings.articleConfig && (
-        <ArticleConfigFields
-          value={settings.articleConfig}
-          book={type.engine === "book"}
-          quote={type.engine === "quote"}
-          onChange={(value) =>
-            setSettings((s) => ({ ...s, articleConfig: value }))
-          }
-        />
-      )}
-      <ContentPlanFields
-        outputs={outputs}
-        quote={type.engine === "quote"}
-        settings={settings}
-        onChange={(next, value) => {
-          setOutputs(next);
-          setSettings(value);
-        }}
-      />
-      {children?.(settings, (patch) =>
-        setSettings((s) => ({ ...s, ...patch })),
-      )}
+    <section className="card content-settings">
+      <div className="content-settings-context">{type.name}</div>
+      <fieldset disabled={busy} className="content-settings-fields">
+        <section className="content-settings-section article-settings">
+          <div className="content-settings-section-head">
+            <h2>Artikel</h2>
+            <label className="check-row config-switch">
+              <input
+                type="checkbox"
+                checked={!!settings.articleConfig}
+                onChange={(e) =>
+                  setSettings((s) => ({
+                    ...s,
+                    articleConfig: e.target.checked
+                      ? defaultArticleConfig(type.engine)
+                      : undefined,
+                  }))
+                }
+              />
+              Konfigurasi artikel
+            </label>
+          </div>
+          {settings.articleConfig && (
+            <ArticleConfigFields
+              value={settings.articleConfig}
+              book={type.engine === "book"}
+              quote={type.engine === "quote"}
+              onChange={(value) =>
+                setSettings((s) => ({ ...s, articleConfig: value }))
+              }
+            />
+          )}
+          <details className="content-settings-prompt">
+            <summary>Prompt artikel</summary>
+            <LabPromptSettings
+              engine={type.engine}
+              images={false}
+              selected={settings.labPromptIds || []}
+              onChange={(ids) =>
+                setSettings((s) => ({ ...s, labPromptIds: ids }))
+              }
+            />
+          </details>
+        </section>
+        <section className="content-settings-section output-settings">
+          <h2>Output & gambar</h2>
+          <ContentPlanFields
+            outputs={outputs}
+            quote={type.engine === "quote"}
+            settings={settings}
+            onChange={(next, value) => {
+              setOutputs(next);
+              setSettings(value);
+            }}
+          />
+        </section>
+        {children && (
+          <section className="content-settings-section publication-settings">
+            <h2>Publikasi</h2>
+            {children(settings, (patch) =>
+              setSettings((s) => ({ ...s, ...patch })),
+            )}
+          </section>
+        )}
+      </fieldset>
       {error && (
-        <p role="alert" className="warn">
+        <p role="alert" className="warn content-settings-error">
           {error}
         </p>
       )}
-      <div>
-        <button
-          className="btn btn-pri"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            setError("");
-            try {
-              await onSave(outputs, settings);
-            } catch (e) {
-              setError((e as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          {busy ? "Menyimpan…" : "Simpan"}
-        </button>
+      <div className="content-settings-footer">
+        <span className="muted" role="status">
+          {busy
+            ? "Menyimpan…"
+            : dirty
+              ? "Perubahan belum disimpan"
+              : "Semua perubahan tersimpan"}
+        </span>
+        <div className="toolbar">
+          <button
+            className="btn btn-sec"
+            disabled={busy || !dirty}
+            onClick={reset}
+          >
+            Batal
+          </button>
+          <button
+            className="btn btn-pri"
+            disabled={busy || !dirty}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                await onSave(outputs, settings);
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Menyimpan…" : "Simpan perubahan"}
+          </button>
+        </div>
       </div>
     </section>
+  );
+}
+function OutputIcon({ kind }: { kind: string }) {
+  return (
+    <svg
+      className="output-choice-icon"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      aria-hidden="true"
+    >
+      {kind === "VIDEO_KALIMAT" ? (
+        <>
+          <rect x="7" y="2" width="10" height="20" rx="2" />
+          <path d="M11 18h2" />
+        </>
+      ) : kind === "VIDEO_KALIMAT_H" ? (
+        <>
+          <rect x="2" y="4" width="20" height="13" rx="2" />
+          <path d="M12 17v4M8 21h8" />
+        </>
+      ) : kind === "PANEL" ? (
+        <>
+          <rect x="3" y="5" width="16" height="16" rx="2" />
+          <path d="M7 2h14v15M3 15l5-5 4 4 3-2 4 4" />
+        </>
+      ) : (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="m3 16 6-6 4 4 3-3 5 6" />
+        </>
+      )}
+    </svg>
   );
 }

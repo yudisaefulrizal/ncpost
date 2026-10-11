@@ -2156,3 +2156,185 @@ dialog.app-dialog::backdrop {
 .global-cron-table th:last-child {
   width: 100px;
 }
+
+.content-settings {
+  overflow: visible;
+}
+.content-settings-context {
+  padding: 16px 22px;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink2);
+}
+.content-settings-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.content-settings-section {
+  padding: 20px 22px;
+  min-width: 0;
+}
+.content-settings-section + .content-settings-section {
+  border-top: 1px solid var(--line-soft);
+}
+.content-settings-section h2 {
+  font-size: 17px;
+  line-height: 1.4;
+  margin: 0 0 16px;
+}
+.content-settings-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.content-settings-section-head h2 {
+  margin: 0;
+}
+.content-settings .config-switch {
+  font-size: 12px;
+  color: var(--ink2);
+  align-items: center;
+}
+.content-settings .field {
+  gap: 6px;
+  font-size: 12px;
+}
+.content-settings input:not([type="checkbox"]),
+.content-settings select {
+  min-height: 40px;
+  height: 40px;
+  font-size: 13px;
+}
+.content-settings .article-config-grid {
+  grid-template-columns: 1fr 1fr 1.2fr 150px;
+  gap: 14px 18px;
+}
+.content-settings .article-paragraphs {
+  grid-column: 4;
+  grid-row: 1;
+}
+.content-settings .article-topic {
+  grid-column: 1 / -1;
+}
+.content-settings .article-material {
+  grid-column: 1 / -1;
+}
+.content-settings-prompt {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.content-settings-prompt summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink2);
+}
+.content-settings-prompt[open] summary {
+  margin-bottom: 14px;
+}
+.content-settings .output-targets legend {
+  display: none;
+}
+.content-settings .output-target-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.content-settings .output-target-options .check-row {
+  position: relative;
+  align-items: center;
+  padding: 12px 14px;
+  min-height: 58px;
+  font-size: 13px;
+  gap: 10px;
+}
+.content-settings .output-target-options input {
+  order: 3;
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+}
+.content-settings .output-choice-icon {
+  flex-shrink: 0;
+}
+.content-settings .settings-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 18px;
+}
+.content-settings .article-config-grid {
+  grid-template-columns: 1fr 1fr 1.2fr 150px;
+}
+.content-settings .publication-settings .output-target-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.content-settings .publication-settings .output-target-options .check-row {
+  min-height: 46px;
+}
+.content-settings .stack {
+  gap: 14px;
+}
+.content-settings-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px;
+  background: white;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0 0 12px 12px;
+}
+.content-settings-footer > span {
+  font-size: 12px;
+}
+.content-settings-error {
+  margin: 0 22px 14px;
+}
+@media (max-width: 1100px) {
+  .content-settings .article-config-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .content-settings .article-paragraphs {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .content-settings .output-target-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .content-settings-section {
+    padding: 18px 16px;
+  }
+  .content-settings-section-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .content-settings .settings-grid,
+  .content-settings .article-config-grid {
+    grid-template-columns: 1fr;
+  }
+  .content-settings .publication-settings .output-target-options {
+    grid-template-columns: 1fr;
+  }
+  .content-settings .output-target-options .check-row {
+    padding: 10px;
+    gap: 7px;
+  }
+  .content-settings-footer {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .content-settings-footer .toolbar {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
