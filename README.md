@@ -21,7 +21,7 @@ Server hanya bind `127.0.0.1:8072`. Di terminal kedua, pada direktori yang sama:
 npm run worker
 ```
 
-`npm run dev` menjalankan frontend Vite melalui server Express pada port yang sama. Server dan worker berjalan sebagai proses terpisah melalui `npm run dev` / `npm start`. Cronjob otomatis dapat diaktifkan per buku di halaman Cronjob. Bab tidak diimpor; judul buku dan judul bab diinput lewat aplikasi (form Tambah bab di Antrean).
+`npm run dev` menjalankan frontend Vite melalui server Express pada port yang sama. Server dan worker berjalan sebagai proses terpisah melalui `npm run dev` / `npm start`. Cronjob dapat ditambahkan per jenis konten melalui tabel di halaman Cronjob. Bab tidak diimpor; judul buku dan judul bab diinput lewat aplikasi (form Tambah bab di Antrean).
 
 Login memakai akun di tabel `users` (password hash scrypt). Akun default: `admin@gmail.com` / `admin123`. Cookie sesi ditandatangani `SESSION_SECRET` di `.env` (dibuat otomatis bila `.env` belum ada; minimal 16 karakter).
 
@@ -124,15 +124,15 @@ Satu perintah menjalankan server (http://127.0.0.1:8072) dan worker sekaligus; `
 
 ## Produksi dan cronjob
 
-Menu **List Cronjob Berikutnya** menggabungkan jadwal aktif dari seluruh jenis konten, diurutkan berdasarkan waktu terdekat dalam WIB. Daftar menampilkan aksi dan jumlah konten per putaran serta diperbarui setiap 15 detik. Pengaturan jadwal tetap di submenu Cronjob jenis konten. Jadwal yang waktunya sudah lewat tetap ditampilkan sebagai menunggu scheduler.
+Menu **List Cronjob Berikutnya** menggabungkan jadwal aktif dari seluruh jenis konten, diurutkan berdasarkan waktu terdekat dalam WIB. Daftar menampilkan aksi serta diperbarui setiap 15 detik. Pengaturan jadwal tetap di submenu Cronjob jenis konten. Jadwal yang waktunya sudah lewat tetap ditampilkan sebagai menunggu scheduler.
 
 Menu **List Antrian** menampilkan pekerjaan artikel dan produksi dari semua jenis konten, baik dari aksi manual maupun cronjob. Daftar diperbarui setiap 5 detik, dengan filter status/jenis konten dan pencarian. Pekerjaan menunggu bisa dibatalkan; pekerjaan gagal terbaru dapat dicoba ulang jika revisi konten belum berubah. Pekerjaan berjalan tidak dapat dibatalkan dari daftar ini. Waktu masuk antrean tersedia untuk pekerjaan baru setelah migrasi; pekerjaan lama tanpa catatan waktu menampilkan `—`.
 
 Jenis konten menentukan target akhir dan gaya gambar. Produksi dijalankan lewat tombol manual (termasuk aksi batch) atau cronjob yang diaktifkan dengan jadwal. Worker tidak lagi mengantrekan semua bahan secara otomatis di luar cronjob; pengaturan lama `autoProcess` dinonaktifkan.
 
-Cronjob diatur sekali per jenis konten dan berlaku untuk seluruh konteks/topiknya. Setiap putaran memilih topik yang memenuhi prasyarat secara bergiliran; jumlah konten per putaran 1–100 (bawaan 1). Akun tujuan mengikuti Pengaturan Konten. Migrasi menggabungkan jadwal lama per konteks dengan interval aktif terpanjang, lalu menonaktifkan jadwal lama agar tidak berjalan ganda.
+Cronjob ditambahkan melalui tombol **Tambah Cronjob** di submenu jenis konten dan berlaku untuk seluruh konteks/topiknya. Satu jenis konten dapat memiliki beberapa jadwal untuk aksi yang sama. Tabel menyediakan **Sunting**, **Hapus**, dan aktif/nonaktif. Setiap eksekusi memproses satu konten yang memenuhi prasyarat. Akun tujuan mengikuti Pengaturan Konten.
 
-Setiap tahap memiliki cronjob dan interval sendiri: artikel, gambar, audio, render, atau publikasi. Cronjob hanya mengantrekan tahap yang dipilih saat prasyarat sudah siap; tidak membuat prasyarat dan tidak menjalankan tahap berikutnya. Interval tetap 1–8760 jam, bawaan 24 jam dan nonaktif. Job yang sudah diantrekan tetap diproses; perubahan ini menghentikan pemicu otomatis yang menambahkan job baru tanpa jadwal.
+Setiap cronjob memilih satu aksi: artikel, gambar, audio, render, atau publikasi. Pilih **Harian** dengan satu atau beberapa jam, atau **Mingguan** dengan pilihan hari dan satu atau beberapa jam; semua waktu memakai **WIB**. Cronjob hanya mengantrekan tahap yang dipilih saat prasyarat sudah siap; tidak membuat prasyarat dan tidak menjalankan tahap berikutnya. Cronjob baru nonaktif sampai diaktifkan. Jadwal terlewat dijalankan sekali, lalu waktu berikutnya dihitung dari waktu sekarang tanpa merapel. Jalankan `npm run migrate` untuk menambahkan identitas jadwal dan konfigurasi harian/mingguan. Jadwal interval lama, waktu berikutnya, status, dan cursor tetap dipertahankan; **Sunting** lalu simpan untuk menggantinya dengan jadwal harian/mingguan. Job yang sudah diantrekan tetap diproses.
 
 ## Akun Instagram per buku
 
@@ -217,11 +217,7 @@ unknown yang tidak dikirim ulang. Tombol **Periksa status Instagram** dalam
 modal hanya mengambil status request tersebut. Caption memakai artikel dan
 sumber berita, dengan tag `#berita`.
 
-**Cronjob** berita menyediakan sepuluh jadwal interval (1–8760 jam), tanpa
-Quote/Gambar Quote, nonaktif secara default. Artikel mencari berita baru;
-tahap lain memilih satu berita belum selesai yang memenuhi prasyarat. Jadwal
-terlewat berjalan sekali, tanpa mengejar seluruh interval. Post/Reels otomatis
-hanya berjalan setelah jadwalnya diaktifkan dan akun tujuan tersedia.
+**Cronjob** berita memakai tabel dan form harian/mingguan yang sama. Aksi yang tersedia mengikuti pengaturan jenis konten dan target sosmed aktif, termasuk **Publish TikTok**. Artikel mencari berita baru; tahap lain memilih satu berita yang memenuhi prasyarat. Publikasi otomatis hanya berjalan setelah jadwalnya diaktifkan dan akun tujuan tersedia.
 
 ## YouTube dan TikTok melalui Zernio
 

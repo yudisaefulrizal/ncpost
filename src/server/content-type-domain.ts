@@ -45,12 +45,12 @@ export function contentStages(
 }
 export function contentAllows(type: ContentType, kind: string) {
   const stages = contentStages(type);
-  if (type.engine === "quote") return ["ARTICLE", "POST_IMAGE"].includes(kind);
   if (kind === "POST_TIKTOK")
     return (
       type.settings?.socialTargets?.includes("tiktok") ??
       !!type.settings?.tiktokAccountId
     );
+  if (type.engine === "quote") return ["ARTICLE", "POST_IMAGE"].includes(kind);
   if (["EDITOR", "PREVIEW"].includes(kind)) return true;
   if (
     ["POST_IG", "REELS_IG"].includes(kind) &&

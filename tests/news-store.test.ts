@@ -208,24 +208,30 @@ it("status publikasi unknown menghalangi kirim ulang dan regenerate artikel; pol
     status: "unknown",
   });
 });
-it("cron berita default nonaktif, interval jam, tanpa quote dan tidak mengejar jadwal terlewat", async () => {
+it("cronjob kalender berita mulai kosong, klaim paralel aman dan jadwal terlewat tidak dirapel", async () => {
   const cron = new NewsCronStore(db.db);
-  expect(await cron.list()).toHaveLength(10);
-  expect((await cron.list()).every((c) => !c.enabled)).toBe(true);
+  expect(await cron.list()).toHaveLength(0);
+  const schedule = { mode: "daily", times: ["09:00"], days: [] };
   await expect(
-    cron.save({ kind: "QUOTE", enabled: true, intervalHours: 1 }),
-  ).rejects.toThrow("berita");
+    cron.save({ kind: "QUOTE", enabled: true, schedule }),
+  ).rejects.toThrow("Jenis cron");
   await expect(
-    cron.save({ kind: "ARTICLE", enabled: true, intervalHours: 0 }),
-  ).rejects.toThrow("Interval");
-  await cron.save({ kind: "ARTICLE", enabled: true, intervalHours: 2 }, 100);
-  await cron.schedule(200);
+    cron.save({
+      kind: "ARTICLE",
+      enabled: true,
+      schedule: { ...schedule, times: [] },
+    }),
+  ).rejects.toThrow("jam");
+  const start = Date.parse("2026-10-07T00:00:00Z");
+  await cron.save({ kind: "ARTICLE", enabled: true, schedule }, start);
+  await cron.schedule(start + 3600000);
   expect(await s.list()).toHaveLength(0);
-  await Promise.all([cron.schedule(9000000), cron.schedule(9000000)]);
+  await Promise.all([
+    cron.schedule(start + 2 * 3600000),
+    cron.schedule(start + 2 * 3600000),
+  ]);
   expect(await s.list()).toHaveLength(1);
-  expect((await cron.list()).find((c) => c.kind === "ARTICLE")?.next_run).toBe(
-    16200000,
-  );
+  expect((await cron.list())[0].next_run).toBe(start + 26 * 3600000);
 });
 
 it("jenis gambar yang tidak dipakai panel tidak membuang render panel", async () => {

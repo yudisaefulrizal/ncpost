@@ -14,7 +14,9 @@ import {
   newsStageDone,
   newsPrerequisite,
 } from "./news-production-domain";
-import { normalizeCron, type BookCron } from "./cron";
+import { type BookCron } from "./cron";
+import { cronNextRun } from "./cron-schedule";
+import { decodeCron, saveCronRecord, deleteCronRecord } from "./cron-records";
 import { NewsMediaStore } from "./news-media-store";
 import { NewsStore } from "./news-store";
 
@@ -29,44 +31,34 @@ export class NewsCronStore {
       ? "teknologi"
       : `type-${this.typeId}`;
   }
+  private scope() {
+    return {
+      table: "news_cron" as const,
+      where: "category=?",
+      params: [this.category],
+    };
+  }
   async list(): Promise<BookCron<NewsCronKind>[]> {
     const [rows]: any = await this.db.query(
-      "SELECT * FROM news_cron WHERE category=?",
+      "SELECT * FROM news_cron WHERE category=? ORDER BY next_run,schedule_id",
       [this.category],
     );
-    return NEWS_CRON_TYPES.map(([kind]) => {
-      const r = rows.find((r: any) => r.kind === kind);
-      return {
-        book: "Teknologi",
-        kind,
-        enabled: !!r?.enabled,
-        intervalHours: r?.interval_hours ?? 24,
-        batchSize: r?.batch_size ?? 1,
-        next_run: r?.next_run ?? null,
-        last_tick: r?.last_tick ?? null,
-        last_result: r?.last_result ?? null,
-      };
-    });
+    return rows.map((row: any) =>
+      decodeCron(row, currentContentType()?.name || "Berita"),
+    );
   }
   async save(input: unknown, now = Date.now()) {
-    const kind = (input as { kind?: unknown } | null)?.kind;
-    if (!NEWS_CRON_TYPES.some(([k]) => k === kind))
-      throw Error("Jenis cron berita tidak dikenal");
-    const v = normalizeCron(
+    await saveCronRecord(
+      this.db,
+      this.scope(),
       input,
-      NEWS_CRON_TYPES.map(([k]) => k),
+      NEWS_CRON_TYPES.map(([kind]) => kind),
+      now,
     );
-    await this.db.query(
-      "INSERT INTO news_cron(category,kind,enabled,interval_hours,next_run,batch_size) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run),batch_size=VALUES(batch_size)",
-      [
-        this.category,
-        v.kind,
-        v.enabled ? 1 : 0,
-        v.intervalHours,
-        v.enabled ? now + v.intervalHours * 3600000 : null,
-        v.batchSize,
-      ],
-    );
+    return this.list();
+  }
+  async remove(id: unknown) {
+    await deleteCronRecord(this.db, this.scope(), id);
     return this.list();
   }
   async schedule(now = Date.now()): Promise<void> {
@@ -95,13 +87,14 @@ export class NewsCronStore {
       )
         continue;
       const [lock]: any = await this.db.query(
-        "UPDATE news_cron SET next_run=?,last_tick=? WHERE category=? AND kind=? AND enabled=1 AND next_run<=?",
+        "UPDATE news_cron SET next_run=?,last_tick=? WHERE category=? AND kind=? AND enabled=1 AND next_run<=? AND schedule_id=?",
         [
-          now + cron.intervalHours * 3600000,
+          cronNextRun(cron, now),
           now,
           this.category,
           cron.kind,
           now,
+          cron.id ?? "",
         ],
       );
       if (!lock.affectedRows) continue;
@@ -109,7 +102,7 @@ export class NewsCronStore {
       try {
         const articles = await news.list();
         let processed = 0;
-        const batchSize = cron.batchSize || 1;
+        const batchSize = 1;
         if (cron.kind === "ARTICLE") {
           if (!articles.some((n) => ["queued", "running"].includes(n.state))) {
             for (let i = 0; i < batchSize; i++) await news.create();
@@ -185,8 +178,8 @@ export class NewsCronStore {
         message = (e as Error).message;
       }
       await this.db.query(
-        "UPDATE news_cron SET last_result=? WHERE category=? AND kind=? AND last_tick=?",
-        [message, this.category, cron.kind, now],
+        "UPDATE news_cron SET last_result=? WHERE category=? AND kind=? AND last_tick=? AND schedule_id=?",
+        [message, this.category, cron.kind, now, cron.id ?? ""],
       );
     }
   }

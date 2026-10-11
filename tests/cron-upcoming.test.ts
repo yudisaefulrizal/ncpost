@@ -49,10 +49,10 @@ it("includes only enabled scheduled stages still used by the content type", () =
     },
   ]);
 });
-it("retains overdue schedules and batch sizes", () => {
+it("retains overdue schedules and limits each execution to one item", () => {
   expect(
     upcomingForType(type, [cron({ next_run: 1, batchSize: 5 })])[0],
-  ).toMatchObject({ nextRun: 1, batchSize: 5 });
+  ).toMatchObject({ nextRun: 1, batchSize: 1 });
 });
 it("merges all source engines, reads each type's own scope, and sorts earliest first", async () => {
   const news: ContentType = { ...type, id: 2, name: "Berita", engine: "news" };
@@ -83,7 +83,7 @@ it("merges all source engines, reads each type's own scope, and sorts earliest f
       c.batchSize,
     ]),
   ).toEqual([
-    ["Berita", 100, 3],
+    ["Berita", 100, 1],
     ["Quote", 200, 1],
     ["Literasi", 300, 1],
   ]);

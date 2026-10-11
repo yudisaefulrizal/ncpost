@@ -17,9 +17,12 @@ export const CRON_TYPES = [
   ["PANEL", "Panel"],
   ["POST_IG", "Post IG"],
   ["REELS_IG", "Reels IG"],
+  ["POST_TIKTOK", "Publish TikTok"],
 ] as const;
 export type CronKind = (typeof CRON_TYPES)[number][0];
 export interface BookCron<K extends string = CronKind> {
+  id?: string;
+  schedule?: import("./cron-schedule").CronSchedule | null;
   book: string;
   kind: K;
   enabled: boolean;
@@ -91,6 +94,8 @@ export function cronJobs(
     c.content_engine === "quote",
   ).length;
   switch (kind) {
+    case "POST_TIKTOK":
+      return [];
     case "QUOTE":
       return c.quote ? [] : [kind];
     case "QUOTE_IMAGE":

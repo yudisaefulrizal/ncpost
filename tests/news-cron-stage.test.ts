@@ -9,7 +9,7 @@ import { emptyNewsProduction } from "../src/server/news-production-domain";
 import { newsFixture } from "./fixtures/news";
 afterEach(() => vi.restoreAllMocks());
 it.each([1, 2])(
-  "news cron processes %i ready articles for only its chosen stage",
+  "news cron processes one ready article even when legacy batch is %i",
   async (batchSize) => {
     const type = {
       id: 90,
@@ -69,14 +69,7 @@ it.each([1, 2])(
       },
     ]);
     await withContentType(type, () => cron.schedule(2));
-    expect(enqueue.mock.calls).toEqual(
-      batchSize === 1
-        ? [[7, ["POST_IMAGE"]]]
-        : [
-            [7, ["POST_IMAGE"]],
-            [8, ["POST_IMAGE"]],
-          ],
-    );
+    expect(enqueue.mock.calls).toEqual([[7, ["POST_IMAGE"]]]);
     expect(create).not.toHaveBeenCalled();
   },
 );

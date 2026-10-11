@@ -106,18 +106,35 @@ export async function migrateDatabase(connection: Connection) {
         `ALTER TABLE ${table} DROP PRIMARY KEY, ADD PRIMARY KEY(${keys})`,
       );
   }
-  // Merge old per-context schedules once; subsequent migrations preserve user edits.
-  await connection.query(
-    `INSERT IGNORE INTO book_cron(book_key,kind,content_type_id,enabled,interval_hours,next_run,last_tick,last_result)
+  // Legacy consolidation must never merge independently configured schedules.
+  if (!hasCronColumn("schedule_id")) {
+    // Merge old per-context schedules once; subsequent migrations preserve user edits.
+    await connection.query(
+      `INSERT IGNORE INTO book_cron(book_key,kind,content_type_id,enabled,interval_hours,next_run,last_tick,last_result)
     SELECT ?,kind,content_type_id,MAX(enabled),COALESCE(MAX(CASE WHEN enabled=1 THEN interval_hours END),24),
       MAX(CASE WHEN enabled=1 THEN next_run END),MAX(last_tick),'Jadwal konteks digabung; interval terpanjang dipertahankan'
     FROM book_cron WHERE book_key<>? GROUP BY content_type_id,kind`,
-    [CONTENT_CRON_KEY, CONTENT_CRON_KEY],
-  );
-  await connection.query(
-    "UPDATE book_cron SET enabled=0,next_run=NULL WHERE book_key<>?",
-    [CONTENT_CRON_KEY],
-  );
+      [CONTENT_CRON_KEY, CONTENT_CRON_KEY],
+    );
+    await connection.query(
+      "UPDATE book_cron SET enabled=0,next_run=NULL WHERE book_key<>?",
+      [CONTENT_CRON_KEY],
+    );
+  }
+  for (const [table, keys] of [
+    ["book_cron", "content_type_id,book_key,kind,schedule_id"],
+    ["news_cron", "category,kind,schedule_id"],
+  ]) {
+    const [columns]: any = await connection.query(`SHOW COLUMNS FROM ${table}`);
+    if (!columns.some((c: any) => c.Field === "schedule_id")) {
+      await connection.query(
+        `ALTER TABLE ${table} ADD COLUMN schedule_id VARCHAR(36) NOT NULL DEFAULT '', ADD COLUMN schedule_json TEXT NULL, DROP PRIMARY KEY, ADD PRIMARY KEY(${keys})`,
+      );
+    }
+    await connection.query(
+      `UPDATE ${table} SET schedule_id=UUID() WHERE schedule_id=''`,
+    );
+  }
   for (const table of ["lab_prompts", "lab_runs"]) {
     await connection.query(
       `INSERT IGNORE INTO lab_images(id,name,role) SELECT DISTINCT reference_image,'Referensi tersimpan','reference' FROM ${table} WHERE reference_image IS NOT NULL`,

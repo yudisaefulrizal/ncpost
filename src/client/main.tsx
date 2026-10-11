@@ -1,3 +1,4 @@
+import { CronTable } from "./cron-settings";
 import { UpcomingCronsPage } from "./cron-upcoming";
 import { QueuePage } from "./queue";
 import { mediaUnits } from "../server/content-contract";
@@ -62,12 +63,7 @@ import {
   panelSources,
   type BookSettings,
 } from "../server/book-settings";
-import {
-  CRON_TYPES,
-  validIntervalHours,
-  MAX_INTERVAL_HOURS,
-  type BookCron,
-} from "../server/cron";
+import { CRON_TYPES, type BookCron } from "../server/cron";
 import { QUOTE_IMAGE_STYLES } from "../server/quote-prompt";
 import {
   status,
@@ -242,17 +238,21 @@ function App() {
       activeTypeId.current !== activeType.id
     )
       return;
-    const [chapters, jobs, settings, crons] = await Promise.all([
+    const [chapters, jobs, settings, crons] = await Promise.allSettled([
       api("/chapters"),
       api("/jobs"),
       api("/book-settings"),
       api("/book-crons"),
     ]);
     if (activeTypeId.current !== activeType.id) return;
-    setRows(chapters);
-    setJobs(jobs);
-    setBookSettings(settings);
-    setBookCrons(crons);
+    if (chapters.status === "fulfilled") setRows(chapters.value);
+    if (jobs.status === "fulfilled") setJobs(jobs.value);
+    if (settings.status === "fulfilled") setBookSettings(settings.value);
+    if (crons.status === "fulfilled") setBookCrons(crons.value);
+    const failed = [chapters, jobs, settings, crons].find(
+      (result) => result.status === "rejected",
+    );
+    if (failed?.status === "rejected") throw failed.reason;
   };
   const settingsFor = (book: string): BookSettings =>
     (activeType?.settings?.managed
@@ -1766,9 +1766,16 @@ function App() {
     sub = "";
     content = activeType && (
       <section className="card pad stack">
-        <h2 className="h3">Jadwal cronjob</h2>
-        <CronSettings
+        <CronTable
+          key={activeType.id}
+          stages={CRON_TYPES.filter(([kind]) =>
+            contentAllows(activeType, kind),
+          )}
           items={bookCrons}
+          onDelete={async (cron) => {
+            await api("/book-crons", "DELETE", { id: cron.id });
+            await refresh();
+          }}
           onSave={async (cron) => {
             await api("/book-crons", "PUT", cron);
             await refresh();
@@ -2786,164 +2793,6 @@ type PlayProps = {
   view?: () => void;
   viewTitle?: string;
 };
-function CronSettings({
-  items,
-  onSave,
-}: {
-  items: BookCron[];
-  onSave: (cron: BookCron) => Promise<void>;
-}) {
-  const type = useContentType();
-  const stages = CRON_TYPES.filter(
-    ([key]) => !type || contentAllows(type, key),
-  );
-
-  return (
-    <section className="card pad stack">
-      <h2 className="h3">{type?.name || "Semua topik"}</h2>
-      <div className="table">
-        <table className="cron-table">
-          <thead>
-            <tr>
-              {stages.map(([kind, label]) => (
-                <th key={kind}>{label}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              {stages.map(([kind, label]) => {
-                const cron = items.find((c) => c.kind === kind);
-                return (
-                  <td key={kind}>
-                    {cron && (
-                      <CronCell cron={cron} label={label} onSave={onSave} />
-                    )}
-                  </td>
-                );
-              })}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function CronCell<K extends string>({
-  cron,
-  label,
-  onSave,
-}: {
-  cron: BookCron<K>;
-  label: string;
-  onSave: (c: BookCron<K>) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState(cron);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  useEffect(
-    () => setDraft(cron),
-    [cron.book, cron.kind, cron.enabled, cron.intervalHours, cron.batchSize],
-  );
-  const invalid =
-    !Number.isInteger(draft.batchSize ?? 1) ||
-    (draft.batchSize ?? 1) < 1 ||
-    (draft.batchSize ?? 1) > 100
-      ? "Isi jumlah konten 1–100"
-      : validIntervalHours(draft.intervalHours)
-        ? ""
-        : `Isi angka bulat 1–${MAX_INTERVAL_HOURS} jam`;
-  const changed =
-    draft.enabled !== cron.enabled ||
-    draft.intervalHours !== cron.intervalHours ||
-    (draft.batchSize ?? 1) !== (cron.batchSize ?? 1);
-  return (
-    <div className="stack-sm">
-      <label className="check-row">
-        <input
-          type="checkbox"
-          checked={draft.enabled}
-          disabled={saving}
-          aria-label={`Aktifkan ${label} ${cron.book}`}
-          onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
-        />{" "}
-        Aktif
-      </label>
-      <label className="field">
-        Setiap berapa jam
-        <input
-          type="number"
-          min={1}
-          max={MAX_INTERVAL_HOURS}
-          step={1}
-          aria-label={`Interval jam ${label} ${cron.book}`}
-          value={Number.isNaN(draft.intervalHours) ? "" : draft.intervalHours}
-          disabled={saving}
-          onChange={(e) =>
-            setDraft({ ...draft, intervalHours: e.target.valueAsNumber })
-          }
-        />
-      </label>
-      <label className="field">
-        Konten per putaran
-        <input
-          type="number"
-          min={1}
-          max={100}
-          step={1}
-          disabled={saving}
-          value={Number.isNaN(draft.batchSize) ? "" : (draft.batchSize ?? 1)}
-          aria-label={`Jumlah konten ${label} ${cron.book}`}
-          onChange={(e) =>
-            setDraft({ ...draft, batchSize: e.target.valueAsNumber })
-          }
-        />
-      </label>
-      {(invalid || error) && (
-        <small role="alert" className="warn">
-          {invalid || error}
-        </small>
-      )}
-      <button
-        className="btn btn-sec btn-sm"
-        disabled={!changed || !!invalid || saving}
-        onClick={async () => {
-          setSaving(true);
-          setError("");
-          try {
-            await onSave(draft);
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        {saving ? "Menyimpan…" : "Simpan"}
-      </button>
-      <small className="muted">
-        {cron.last_tick == null
-          ? "Belum dijalankan"
-          : new Date(cron.last_tick).toLocaleString("id-ID", {
-              timeZone: "Asia/Jakarta",
-            }) + " WIB"}
-      </small>
-      {cron.enabled && cron.next_run != null && (
-        <small className="muted">
-          Berikutnya:{" "}
-          {new Date(cron.next_run).toLocaleString("id-ID", {
-            timeZone: "Asia/Jakarta",
-          })}{" "}
-          WIB
-        </small>
-      )}
-      {cron.last_result && <small className="muted">{cron.last_result}</small>}
-    </div>
-  );
-}
-
-// Pengaturan Konten: satu kartu per konteks dengan draf lokal sampai disimpan.
 function NewsProduction({
   instagram,
   ttsReady,
@@ -4025,10 +3874,6 @@ function NewsFinishedContent({ kind }: { kind: "PANEL" | "VIDEO" }) {
 
 function NewsCronSettings() {
   const type = useContentType();
-  const stages = NEWS_CRON_TYPES.filter(
-    ([key]) => !type || contentAllows(type, key),
-  );
-
   const [items, setItems] = useState<BookCron<NewsCronKind>[]>([]),
     [error, setError] = useState("");
   useEffect(() => {
@@ -4037,46 +3882,25 @@ function NewsCronSettings() {
       .catch((e) => setError(e.message));
   }, []);
   return (
-    <div className="stack-lg">
-      <section className="card pad stack">
-        <h2 className="h3">Jadwal cronjob berita</h2>
-      </section>
+    <section className="card pad stack">
       {error && (
         <p className="warn" role="alert">
           {error}
         </p>
       )}
-      <section className="card queue">
-        <div className="table">
-          <table className="cron-table">
-            <thead>
-              <tr>
-                {stages.map(([k, label]) => (
-                  <th key={k}>{label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                {stages.map(([k, label]) => (
-                  <td key={k}>
-                    {items.find((c) => c.kind === k) && (
-                      <CronCell
-                        label={label}
-                        cron={items.find((c) => c.kind === k)!}
-                        onSave={async (c) => {
-                          setItems(await api("/news-crons", "PUT", c));
-                        }}
-                      />
-                    )}
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+      <CronTable
+        items={items}
+        stages={NEWS_CRON_TYPES.filter(
+          ([kind]) => !type || contentAllows(type, kind),
+        )}
+        onSave={async (cron) => {
+          setItems(await api("/news-crons", "PUT", cron));
+        }}
+        onDelete={async (cron) => {
+          setItems(await api("/news-crons", "DELETE", { id: cron.id }));
+        }}
+      />
+    </section>
   );
 }
 

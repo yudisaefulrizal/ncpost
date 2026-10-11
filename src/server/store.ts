@@ -1,4 +1,8 @@
 import { CONTENT_CRON_KEY } from "./cron";
+import { cronNextRun } from "./cron-schedule";
+import { decodeCron, saveCronRecord, deleteCronRecord } from "./cron-records";
+import { tiktokPublishInput } from "./tiktok-publish";
+import { normalizeTikTokSettings } from "./tiktok-settings";
 import { contentImportItems } from "./content-import";
 import { mediaUnits } from "./content-contract";
 import { labImageKind } from "./lab-image-types";
@@ -9,13 +13,7 @@ import {
   contentAllows,
 } from "./content-types";
 import mysql from "mysql2/promise";
-import {
-  CRON_TYPES,
-  intervalDue,
-  cronJobs,
-  normalizeCron,
-  type BookCron,
-} from "./cron";
+import { CRON_TYPES, intervalDue, cronJobs, type BookCron } from "./cron";
 import {
   validateContentText,
   roundRobin,
@@ -462,64 +460,53 @@ export class Store {
     );
     return settings;
   }
-  async bookCrons(): Promise<BookCron[]> {
-    let saved: any[];
-    let migrationNeeded = false;
-    try {
-      saved = await rows<any>(
-        this.db,
-        "SELECT * FROM book_cron WHERE content_type_id=?",
-        [currentContentType()?.id ?? 1],
-      );
-    } catch (e) {
-      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE") throw e;
-      saved = [];
-      migrationNeeded = true;
-    }
-    return CRON_TYPES.map(([kind]) => {
-      const row = saved.find(
-        (r) => r.book_key === CONTENT_CRON_KEY && r.kind === kind,
-      );
-      return {
-        book: currentContentType()?.name || "Semua topik",
-        kind,
-        enabled: !!row?.enabled,
-        intervalHours: Number(row?.interval_hours ?? 24),
-        batchSize: Number(row?.batch_size ?? 1),
-        next_run: row?.next_run == null ? null : Number(row.next_run),
-        last_tick: row?.last_tick == null ? null : Number(row.last_tick),
-        last_result: migrationNeeded
-          ? "Tabel cron belum tersedia. Jalankan npm run migrate."
-          : (row?.last_result ?? null),
-      };
-    });
+  private cronScope() {
+    return {
+      table: "book_cron" as const,
+      where: "content_type_id=? AND book_key=?",
+      params: [currentContentType()?.id ?? 1, CONTENT_CRON_KEY],
+    };
   }
-  async saveBookCron(_book: string, input: unknown, now = Date.now()) {
-    const c = normalizeCron(input);
+  async bookCrons(): Promise<BookCron[]> {
     try {
-      await run(
+      const saved = await rows<any>(
         this.db,
-        `INSERT INTO book_cron(book_key,kind,enabled,interval_hours,next_run,content_type_id,batch_size) VALUES(?,?,?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE enabled=VALUES(enabled),interval_hours=VALUES(interval_hours),next_run=VALUES(next_run),batch_size=VALUES(batch_size)`,
-        [
-          CONTENT_CRON_KEY,
-          c.kind,
-          c.enabled ? 1 : 0,
-          c.intervalHours,
-          c.enabled ? now + c.intervalHours * 3600000 : null,
-          currentContentType()?.id ?? 1,
-          c.batchSize,
-        ],
+        "SELECT * FROM book_cron WHERE content_type_id=? AND book_key=? ORDER BY next_run,schedule_id",
+        this.cronScope().params,
+      );
+      return saved.map(
+        (row) =>
+          decodeCron(
+            row,
+            currentContentType()?.name || "Semua topik",
+          ) as BookCron,
       );
     } catch (e) {
-      if ((e as { code?: string }).code === "ER_NO_SUCH_TABLE")
-        throw Error("Tabel cron belum tersedia. Jalankan npm run migrate.");
+      if (
+        (e as { code?: string }).code === "ER_NO_SUCH_TABLE" ||
+        (e as { code?: string }).code === "ER_BAD_FIELD_ERROR"
+      )
+        throw Error("Tabel cron perlu diperbarui. Jalankan npm run migrate.");
       throw e;
     }
-    return c;
+  }
+  async saveBookCron(_book: string, input: unknown, now = Date.now()) {
+    return saveCronRecord(
+      this.db,
+      this.cronScope(),
+      input,
+      CRON_TYPES.map(([kind]) => kind),
+      now,
+    );
+  }
+  async deleteBookCron(id: unknown) {
+    await deleteCronRecord(this.db, this.cronScope(), id);
   }
 
-  async scheduleCrons(now = Date.now()) {
+  async scheduleCrons(
+    now = Date.now(),
+    publishTikTok?: (source: string) => Promise<{ status: string }>,
+  ) {
     const tick = Math.floor(now / 60000) * 60000;
     const due = await rows<any>(
       this.db,
@@ -540,12 +527,21 @@ export class Store {
           )
         )
           continue;
+        if (cron.kind === "POST_TIKTOK") {
+          await this.scheduleTikTokCron(cron, now, tick, publishTikTok);
+          continue;
+        }
         await this.tx(async (db) => {
           const current = (
             await rows<any>(
               db,
-              "SELECT * FROM book_cron WHERE book_key=? AND kind=? AND content_type_id=? FOR UPDATE",
-              [cron.book_key, cron.kind, cron.content_type_id ?? 1],
+              "SELECT * FROM book_cron WHERE book_key=? AND kind=? AND content_type_id=? AND schedule_id=? FOR UPDATE",
+              [
+                cron.book_key,
+                cron.kind,
+                cron.content_type_id ?? 1,
+                cron.schedule_id ?? "",
+              ],
             )
           )[0];
           if (
@@ -599,19 +595,20 @@ export class Store {
             queued++;
             lastItemId = c.id;
             result = `${queued} topik: ${cron.kind} masuk antrean`;
-            if (queued >= Number(current.batch_size || 1)) break;
+            break;
           }
           await run(
             db,
-            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=?,last_item_id=? WHERE book_key=? AND kind=? AND content_type_id=?",
+            "UPDATE book_cron SET last_tick=?,last_result=?,next_run=?,last_item_id=? WHERE book_key=? AND kind=? AND content_type_id=? AND schedule_id=?",
             [
               tick,
               result,
-              now + Number(current.interval_hours) * 3600000,
+              cronNextRun(current, now),
               lastItemId,
               cron.book_key,
               cron.kind,
               cron.content_type_id ?? 1,
+              cron.schedule_id ?? "",
             ],
           );
         });
@@ -620,19 +617,108 @@ export class Store {
         await run(
           this.db,
           `UPDATE book_cron SET last_tick=?,last_result=?,next_run=?
-          WHERE book_key=? AND kind=? AND content_type_id=? AND (last_tick IS NULL OR last_tick<?)`,
+          WHERE book_key=? AND kind=? AND content_type_id=? AND (last_tick IS NULL OR last_tick<?) AND schedule_id=?`,
           [
             tick,
             `Gagal: ${message}`,
-            now + Number(cron.interval_hours) * 3600000,
+            cronNextRun(cron, now),
             cron.book_key,
             cron.kind,
             cron.content_type_id ?? 1,
             tick,
+            cron.schedule_id ?? "",
           ],
         );
       }
     }
+  }
+  private async scheduleTikTokCron(
+    cron: any,
+    now: number,
+    tick: number,
+    publish?: (source: string) => Promise<{ status: string }>,
+  ) {
+    const key = [cron.book_key, cron.kind, cron.content_type_id ?? 1];
+    const scheduleId = cron.schedule_id ?? "";
+    const claimed = await run(
+      this.db,
+      "UPDATE book_cron SET last_tick=?,next_run=? WHERE book_key=? AND kind=? AND content_type_id=? AND enabled=1 AND next_run<=? AND (last_tick IS NULL OR last_tick<?) AND schedule_id=?",
+      [tick, cronNextRun(cron, now), ...key, now, tick, scheduleId],
+    );
+    if (!claimed.affectedRows) return;
+    let message = "Tidak ada topik yang siap / belum dipublikasikan";
+    let cursor = Number(cron.last_item_id || 0);
+    try {
+      if (!publish) throw Error("Worker publikasi TikTok belum tersedia");
+      const chapters = await rows<Chapter>(
+        this.db,
+        "SELECT * FROM chapters WHERE content_type_id=? ORDER BY COALESCE(part_number,id),id",
+        [key[2]],
+      );
+      chapters.sort(
+        (a, b) =>
+          Number(a.id <= cursor) - Number(b.id <= cursor) || a.id - b.id,
+      );
+      let processed = 0;
+      for (const c of chapters) {
+        if (c.article_status !== "siap") continue;
+        const active = await rows<Job>(
+          this.db,
+          "SELECT * FROM jobs WHERE chapter_id=? AND state IN ('queued','running')",
+          [c.id],
+        );
+        if (active.length) continue;
+        const settings = await this.bookSettings(
+          c.book,
+          this.db,
+          Number(key[2]),
+        );
+        const options = normalizeTikTokSettings(settings.tiktok);
+        if (!settings.tiktokAccountId || !options.privacy)
+          throw Error("Lengkapi akun dan privasi TikTok di Pengaturan Konten");
+        const ready =
+          options.media === "photo"
+            ? c.panels && c.panel_status === "tersedia"
+            : options.media === "h"
+              ? c.sentence_video_h
+              : c.sentence_video;
+        if (!ready) continue;
+        if (options.media === "photo") {
+          const manifest = JSON.parse(c.panels!);
+          const files = [
+            ...(manifest.panels || []).map((p: any) => p.file),
+            manifest.closing,
+          ].filter((file) => typeof file === "string");
+          if (files.length < 2 || files.length > 35) continue;
+        }
+        const source = `book:${c.id}`;
+        const input = tiktokPublishInput(
+          source,
+          c.article,
+          c.title,
+          settings,
+          c.content_engine,
+        );
+        const previous = await rows(
+          this.db,
+          "SELECT id FROM zernio_publications WHERE source_key=? AND platform='tiktok' AND account_id=? LIMIT 1",
+          [input.mediaKey, input.accountId],
+        );
+        if (previous.length) continue;
+        const result = await publish(source);
+        cursor = c.id;
+        processed++;
+        message = `${processed} topik: TikTok ${result.status}`;
+        break;
+      }
+    } catch (e) {
+      message = `Gagal: ${e instanceof Error ? e.message : "Publikasi TikTok gagal"}`;
+    }
+    await run(
+      this.db,
+      "UPDATE book_cron SET last_result=?,last_item_id=? WHERE book_key=? AND kind=? AND content_type_id=? AND last_tick=? AND schedule_id=?",
+      [message, cursor, ...key, tick, scheduleId],
+    );
   }
   async chapter(id: number, db: Db = this.db) {
     const c = (

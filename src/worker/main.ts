@@ -1041,7 +1041,9 @@ while (!stop) {
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastCronMinute) {
     try {
-      await store.scheduleCrons();
+      await store.scheduleCrons(Date.now(), (source) =>
+        publishZernio(store, { quickTikTok: true, source }),
+      );
       await new NewsCronStore(store.db, undefined, (source) =>
         publishZernio(store, { quickTikTok: true, source }),
       ).schedule();

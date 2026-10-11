@@ -628,24 +628,30 @@ it("folder hasil mengikuti nomor bagian: ganti nomor, urutkan ulang, dan hapus",
   }
 });
 
-it("interval jam per buku tersimpan dan scheduler paralel tidak menggandakan job", async () => {
-  const a = await s.create("Interval A", "Satu");
-  const b = await s.create("Interval B", "Satu");
-  const start = Date.parse("2026-10-07T16:45:00Z");
-  await s.saveBookCron(
-    "Interval A",
-    { kind: "ARTICLE", enabled: true, intervalHours: 2 },
+it("cronjob kalender terpisah dan scheduler paralel tidak menggandakan job", async () => {
+  const a = await s.create("Konteks A", "Satu");
+  const b = await s.create("Konteks B", "Satu");
+  const start = Date.parse("2026-10-07T00:00:00Z");
+  const first = await s.saveBookCron(
+    "",
+    {
+      kind: "ARTICLE",
+      enabled: true,
+      schedule: { mode: "daily", times: ["09:00"], days: [] },
+    },
     start,
   );
-  await s.saveBookCron(
-    "Interval B",
-    { kind: "ARTICLE", enabled: true, intervalHours: 3 },
+  const second = await s.saveBookCron(
+    "",
+    {
+      kind: "ARTICLE",
+      enabled: true,
+      schedule: { mode: "daily", times: ["10:00"], days: [] },
+    },
     start,
   );
-  const schedules = await s.bookCrons();
-  expect(
-    schedules.find((c) => c.book === "Interval A" && c.kind === "ARTICLE"),
-  ).toMatchObject({ intervalHours: 2, next_run: start + 2 * 3600000 });
+  expect(first.id).not.toBe(second.id);
+  expect(await s.bookCrons()).toHaveLength(2);
   await s.scheduleCrons(start + 2 * 3600000 - 1);
   expect(await s.jobs()).toHaveLength(0);
   await Promise.all([
@@ -658,34 +664,34 @@ it("interval jam per buku tersimpan dan scheduler paralel tidak menggandakan job
     [a, b].sort(),
   );
 });
-it("menyimpan interval baru mengatur ulang waktu berikutnya dan nonaktif menghentikan jadwal", async () => {
-  await s.create("Interval C", "Satu");
-  const start = Date.parse("2026-10-07T16:45:00Z");
-  await s.saveBookCron(
-    "Interval C",
-    { kind: "ARTICLE", enabled: true, intervalHours: 2 },
+it("sunting jadwal kalender memperbarui satu baris dan nonaktif menghentikan jadwal", async () => {
+  await s.create("Konteks C", "Satu");
+  const start = Date.parse("2026-10-07T00:00:00Z");
+  const original = await s.saveBookCron(
+    "",
+    {
+      kind: "ARTICLE",
+      enabled: true,
+      schedule: { mode: "daily", times: ["09:00"], days: [] },
+    },
     start,
   );
-  await s.saveBookCron(
-    "Interval C",
-    { kind: "ARTICLE", enabled: true, intervalHours: 5 },
-    start + 3600000,
-  );
-  expect(
-    (await s.bookCrons()).find((c) => c.kind === "ARTICLE")?.next_run,
-  ).toBe(start + 6 * 3600000);
+  const updated = {
+    ...original,
+    schedule: { mode: "daily" as const, times: ["13:00"], days: [] },
+  };
+  await s.saveBookCron("", updated, start + 3600000);
+  expect(await s.bookCrons()).toHaveLength(1);
+  expect((await s.bookCrons())[0].next_run).toBe(start + 6 * 3600000);
   await s.scheduleCrons(start + 2 * 3600000);
   expect(await s.jobs()).toHaveLength(0);
-  await s.saveBookCron(
-    "Interval C",
-    { kind: "ARTICLE", enabled: false, intervalHours: 5 },
-    start + 2 * 3600000,
-  );
+  await s.saveBookCron("", { ...updated, enabled: false }, start + 2 * 3600000);
   await s.scheduleCrons(start + 10 * 3600000);
   expect(await s.jobs()).toHaveLength(0);
-  expect((await s.bookCrons()).find((c) => c.kind === "ARTICLE")).toMatchObject(
-    { enabled: false, next_run: null },
-  );
+  expect((await s.bookCrons())[0]).toMatchObject({
+    enabled: false,
+    next_run: null,
+  });
 });
 it("akun Instagram tujuan tersimpan terpisah per judul buku tanpa mengubah hasil", async () => {
   const a = await s.create("Akun Buku A", "Satu");

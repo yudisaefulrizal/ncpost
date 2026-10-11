@@ -41,24 +41,38 @@ export function UpcomingCronsPage() {
   );
   const paged = paginateRows(filtered, page);
   return (
-    <section className="card pad stack">
-      <div className="toolbar">
-        <input
-          aria-label="Cari cronjob"
-          placeholder="Cari jenis konten atau aksi"
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-        />
-        <button
-          className="btn btn-sec"
-          disabled={loading}
-          onClick={() => setRefresh((v) => v + 1)}
-        >
-          Perbarui
-        </button>
+    <section className="card pad stack cron-upcoming">
+      <div className="upcoming-toolbar">
+        <div className="cron-heading">
+          <h2 className="h3">Jadwal aktif</h2>
+          <span className="cron-count">{items.length}</span>
+        </div>
+        <div className="upcoming-controls">
+          <div className="upcoming-search">
+            <UpcomingIcon name="search" />
+            <input
+              aria-label="Cari cronjob"
+              placeholder="Cari jenis konten atau aksi"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+            />
+          </div>
+          <button
+            className="btn btn-sec"
+            disabled={loading}
+            onClick={() => setRefresh((v) => v + 1)}
+          >
+            {loading ? (
+              <span className="spinner" aria-hidden="true" />
+            ) : (
+              <UpcomingIcon name="refresh" />
+            )}{" "}
+            Perbarui
+          </button>
+        </div>
       </div>
       {error && (
         <p role="alert" className="warn">
@@ -73,35 +87,47 @@ export function UpcomingCronsPage() {
       ) : (
         <>
           <div className="table">
-            <table>
+            <table className="cron-table upcoming-table">
               <thead>
                 <tr>
-                  <th>Jenis konten</th>
-                  <th>Aksi</th>
-                  <th>Konten per putaran</th>
+                  <th>Konten</th>
+                  <th>Proses</th>
                   <th>Waktu berikutnya</th>
                 </tr>
               </thead>
               <tbody>
                 {paged.items.map((c) => (
-                  <tr key={`${c.contentTypeId}:${c.kind}`}>
-                    <td>{c.contentType}</td>
+                  <tr key={`${c.contentTypeId}:${c.id || c.kind}`}>
+                    <td className="cron-content">{c.contentType}</td>
                     <td>{c.label}</td>
-                    <td>{c.batchSize}</td>
                     <td>
-                      {new Date(c.nextRun).toLocaleString("id-ID", {
-                        timeZone: "Asia/Jakarta",
-                      })}{" "}
-                      WIB
-                      {c.nextRun <= Date.now() && (
-                        <small className="muted"> · Menunggu scheduler</small>
-                      )}
+                      <div className="cron-next">
+                        <strong>
+                          {new Date(c.nextRun).toLocaleTimeString("id-ID", {
+                            timeZone: "Asia/Jakarta",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}{" "}
+                          <small>WIB</small>
+                        </strong>
+                        <span>
+                          {new Date(c.nextRun).toLocaleDateString("id-ID", {
+                            timeZone: "Asia/Jakarta",
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                        {c.nextRun <= Date.now() && (
+                          <span className="upcoming-waiting">Menunggu</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {!paged.total && (
                   <tr>
-                    <td colSpan={4}>
+                    <td colSpan={3} className="cron-empty">
                       {search
                         ? "Tidak ada jadwal yang sesuai pencarian."
                         : "Belum ada cronjob aktif. Atur jadwal di submenu Cronjob jenis konten."}
@@ -111,28 +137,71 @@ export function UpcomingCronsPage() {
               </tbody>
             </table>
           </div>
-          <div className="toolbar">
-            <small className="muted">{paged.total} jadwal aktif</small>
-            <button
-              className="btn btn-sec btn-sm"
-              disabled={paged.page <= 1}
-              onClick={() => setPage(paged.page - 1)}
-            >
-              Sebelumnya
-            </button>
-            <span>
-              {paged.page} / {paged.pages}
-            </span>
-            <button
-              className="btn btn-sec btn-sm"
-              disabled={paged.page >= paged.pages}
-              onClick={() => setPage(paged.page + 1)}
-            >
-              Berikutnya
-            </button>
+          <div className="upcoming-footer">
+            <small className="muted">
+              {paged.total
+                ? `Menampilkan ${(paged.page - 1) * 20 + 1}–${Math.min(paged.page * 20, paged.total)} dari ${paged.total} jadwal`
+                : "0 jadwal"}
+            </small>
+            <div className="upcoming-pagination">
+              <button
+                className="btn btn-sec btn-sm cron-icon-btn"
+                aria-label="Sebelumnya"
+                title="Halaman sebelumnya"
+                disabled={paged.page <= 1}
+                onClick={() => setPage(paged.page - 1)}
+              >
+                <UpcomingIcon name="left" />
+              </button>
+              <span>
+                {paged.page} / {paged.pages}
+              </span>
+              <button
+                className="btn btn-sec btn-sm cron-icon-btn"
+                aria-label="Berikutnya"
+                title="Halaman berikutnya"
+                disabled={paged.page >= paged.pages}
+                onClick={() => setPage(paged.page + 1)}
+              >
+                <UpcomingIcon name="right" />
+              </button>
+            </div>
           </div>
         </>
       )}
     </section>
+  );
+}
+
+function UpcomingIcon({
+  name,
+}: {
+  name: "search" | "refresh" | "left" | "right";
+}) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {name === "search" ? (
+        <>
+          <circle cx="10.5" cy="10.5" r="6.5" />
+          <path d="m16 16 4 4" />
+        </>
+      ) : name === "refresh" ? (
+        <>
+          <path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3a7 7 0 0 0 11.6-1" />
+        </>
+      ) : (
+        <path d={name === "left" ? "m14 6-6 6 6 6" : "m10 6 6 6-6 6"} />
+      )}
+    </svg>
   );
 }

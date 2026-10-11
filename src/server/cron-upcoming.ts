@@ -9,6 +9,7 @@ import { NewsCronStore } from "./news-cron";
 import { CRON_TYPES, type BookCron } from "./cron";
 import { NEWS_CRON_TYPES } from "./news-production-domain";
 export interface UpcomingCron {
+  id?: string;
   contentTypeId: number;
   contentType: string;
   kind: string;
@@ -33,11 +34,12 @@ export function upcomingForType(
         contentAllows(type, c.kind),
     )
     .map((c) => ({
+      ...(c.id ? { id: c.id } : {}),
       contentTypeId: type.id,
       contentType: type.name,
       kind: c.kind,
       label: labels[c.kind] || c.kind,
-      batchSize: c.batchSize ?? 1,
+      batchSize: 1,
       nextRun: Number(c.next_run),
     }));
 }

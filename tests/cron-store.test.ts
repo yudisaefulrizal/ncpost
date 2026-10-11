@@ -41,7 +41,12 @@ function fixture() {
     if (sql.includes("FROM book_cron") && sql.includes("FOR UPDATE"))
       return [
         scheduled
-          .filter((c) => c.book_key === params[0] && c.kind === params[1])
+          .filter(
+            (c) =>
+              c.book_key === params[0] &&
+              c.kind === params[1] &&
+              ((c as any).schedule_id ?? "") === params[3],
+          )
           .map((c) => ({ ...c })),
       ];
     if (sql.includes("FROM chapters")) return [chapters];
@@ -51,7 +56,8 @@ function fixture() {
       const c = scheduled.find(
         (c) =>
           c.book_key === params[sql.includes("last_item_id=?") ? 4 : 3] &&
-          c.kind === params[sql.includes("last_item_id=?") ? 5 : 4],
+          c.kind === params[sql.includes("last_item_id=?") ? 5 : 4] &&
+          ((c as any).schedule_id ?? "") === params[params.length - 1],
       )!;
       c.last_tick = params[0];
       c.last_result = params[1];
@@ -120,76 +126,53 @@ it("kegagalan jadwal di-rollback dan dilaporkan", async () => {
   expect(connection.rollback).toHaveBeenCalledTimes(1);
   expect(scheduled[0].last_result).toContain("Gagal: Provider belum siap");
 });
-it("satu putaran memproses batch lintas konteks tanpa membuat pipeline", async () => {
+it("satu eksekusi memproses satu topik meskipun batch lama bernilai dua", async () => {
   const { s, scheduled, enqueue } = fixture();
   scheduled[0].batch_size = 2;
   await s.scheduleCrons(now);
-  expect(enqueue.mock.calls.map((c) => [c[0], c[1]])).toEqual([
-    [2, "ARTICLE"],
-    [3, "ARTICLE"],
-  ]);
-  expect(scheduled[0].last_item_id).toBe(3);
+  expect(enqueue.mock.calls.map((c) => [c[0], c[1]])).toEqual([[2, "ARTICLE"]]);
+  expect(scheduled[0].last_item_id).toBe(2);
 });
-it("schema lama tetap bisa membaca pengaturan dan menunjukkan kebutuhan migrasi", async () => {
+it("schema lama menjelaskan bahwa migrasi diperlukan", async () => {
   const { s } = fixture();
-  vi.spyOn(s, "list").mockResolvedValue([{ book: "Buku A" }] as Chapter[]);
   vi.mocked(s.db.query).mockRejectedValueOnce(
     Object.assign(Error("missing table"), { code: "ER_NO_SUCH_TABLE" }),
   );
-  const crons = await s.bookCrons();
-  expect(crons).toHaveLength(12);
-  expect(crons.every((c) => !c.enabled)).toBe(true);
-  expect(crons[0].last_result).toContain("npm run migrate");
+  await expect(s.bookCrons()).rejects.toThrow("npm run migrate");
 });
-it("simpan memvalidasi cron sebelum menulis serta menjelaskan migrasi yang belum dijalankan", async () => {
+it("menolak jadwal tanpa jam sebelum menulis", async () => {
   const { s } = fixture();
-  vi.spyOn(s, "list").mockResolvedValue([{ book: "Buku A" }] as Chapter[]);
   await expect(
-    s.saveBookCron("Buku A", {
+    s.saveBookCron("", {
       kind: "ARTICLE",
       enabled: true,
-      intervalHours: 0,
+      schedule: { mode: "daily", times: [], days: [] },
     }),
-  ).rejects.toThrow("Interval");
-  vi.mocked(s.db.query).mockRejectedValueOnce(
-    Object.assign(Error("missing table"), { code: "ER_NO_SUCH_TABLE" }),
-  );
-  await expect(
-    s.saveBookCron("Buku A", {
-      kind: "ARTICLE",
-      enabled: true,
-      intervalHours: 2,
-    }),
-  ).rejects.toThrow("npm run migrate");
+  ).rejects.toThrow("jam");
+  expect(s.db.query).not.toHaveBeenCalled();
 });
-
-it("menyimpan interval memulai hitungan sejak disimpan dan nonaktif menghapus waktu berikutnya", async () => {
-  const { s } = fixture();
-  vi.spyOn(s, "list").mockResolvedValue([{ book: "Buku A" }] as Chapter[]);
-  vi.mocked(s.db.query).mockResolvedValue([{ affectedRows: 1 }, []] as any);
-  await s.saveBookCron(
-    "Buku A",
-    { kind: "QUOTE", enabled: true, intervalHours: 25 },
-    now,
-  );
-  expect(s.db.query).toHaveBeenLastCalledWith(
-    expect.stringContaining("INSERT INTO book_cron"),
-    [CONTENT_CRON_KEY, "QUOTE", 1, 25, now + 25 * 3600000, 1, 1],
-  );
-  await s.saveBookCron(
-    "Buku A",
-    { kind: "QUOTE", enabled: false, intervalHours: 25 },
-    now,
-  );
-  expect(s.db.query).toHaveBeenLastCalledWith(expect.any(String), [
-    CONTENT_CRON_KEY,
-    "QUOTE",
-    0,
-    25,
-    null,
-    1,
-    1,
-  ]);
+it("dua jadwal dengan aksi yang sama memakai baris dan waktu berikutnya sendiri", async () => {
+  const { s, scheduled, enqueue } = fixture();
+  const a = scheduled[0] as any;
+  a.schedule_id = "a";
+  a.schedule_json = JSON.stringify({
+    mode: "daily",
+    times: ["09:00", "16:00"],
+    days: [],
+  });
+  scheduled.push({
+    ...a,
+    schedule_id: "b",
+    schedule_json: JSON.stringify({
+      mode: "weekly",
+      times: ["09:00"],
+      days: [3],
+    }),
+  } as any);
+  await s.scheduleCrons(now);
+  expect(enqueue.mock.calls.map((call) => call[0])).toEqual([2, 3]);
+  expect(scheduled[0].next_run).toBe(Date.parse("2026-10-07T09:00:00Z"));
+  expect(scheduled[1].next_run).toBe(Date.parse("2026-10-14T02:00:00Z"));
 });
 
 it("cron nonaktif tidak mengantrekan topik", async () => {

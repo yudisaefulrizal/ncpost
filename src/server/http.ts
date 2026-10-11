@@ -265,6 +265,9 @@ app.put("/api/news-crons", async (req, res) => {
     );
   res.json(await new NewsCronStore(store.db).save(req.body));
 });
+app.delete("/api/news-crons", async (req, res) => {
+  res.json(await new NewsCronStore(store.db).remove(req.body?.id));
+});
 app.post("/api/news/:id/publications/:kind/refresh", async (req, res) => {
   const id = Number(req.params.id),
     kind = String(req.params.kind);
@@ -477,7 +480,17 @@ app.post("/api/queue/:source/:id/:action", async (req, res) => {
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
 app.put("/api/book-crons", async (req, res) => {
+  if (req.body?.enabled === true && req.body.kind === "POST_TIKTOK") {
+    const saved = await store.bookSettings("");
+    if (!saved.tiktokAccountId || !saved.tiktok?.privacy)
+      throw Error("Lengkapi akun dan privasi TikTok di Pengaturan Konten");
+    await validateZernioSettings(saved, { ...saved, tiktokAccountId: null });
+  }
   res.json(await store.saveBookCron("", req.body));
+});
+app.delete("/api/book-crons", async (req, res) => {
+  await store.deleteBookCron(req.body?.id);
+  res.json({ ok: true });
 });
 
 // Pengaturan Konten: satu baris per judul buku yang ada di daftar bagian.
