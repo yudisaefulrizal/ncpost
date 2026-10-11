@@ -468,9 +468,18 @@ export function CronTable<K extends string>({
                   type="button"
                   className="btn btn-sec btn-sm"
                   disabled={schedule.times.length >= 48}
-                  onClick={() =>
-                    changeSchedule({ times: [...schedule.times, ""] })
-                  }
+                  onClick={() => {
+                    try {
+                      const next = shiftCronTimes(
+                        [schedule.times[schedule.times.length - 1]],
+                        15,
+                      )[0];
+                      changeSchedule({ times: [...schedule.times, next] });
+                      setError("");
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
                 >
                   Tambah jam
                 </button>
