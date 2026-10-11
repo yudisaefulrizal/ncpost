@@ -163,3 +163,22 @@ it("pengaturan otomatis lama tidak mengaktifkan produksi tanpa jadwal", () => {
       .autoProcess,
   ).toBe(false);
 });
+
+it("menyimpan pengaturan YouTube dan menolak nilai yang tidak valid", () => {
+  const youtube = { visibility: "public", madeForKids: true, synthetic: false };
+  expect(
+    normalizeBookSettings({ ...DEFAULT_BOOK_SETTINGS, youtube }).youtube,
+  ).toEqual(youtube);
+  expect(() =>
+    normalizeBookSettings({
+      ...DEFAULT_BOOK_SETTINGS,
+      youtube: { ...youtube, visibility: "other" },
+    }),
+  ).toThrow("YouTube");
+  expect(() =>
+    normalizeBookSettings({
+      ...DEFAULT_BOOK_SETTINGS,
+      youtube: { ...youtube, madeForKids: "false" },
+    }),
+  ).toThrow("YouTube");
+});

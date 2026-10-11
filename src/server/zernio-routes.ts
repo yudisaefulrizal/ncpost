@@ -210,6 +210,14 @@ export async function publishZernio(store: Store, input: any) {
   const urls = names.map((name) => new URL(`/pub/${name}`, origin));
   if (urls.some((url) => url.protocol !== "https:"))
     throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
+  if (account.platform === "youtube") {
+    const youtube = settings.youtube || {
+      visibility: "private",
+      madeForKids: false,
+      synthetic: false,
+    };
+    input = { ...input, ...youtube };
+  }
   const officialYouTube = account.connectionId === "ncwa-youtube";
   if (
     officialYouTube &&

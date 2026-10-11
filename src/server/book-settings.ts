@@ -78,7 +78,27 @@ export function socialColumns(targets: SocialTarget[]) {
     tiktok: targets.includes("tiktok"),
   };
 }
+export interface YouTubeSettings {
+  visibility: "public" | "private" | "unlisted";
+  madeForKids: boolean;
+  synthetic: boolean;
+}
+export function normalizeYouTubeSettings(value: any): YouTubeSettings {
+  if (
+    !value ||
+    !["public", "private", "unlisted"].includes(value.visibility) ||
+    typeof value.madeForKids !== "boolean" ||
+    typeof value.synthetic !== "boolean"
+  )
+    throw Error("Pengaturan publikasi YouTube tidak valid");
+  return {
+    visibility: value.visibility,
+    madeForKids: value.madeForKids,
+    synthetic: value.synthetic,
+  };
+}
 export interface BookSettings {
+  youtube?: YouTubeSettings;
   articleConfig?: ArticleConfig;
   imageUnit?: ImageUnit;
   tiktok?: TikTokSettings;
@@ -269,6 +289,9 @@ export function normalizeBookSettings(input: any): BookSettings {
       : {}),
     ...(labIds !== undefined
       ? { labPromptIds: [...new Set<number>(labIds)] }
+      : {}),
+    ...(input?.youtube !== undefined
+      ? { youtube: normalizeYouTubeSettings(input.youtube) }
       : {}),
     instagramAccountId,
     youtubeAccountId: socialId("youtubeAccountId"),

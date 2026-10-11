@@ -138,6 +138,7 @@ it("sends a produced video to NC-WA and keeps request ID for uncertain delivery"
     bookSettings: async () => ({
       socialTargets: ["youtube"],
       youtubeAccountId: id,
+      youtube: { visibility: "unlisted", madeForKids: true, synthetic: false },
     }),
     db: {
       query: async (sql: string, params: any[]) => {
@@ -179,9 +180,9 @@ it("sends a produced video to NC-WA and keeps request ID for uncertain delivery"
     expect(upload).toMatchObject({
       channelId: channel,
       title: "Judul",
-      privacyStatus: "private",
-      madeForKids: false,
-      containsSyntheticMedia: true,
+      privacyStatus: "unlisted",
+      madeForKids: true,
+      containsSyntheticMedia: false,
     });
     expect(savedRequest).toBe(upload.requestId);
     expect(JSON.parse(savedConnection).connectionId).toBe("ncwa-youtube");

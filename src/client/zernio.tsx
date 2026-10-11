@@ -1,3 +1,4 @@
+import type { YouTubeSettings } from "../server/book-settings";
 import { TikTokSettingsFields } from "./tiktok-settings";
 import type { TikTokSettings } from "../server/tiktok-settings";
 import { socialTargets, type SocialTarget } from "../server/book-settings";
@@ -33,6 +34,7 @@ export function ZernioPanel({
   instagram?: InstagramConnection;
   credentials?: boolean;
   settings?: {
+    youtube?: YouTubeSettings;
     tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
     instagramAccountId: string | null;
@@ -40,6 +42,7 @@ export function ZernioPanel({
     tiktokAccountId: string | null;
   };
   onChange?: (value: {
+    youtube?: YouTubeSettings;
     tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
     instagramAccountId?: string | null;
@@ -464,6 +467,58 @@ export function ZernioPanel({
                 </label>
               ))}
           </div>
+          {socialTargets(settings).includes("youtube") && (
+            <div className="settings-grid">
+              <label className="field">
+                Privasi YouTube
+                <select
+                  value={settings.youtube?.visibility || "private"}
+                  onChange={(e) =>
+                    onChange?.({
+                      youtube: {
+                        madeForKids: false,
+                        synthetic: false,
+                        ...settings.youtube,
+                        visibility: e.target
+                          .value as YouTubeSettings["visibility"],
+                      },
+                    })
+                  }
+                >
+                  <option value="private">Private · Pribadi</option>
+                  <option value="public">Public · Publik</option>
+                  <option value="unlisted">Unlisted · Tidak tercantum</option>
+                </select>
+              </label>
+              {(
+                [
+                  ["madeForKids", "Dibuat untuk anak-anak"],
+                  ["synthetic", "Konten sintetis yang perlu diungkapkan"],
+                ] as const
+              ).map(([key, label]) => (
+                <label className="field" key={key}>
+                  {label}
+                  <select
+                    value={String(settings.youtube?.[key] ?? false)}
+                    onChange={(e) =>
+                      onChange?.({
+                        youtube: {
+                          visibility: "private",
+                          madeForKids: false,
+                          synthetic: false,
+                          ...settings.youtube,
+                          [key]: e.target.value === "true",
+                        },
+                      })
+                    }
+                  >
+                    <option value="false">Tidak</option>
+                    <option value="true">Ya</option>
+                  </select>
+                </label>
+              ))}
+            </div>
+          )}
           {socialTargets(settings).includes("tiktok") && (
             <TikTokSettingsFields
               accountId={settings.tiktokAccountId}
@@ -641,27 +696,10 @@ export function ZernioPanel({
                     onChange={(e) => setTitle(e.target.value)}
                   />
                 </label>
-                <label className="field">
-                  Visibilitas
-                  <select
-                    required
-                    value={visibility}
-                    onChange={(e) => setVisibility(e.target.value)}
-                  >
-                    <option value="">Pilih visibilitas</option>
-                    <option value="public">Publik</option>
-                    <option value="private">Pribadi</option>
-                    <option value="unlisted">Tidak publik</option>
-                  </select>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={madeForKids}
-                    onChange={(e) => setMadeForKids(e.target.checked)}
-                  />{" "}
-                  Video dibuat khusus untuk anak-anak
-                </label>
+                <p className="muted">
+                  Privasi, pengaturan anak-anak, dan konten sintetis mengikuti
+                  Pengaturan Konten yang tersimpan.
+                </p>
               </>
             )}
             {account?.platform === "tiktok" && (
@@ -709,14 +747,16 @@ export function ZernioPanel({
                   ))}
               </>
             )}
-            <label>
-              <input
-                type="checkbox"
-                checked={synthetic}
-                onChange={(e) => setSynthetic(e.target.checked)}
-              />{" "}
-              Konten mengandung materi sintetis / AI
-            </label>
+            {account?.platform === "tiktok" && (
+              <label>
+                <input
+                  type="checkbox"
+                  checked={synthetic}
+                  onChange={(e) => setSynthetic(e.target.checked)}
+                />{" "}
+                Konten mengandung materi sintetis / AI
+              </label>
+            )}
             <label>
               <input
                 type="checkbox"
