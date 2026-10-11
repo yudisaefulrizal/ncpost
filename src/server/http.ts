@@ -1,6 +1,7 @@
 import { listUpcomingCrons } from "./cron-upcoming";
 import { shiftAllCrons } from "./cron-shift";
 import { loadCronGuide, saveCronGuide } from "./cron-guide-store";
+import { optimizeCronRecords } from "./cron-optimize-store";
 import { listQueue, queueAction, clearQueue } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
@@ -476,6 +477,14 @@ app.get("/api/crons", async (_, res) =>
 );
 app.post("/api/crons/shift", async (req, res) => {
   res.json(await shiftAllCrons(store.db, req.body?.minutes));
+});
+app.post("/api/crons/optimize/preview", async (_, res) =>
+  res.json(await optimizeCronRecords(store.db)),
+);
+app.post("/api/crons/optimize/apply", async (req, res) => {
+  if (typeof req.body?.revision !== "string")
+    throw Error("Jalankan Optimasi untuk membuat pratinjau terlebih dahulu");
+  res.json(await optimizeCronRecords(store.db, req.body.revision));
 });
 app.get("/api/cron-guide", async (_, res) =>
   res.json(await loadCronGuide(store.db)),

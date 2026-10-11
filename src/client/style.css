@@ -2440,7 +2440,7 @@ dialog.app-dialog::backdrop {
 .cron-chart-svg {
   display: block;
   width: 100%;
-  min-width: 640px;
+  min-width: 0;
 }
 .cron-chart-svg text {
   fill: var(--ink2);
@@ -2644,6 +2644,64 @@ dialog.app-dialog::backdrop {
     display: none;
   }
   .guide-savebar > div {
+    justify-content: flex-end;
+  }
+}
+.cron-optimization-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--brand);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.cron-optimization-preview > div:first-child {
+  flex: 1;
+  min-width: 200px;
+}
+.cron-optimization-preview p {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.cron-optimization-actions,
+.cron-optimization-legend,
+.cron-optimization-legend span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cron-optimization-legend {
+  font-size: 12px;
+  color: var(--muted);
+}
+.cron-optimization-legend i {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.cron-optimization-legend .before,
+.cron-chart-before {
+  fill: #c4ccd0;
+  background: #c4ccd0;
+}
+.cron-optimization-legend .after {
+  background: var(--brand);
+}
+.cron-optimization-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 12px 0;
+}
+.cron-optimization-details table {
+  min-width: 600px;
+}
+@media (max-width: 640px) {
+  .cron-optimization-actions {
+    width: 100%;
     justify-content: flex-end;
   }
 }
