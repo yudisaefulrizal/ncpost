@@ -472,7 +472,7 @@ export function ZernioPanel({
               <label className="field">
                 Privasi YouTube
                 <select
-                  value={settings.youtube?.visibility || "private"}
+                  value={settings.youtube?.visibility || "public"}
                   onChange={(e) =>
                     onChange?.({
                       youtube: {
@@ -503,7 +503,7 @@ export function ZernioPanel({
                     onChange={(e) =>
                       onChange?.({
                         youtube: {
-                          visibility: "private",
+                          visibility: "public",
                           madeForKids: false,
                           synthetic: false,
                           ...settings.youtube,

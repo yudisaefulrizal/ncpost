@@ -3,10 +3,15 @@ import { Store } from "../src/server/store";
 import { CRON_TYPES, CONTENT_CRON_KEY } from "../src/server/cron";
 import { DEFAULT_BOOK_SETTINGS } from "../src/server/book-settings";
 
-function fixture({ claimed = true, previous = false, ready = true } = {}) {
+function fixture({
+  claimed = true,
+  previous = false,
+  ready = true,
+  youtube = false,
+} = {}) {
   const cron = {
     book_key: CONTENT_CRON_KEY,
-    kind: "POST_TIKTOK",
+    kind: youtube ? "POST_YOUTUBE" : "POST_TIKTOK",
     content_type_id: 1,
     enabled: 1,
     interval_hours: 2,
@@ -24,7 +29,7 @@ function fixture({ claimed = true, previous = false, ready = true } = {}) {
             outputs: '["VIDEO_KALIMAT"]',
             settings: JSON.stringify({
               managed: false,
-              socialTargets: ["tiktok"],
+              socialTargets: [youtube ? "youtube" : "tiktok"],
             }),
           },
         ],
@@ -58,8 +63,9 @@ function fixture({ claimed = true, previous = false, ready = true } = {}) {
   } as any;
   vi.spyOn(store, "bookSettings").mockResolvedValue({
     ...DEFAULT_BOOK_SETTINGS,
-    socialTargets: ["tiktok"],
+    socialTargets: [youtube ? "youtube" : "tiktok"],
     tiktokAccountId: "akun",
+    youtubeAccountId: "yt",
     tiktok: { media: "v", privacy: "PUBLIC_TO_EVERYONE" },
   } as any);
   const enqueue = vi.spyOn(store, "enqueue");
@@ -83,5 +89,20 @@ it.each([{ previous: true }, { ready: false }, { claimed: false }])(
     await f.store.scheduleCrons(100000, f.publish);
     expect(f.publish).not.toHaveBeenCalled();
     expect(f.enqueue).not.toHaveBeenCalled();
+  },
+);
+
+it("jadwal YouTube memublikasikan satu video siap tanpa membuat produksi baru", async () => {
+  const f = fixture({ youtube: true });
+  await f.store.scheduleCrons(100000, f.publish);
+  expect(f.publish).toHaveBeenCalledExactlyOnceWith("book:1", "youtube");
+  expect(f.enqueue).not.toHaveBeenCalled();
+});
+it.each([{ previous: true }, { ready: false }, { claimed: false }])(
+  "jadwal YouTube melewati item tidak layak: %j",
+  async (options) => {
+    const f = fixture({ ...options, youtube: true });
+    await f.store.scheduleCrons(100000, f.publish);
+    expect(f.publish).not.toHaveBeenCalled();
   },
 );

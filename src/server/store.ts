@@ -1,3 +1,4 @@
+import { youtubePublishInput } from "./youtube-publish";
 import { CONTENT_CRON_KEY } from "./cron";
 import { cronNextRun } from "./cron-schedule";
 import { decodeCron, saveCronRecord, deleteCronRecord } from "./cron-records";
@@ -505,7 +506,10 @@ export class Store {
 
   async scheduleCrons(
     now = Date.now(),
-    publishTikTok?: (source: string) => Promise<{ status: string }>,
+    publishTikTok?: (
+      source: string,
+      platform?: "youtube" | "tiktok",
+    ) => Promise<{ status: string }>,
   ) {
     const tick = Math.floor(now / 60000) * 60000;
     const due = await rows<any>(
@@ -527,7 +531,7 @@ export class Store {
           )
         )
           continue;
-        if (cron.kind === "POST_TIKTOK") {
+        if (["POST_TIKTOK", "POST_YOUTUBE"].includes(cron.kind)) {
           await this.scheduleTikTokCron(cron, now, tick, publishTikTok);
           continue;
         }
@@ -636,7 +640,10 @@ export class Store {
     cron: any,
     now: number,
     tick: number,
-    publish?: (source: string) => Promise<{ status: string }>,
+    publish?: (
+      source: string,
+      platform?: "youtube" | "tiktok",
+    ) => Promise<{ status: string }>,
   ) {
     const key = [cron.book_key, cron.kind, cron.content_type_id ?? 1];
     const scheduleId = cron.schedule_id ?? "";
@@ -649,7 +656,7 @@ export class Store {
     let message = "Tidak ada topik yang siap / belum dipublikasikan";
     let cursor = Number(cron.last_item_id || 0);
     try {
-      if (!publish) throw Error("Worker publikasi TikTok belum tersedia");
+      if (!publish) throw Error("Worker publikasi sosmed belum tersedia");
       const chapters = await rows<Chapter>(
         this.db,
         "SELECT * FROM chapters WHERE content_type_id=? ORDER BY COALESCE(part_number,id),id",
@@ -674,8 +681,26 @@ export class Store {
           Number(key[2]),
         );
         const options = normalizeTikTokSettings(settings.tiktok);
-        if (!settings.tiktokAccountId || !options.privacy)
-          throw Error("Lengkapi akun dan privasi TikTok di Pengaturan Konten");
+        const youtube = cron.kind === "POST_YOUTUBE";
+        const platform = youtube ? "youtube" : "tiktok";
+        if (youtube)
+          options.media = youtubePublishInput(
+            "book:1",
+            "",
+            settings,
+          ).mediaKey.endsWith(":h")
+            ? "h"
+            : "v";
+        if (
+          youtube
+            ? !settings.youtubeAccountId
+            : !settings.tiktokAccountId || !options.privacy
+        )
+          throw Error(
+            youtube
+              ? "Pilih akun YouTube di Pengaturan Konten"
+              : "Lengkapi akun dan privasi TikTok di Pengaturan Konten",
+          );
         const ready =
           options.media === "photo"
             ? c.panels && c.panel_status === "tersedia"
@@ -692,27 +717,32 @@ export class Store {
           if (files.length < 2 || files.length > 35) continue;
         }
         const source = `book:${c.id}`;
-        const input = tiktokPublishInput(
-          source,
-          c.article,
-          c.title,
-          settings,
-          c.content_engine,
-        );
+        const input = youtube
+          ? youtubePublishInput(source, c.title, settings)
+          : tiktokPublishInput(
+              source,
+              c.article,
+              c.title,
+              settings,
+              c.content_engine,
+            );
         const previous = await rows(
           this.db,
-          "SELECT id FROM zernio_publications WHERE source_key=? AND platform='tiktok' AND account_id=? LIMIT 1",
-          [input.mediaKey, input.accountId],
+          "SELECT id FROM zernio_publications WHERE source_key=? AND platform=? AND account_id=? LIMIT 1",
+          [input.mediaKey, platform, input.accountId],
         );
         if (previous.length) continue;
-        const result = await publish(source);
+        const result = await publish(
+          source,
+          ...(youtube ? ["youtube" as const] : []),
+        );
         cursor = c.id;
         processed++;
-        message = `${processed} topik: TikTok ${result.status}`;
+        message = `${processed} topik: ${youtube ? "YouTube" : "TikTok"} ${result.status}`;
         break;
       }
     } catch (e) {
-      message = `Gagal: ${e instanceof Error ? e.message : "Publikasi TikTok gagal"}`;
+      message = `Gagal: ${e instanceof Error ? e.message : "Publikasi sosmed gagal"}`;
     }
     await run(
       this.db,

@@ -1,3 +1,4 @@
+import { youtubePublishInput } from "./youtube-publish";
 import { normalizeTikTokSettings } from "./tiktok-settings";
 import { tiktokPublishInput } from "./tiktok-publish";
 import {
@@ -24,7 +25,10 @@ export class NewsCronStore {
   constructor(
     readonly db: mysql.Pool,
     readonly typeId = currentContentType()?.id,
-    readonly publishTikTok?: (source: string) => Promise<{ status: string }>,
+    readonly publishTikTok?: (
+      source: string,
+      platform?: "youtube" | "tiktok",
+    ) => Promise<{ status: string }>,
   ) {}
   get category() {
     return !this.typeId || this.typeId === 2
@@ -108,15 +112,31 @@ export class NewsCronStore {
             for (let i = 0; i < batchSize; i++) await news.create();
             message = `${batchSize} artikel baru masuk antrean`;
           } else message = "Artikel masih dalam proses";
-        } else if (cron.kind === "POST_TIKTOK") {
+        } else if (["POST_TIKTOK", "POST_YOUTUBE"].includes(cron.kind)) {
           const settings = await media.settings();
           const options = normalizeTikTokSettings(settings.tiktok);
-          if (!settings.tiktokAccountId || !options.privacy)
+          const youtube = cron.kind === "POST_YOUTUBE";
+          const platform = youtube ? "youtube" : "tiktok";
+          if (youtube)
+            options.media = youtubePublishInput(
+              "book:1",
+              "",
+              settings,
+            ).mediaKey.endsWith(":h")
+              ? "h"
+              : "v";
+          if (
+            youtube
+              ? !settings.youtubeAccountId
+              : !settings.tiktokAccountId || !options.privacy
+          )
             throw Error(
-              "Lengkapi akun dan privasi TikTok di Pengaturan Konten",
+              youtube
+                ? "Pilih akun YouTube di Pengaturan Konten"
+                : "Lengkapi akun dan privasi TikTok di Pengaturan Konten",
             );
           if (!this.publishTikTok)
-            throw Error("Worker publikasi TikTok belum tersedia");
+            throw Error("Worker publikasi sosmed belum tersedia");
           const kind =
             options.media === "photo"
               ? "PANEL"
@@ -132,20 +152,20 @@ export class NewsCronStore {
             )
               continue;
             const source = `news:${n.id}`;
-            const input = tiktokPublishInput(
-              source,
-              n.article,
-              n.title,
-              settings,
-            );
+            const input = youtube
+              ? youtubePublishInput(source, n.title, settings)
+              : tiktokPublishInput(source, n.article, n.title, settings);
             const [previous]: any = await this.db.query(
-              "SELECT id FROM zernio_publications WHERE source_key=? AND platform='tiktok' AND account_id=? LIMIT 1",
-              [input.mediaKey, input.accountId],
+              "SELECT id FROM zernio_publications WHERE source_key=? AND platform=? AND account_id=? LIMIT 1",
+              [input.mediaKey, platform, input.accountId],
             );
             if (previous.length) continue;
-            const result = await this.publishTikTok(source);
+            const result = await this.publishTikTok(
+              source,
+              ...(youtube ? ["youtube" as const] : []),
+            );
             processed++;
-            message = `${processed} artikel: TikTok ${result.status}`;
+            message = `${processed} artikel: ${youtube ? "YouTube" : "TikTok"} ${result.status}`;
             if (processed >= batchSize) break;
           }
         } else {

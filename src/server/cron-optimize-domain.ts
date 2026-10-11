@@ -24,7 +24,7 @@ export interface CronOptimization {
 export const cronSource = (item: UpcomingCron) =>
   `${item.contentTypeId}:${item.kind}:${item.id}`;
 export function cronStage(kind: string): { stage: GuideStage; rank: number } {
-  if (["POST_IG", "REELS_IG", "POST_TIKTOK"].includes(kind))
+  if (["POST_IG", "REELS_IG", "POST_TIKTOK", "POST_YOUTUBE"].includes(kind))
     return { stage: "post", rank: 6 };
   if (kind === "ARTICLE") return { stage: "article", rank: 0 };
   if (kind === "QUOTE") return { stage: "article", rank: 1 };

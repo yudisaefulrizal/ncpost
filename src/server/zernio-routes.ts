@@ -1,3 +1,4 @@
+import { youtubePublishInput } from "./youtube-publish";
 import {
   socialAccounts,
   ncwaYouTubeRequest,
@@ -121,7 +122,7 @@ export async function publishZernio(store: Store, input: any) {
     (!Number.isSafeInteger(repostOf) || repostOf < 1)
   )
     throw Error("ID post ulang tidak valid");
-  if (input?.quickTikTok === true) {
+  if (input?.quickTikTok === true || input?.quickYouTube === true) {
     const source = String(input.source);
     if (!/^(book|news):[1-9]\d*$/.test(source))
       throw Error("Konten TikTok tidak valid");
@@ -149,13 +150,15 @@ export async function publishZernio(store: Store, input: any) {
             store.db,
             item.content_type_id ?? 2,
           );
-    input = tiktokPublishInput(
-      source,
-      item.article,
-      item.title,
-      saved,
-      item.content_engine,
-    );
+    input = input.quickYouTube
+      ? youtubePublishInput(source, item.title, saved)
+      : tiktokPublishInput(
+          source,
+          item.article,
+          item.title,
+          saved,
+          item.content_engine,
+        );
   }
   const id = zernioId(input?.accountId);
   const connection = await socialAccounts();
@@ -212,7 +215,7 @@ export async function publishZernio(store: Store, input: any) {
     throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
   if (account.platform === "youtube") {
     const youtube = settings.youtube || {
-      visibility: "private",
+      visibility: "public",
       madeForKids: false,
       synthetic: false,
     };

@@ -261,6 +261,12 @@ app.get("/api/news-crons", async (_, res) =>
   res.json(await new NewsCronStore(store.db).list()),
 );
 app.put("/api/news-crons", async (req, res) => {
+  if (req.body?.enabled === true && req.body.kind === "POST_YOUTUBE") {
+    const saved = await new NewsMediaStore(store.db).settings();
+    if (!saved.youtubeAccountId)
+      throw Error("Pilih akun YouTube di Pengaturan Konten");
+    await validateZernioSettings(saved, { ...saved, youtubeAccountId: null });
+  }
   if (req.body?.enabled === true && req.body.kind === "POST_TIKTOK") {
     const saved = await new NewsMediaStore(store.db).settings();
     if (!saved.tiktokAccountId || !saved.tiktok?.privacy)
@@ -522,6 +528,12 @@ app.post("/api/queue/clear", async (_req, res) => {
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
 app.put("/api/book-crons", async (req, res) => {
+  if (req.body?.enabled === true && req.body.kind === "POST_YOUTUBE") {
+    const saved = await store.bookSettings("");
+    if (!saved.youtubeAccountId)
+      throw Error("Pilih akun YouTube di Pengaturan Konten");
+    await validateZernioSettings(saved, { ...saved, youtubeAccountId: null });
+  }
   if (req.body?.enabled === true && req.body.kind === "POST_TIKTOK") {
     const saved = await store.bookSettings("");
     if (!saved.tiktokAccountId || !saved.tiktok?.privacy)

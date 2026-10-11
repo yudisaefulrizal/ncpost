@@ -1059,11 +1059,19 @@ while (!stop) {
   const minute = Math.floor(Date.now() / 60000);
   if (minute !== lastCronMinute) {
     try {
-      await store.scheduleCrons(Date.now(), (source) =>
-        publishZernio(store, { quickTikTok: true, source }),
+      await store.scheduleCrons(Date.now(), (source, platform) =>
+        publishZernio(store, {
+          quickTikTok: platform !== "youtube",
+          quickYouTube: platform === "youtube",
+          source,
+        }),
       );
-      await new NewsCronStore(store.db, undefined, (source) =>
-        publishZernio(store, { quickTikTok: true, source }),
+      await new NewsCronStore(store.db, undefined, (source, platform) =>
+        publishZernio(store, {
+          quickTikTok: platform !== "youtube",
+          quickYouTube: platform === "youtube",
+          source,
+        }),
       ).schedule();
       lastCronMinute = minute;
     } catch (e) {

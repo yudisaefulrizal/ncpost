@@ -47,7 +47,7 @@ it("book caption skips title and hook heading", () => {
 it("missing privacy, disabled targets, missing account and invalid source never publish", () => {
   const saved = { ...settings, socialTargets: [...settings.socialTargets] };
   for (const value of [
-    { ...saved, tiktok: normalizeTikTokSettings(null) },
+    { ...saved, tiktok: normalizeTikTokSettings({ privacy: "" }) },
     { ...saved, socialTargets: [] },
     { ...saved, tiktokAccountId: null },
   ])
@@ -65,4 +65,8 @@ it("validates and persists saved TikTok publication settings", () => {
   ).toEqual(settings.tiktok);
   expect(() => normalizeTikTokSettings({ media: "invalid" })).toThrow();
   expect(() => normalizeTikTokSettings({ allowComment: "true" })).toThrow();
+});
+
+it("TikTok menggunakan privasi publik sebagai bawaan", () => {
+  expect(normalizeTikTokSettings(null).privacy).toBe("PUBLIC_TO_EVERYONE");
 });

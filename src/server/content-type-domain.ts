@@ -45,6 +45,12 @@ export function contentStages(
 }
 export function contentAllows(type: ContentType, kind: string) {
   const stages = contentStages(type);
+  if (kind === "POST_YOUTUBE")
+    return (
+      (stages.has("VIDEO_KALIMAT") || stages.has("VIDEO_KALIMAT_H")) &&
+      (type.settings?.socialTargets?.includes("youtube") ??
+        !!type.settings?.youtubeAccountId)
+    );
   if (kind === "POST_TIKTOK")
     return (
       type.settings?.socialTargets?.includes("tiktok") ??

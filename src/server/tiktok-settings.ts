@@ -9,7 +9,7 @@ export interface TikTokSettings {
 }
 export const DEFAULT_TIKTOK_SETTINGS: TikTokSettings = {
   media: "v",
-  privacy: "",
+  privacy: "PUBLIC_TO_EVERYONE",
   allowComment: false,
   allowDuet: false,
   allowStitch: false,
