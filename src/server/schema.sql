@@ -1,3 +1,24 @@
+CREATE TABLE IF NOT EXISTS process_timing_locks (
+  stage VARCHAR(16) NOT NULL PRIMARY KEY
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+INSERT IGNORE INTO process_timing_locks(stage) VALUES('article'),('images'),('video'),('audio');
+CREATE TABLE IF NOT EXISTS process_timings (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  stage VARCHAR(16) NOT NULL,
+  source VARCHAR(16) NOT NULL,
+  job_id INT NOT NULL,
+  attempt INT NOT NULL,
+  kind VARCHAR(32) NOT NULL,
+  content_type_id INT NULL,
+  title VARCHAR(500) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  started_at BIGINT NOT NULL,
+  finished_at BIGINT NOT NULL,
+  duration_ms BIGINT NOT NULL,
+  UNIQUE KEY process_attempt(source,job_id,attempt),
+  KEY recent_stage(stage,finished_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS cron_guide (
   id TINYINT NOT NULL PRIMARY KEY,
   settings TEXT NOT NULL,

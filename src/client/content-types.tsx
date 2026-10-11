@@ -155,7 +155,7 @@ export function ContentTypes({
           <div className="stack">
             <p>
               Hapus jenis konten <strong>{deleting.name}</strong> beserta
-              pengaturan dan cronjobnya?
+              pengaturan dan jadwalnya?
             </p>
             <p className="muted">
               Jenis konten harus kosong. Topik atau artikel dapat dihapus

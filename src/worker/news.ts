@@ -1,4 +1,5 @@
 import { generateConfiguredArticle } from "./configured-article";
+import { finishProcessTiming } from "../server/process-timing";
 import { NewsMediaStore } from "../server/news-media-store";
 import { productionLabPrompt } from "../server/lab-production";
 import { createHash } from "node:crypto";
@@ -63,6 +64,8 @@ export function parseNewsResearch(raw: string) {
   return { result, research, validation };
 }
 export async function runNewsJob(store: NewsStore, j: NewsArticle) {
+  const startedAt = Date.now(),
+    started = performance.now();
   // A unique attempt directory prevents lease-recovery results overwriting newer runs.
   const dir = path.join(
     ROOT,
@@ -185,5 +188,13 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
     await store.fail(j, message);
   } finally {
     clearInterval(heartbeat);
+    await finishProcessTiming(
+      store.db,
+      "news",
+      j,
+      "article",
+      startedAt,
+      performance.now() - started,
+    );
   }
 }

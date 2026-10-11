@@ -2,6 +2,8 @@ import { listUpcomingCrons } from "./cron-upcoming";
 import { shiftAllCrons } from "./cron-shift";
 import { loadCronGuide, saveCronGuide } from "./cron-guide-store";
 import { optimizeCronRecords } from "./cron-optimize-store";
+import { listProcessTimings, applyTimingEta } from "./process-timing";
+import { timingEta } from "./process-timing-domain";
 import { listQueue, queueAction, clearQueue } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
@@ -474,6 +476,13 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
 });
 app.get("/api/crons", async (_, res) =>
   res.json(await listUpcomingCrons(store, true)),
+);
+app.get("/api/process-timings", async (_, res) => {
+  const history = await listProcessTimings(store.db);
+  res.json({ history, eta: timingEta(history) });
+});
+app.post("/api/process-timings/eta", async (req, res) =>
+  res.json(await applyTimingEta(store.db, req.body?.stage)),
 );
 app.post("/api/crons/shift", async (req, res) => {
   res.json(await shiftAllCrons(store.db, req.body?.minutes));

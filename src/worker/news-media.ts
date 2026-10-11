@@ -1,4 +1,6 @@
 import { mediaUnits, imageVariables } from "../server/content-contract";
+import { finishProcessTiming } from "../server/process-timing";
+import { timingStage } from "../server/process-timing-domain";
 import { buildImageAudioVideo } from "../server/image-audio-video";
 import {
   generateReadyPost,
@@ -87,6 +89,9 @@ export async function runNewsMediaJob(
   assets: Store,
   j: NewsMediaJob,
 ) {
+  const startedAt = Date.now(),
+    started = performance.now();
+  let timing = timingStage(j.kind);
   const work = path.join(
     outputRoot(),
     "berita/media",
@@ -255,6 +260,7 @@ export async function runNewsMediaJob(
     }
     if (j.kind === "PANEL") {
       if (settings.carouselMode === "direct") {
+        timing = "images";
         const manifest = await generateDirectCarousel({
           dir: work,
           work,
@@ -538,5 +544,13 @@ export async function runNewsMediaJob(
     );
   } finally {
     clearInterval(heartbeat);
+    await finishProcessTiming(
+      store.db,
+      "news-media",
+      j,
+      timing,
+      startedAt,
+      performance.now() - started,
+    );
   }
 }

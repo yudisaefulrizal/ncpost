@@ -58,7 +58,7 @@ export function nextScheduleRun(schedule: CronSchedule, now: number): number {
       if (candidate > now) return candidate;
     }
   }
-  throw Error("Waktu cronjob berikutnya tidak ditemukan");
+  throw Error("Waktu jadwal berikutnya tidak ditemukan");
 }
 export function cronNextRun(
   cron: {

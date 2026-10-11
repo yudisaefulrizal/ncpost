@@ -61,7 +61,7 @@ export function CronChart({
         { revision: preview.revision },
         null,
       );
-      setMessage(`${result.count} cronjob berhasil dioptimasi.`);
+      setMessage(`${result.count} jadwal berhasil dioptimasi.`);
       setPreview(null);
       setSelected(null);
       onRefresh();
@@ -180,7 +180,7 @@ export function CronChart({
       {preview && (
         <div className="cron-optimization-preview">
           <div>
-            <strong>Pratinjau optimasi · {preview.count} cronjob aktif</strong>
+            <strong>Pratinjau optimasi · {preview.count} jadwal aktif</strong>
             <p className="muted">
               Semua jenis konten dihitung bersama. Frekuensi tetap; hari
               mingguan dapat bergeser saat melewati tengah malam. Slot memakai
@@ -346,7 +346,7 @@ export function CronChart({
             </p>
           )}
           <small className="muted">
-            Hanya cronjob aktif pada tanggal yang dipilih. Arahkan kursor atau
+            Hanya jadwal aktif pada tanggal yang dipilih. Arahkan kursor atau
             pilih batang untuk melihat detail.
           </small>
           {preview && (

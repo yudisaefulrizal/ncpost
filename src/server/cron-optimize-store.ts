@@ -75,7 +75,7 @@ export async function optimizeCronRecords(
       .digest("hex");
     if (revision !== undefined && revision !== token)
       throw Error(
-        "Cronjob atau Guide berubah sejak pratinjau. Jalankan Optimasi lagi sebelum menerapkan.",
+        "Jadwal atau Guide berubah sejak pratinjau. Jalankan Optimasi lagi sebelum menerapkan.",
       );
     const plan = optimizeCrons(items, guide, token);
     if (revision !== undefined) {

@@ -76,7 +76,7 @@ export function optimizeCrons(
   const active = input.filter(
     (item) => item.cron?.enabled && item.available !== false,
   );
-  if (!active.length) throw Error("Tidak ada cronjob aktif untuk dioptimasi");
+  if (!active.length) throw Error("Tidak ada jadwal aktif untuk dioptimasi");
   for (const item of active) {
     if (!item.id || !item.cron?.schedule)
       throw Error(
@@ -213,7 +213,7 @@ export function optimizeCrons(
       }
       if (chosen === undefined)
         throw Error(
-          `Slot ${stage === "post" ? "posting" : "produksi"} penuh untuk ${item.contentType} · ${item.label}. Perluas rentang di Guide atau kurangi frekuensi cronjob. Jadwal belum diubah.`,
+          `Slot ${stage === "post" ? "posting" : "produksi"} penuh untuk ${item.contentType} · ${item.label}. Perluas rentang di Guide atau kurangi frekuensi jadwal. Jadwal belum diubah.`,
         );
       occupied.push(...slot);
       const absolute = origin + chosen;

@@ -124,7 +124,7 @@ export function CronTable<K extends string>({
         <>
           <div className="card-title cron-header">
             <div className="cron-heading">
-              <h2 className="h3">{type?.name || "Cronjob"}</h2>
+              <h2 className="h3">{type?.name || "Jadwal"}</h2>
               <span className="cron-count">{items.length} jadwal</span>
             </div>
             <button
@@ -132,7 +132,7 @@ export function CronTable<K extends string>({
               disabled={busy || !stages.length}
               onClick={() => edit()}
             >
-              <CronIcon name="plus" /> Tambah Cronjob
+              <CronIcon name="plus" /> Tambah Jadwal
             </button>
           </div>
           {error && !draft && (
@@ -212,7 +212,7 @@ export function CronTable<K extends string>({
                               : cron.enabled
                           }
                           disabled={busy}
-                          title="Aktifkan cronjob"
+                          title="Aktifkan jadwal"
                           onChange={(e) => {
                             const enabled = e.target.checked;
                             setToggling({ id: cron.id, enabled });
@@ -282,7 +282,7 @@ export function CronTable<K extends string>({
                         <button
                           className="btn btn-sec btn-sm cron-icon-btn"
                           aria-label="Sunting"
-                          title="Sunting cronjob"
+                          title="Sunting jadwal"
                           disabled={busy}
                           onClick={() => edit(cron)}
                         >
@@ -291,7 +291,7 @@ export function CronTable<K extends string>({
                         <button
                           className="btn btn-sec btn-sm cron-icon-btn"
                           aria-label="Duplikasi"
-                          title="Duplikasi cronjob"
+                          title="Duplikasi jadwal"
                           disabled={busy}
                           onClick={() => edit(duplicateCron(cron))}
                         >
@@ -300,10 +300,10 @@ export function CronTable<K extends string>({
                         <button
                           className="btn btn-sec btn-sm cron-icon-btn cron-delete"
                           aria-label="Hapus"
-                          title="Hapus cronjob"
+                          title="Hapus jadwal"
                           disabled={busy}
                           onClick={() => {
-                            if (window.confirm("Hapus cronjob ini?"))
+                            if (window.confirm("Hapus jadwal ini?"))
                               void act(() => onDelete(cron));
                           }}
                         >
@@ -316,7 +316,7 @@ export function CronTable<K extends string>({
                 {!items.length && (
                   <tr>
                     <td colSpan={7} className="cron-empty">
-                      Belum ada cronjob. Tambahkan jadwal untuk aksi yang ingin
+                      Belum ada jadwal. Tambahkan jadwal untuk aksi yang ingin
                       dijalankan.
                     </td>
                   </tr>
@@ -328,7 +328,7 @@ export function CronTable<K extends string>({
       )}
       {draft && schedule && (
         <Modal
-          title={draft.id ? "Sunting Cronjob" : "Tambah Cronjob"}
+          title={draft.id ? "Sunting Jadwal" : "Tambah Jadwal"}
           onClose={() => {
             if (!busy) {
               setDraft(null);
@@ -639,7 +639,7 @@ export function CronTable<K extends string>({
               </p>
             )}
             <button className="btn btn-pri" disabled={busy} type="submit">
-              {busy ? "Menyimpan…" : "Simpan Cronjob"}
+              {busy ? "Menyimpan…" : "Simpan Jadwal"}
             </button>
           </form>
         </Modal>

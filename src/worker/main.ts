@@ -1,4 +1,6 @@
 import { sendInstagramPublication } from "./instagram-publication";
+import { finishProcessTiming } from "../server/process-timing";
+import { timingStage } from "../server/process-timing-domain";
 import { mediaUnits, imageVariables } from "../server/content-contract";
 import { generateConfiguredArticle } from "./configured-article";
 import { generateStandaloneQuote } from "./quote";
@@ -231,6 +233,9 @@ function publicVideo(c: Chapter) {
   return `${origin}/pub/${name}`;
 }
 async function runJob(job: Job) {
+  const startedAt = Date.now(),
+    started = performance.now();
+  let timing = timingStage(job.kind);
   const heartbeat = setInterval(
     () => store.heartbeat(job.id).catch(() => {}),
     60000,
@@ -733,6 +738,7 @@ async function runJob(job: Job) {
         c.content_type_id ?? 1,
       );
       if (settings.carouselMode === "direct") {
+        timing = "images";
         const dir = panelDir(c);
         mkdirSync(dir, { recursive: true, mode: 0o700 });
         const manifest = await generateDirectCarousel({
@@ -1031,6 +1037,14 @@ async function runJob(job: Job) {
     await store.fail(job.id, e instanceof Error ? e.message : "Worker gagal");
   } finally {
     clearInterval(heartbeat);
+    await finishProcessTiming(
+      store.db,
+      "book",
+      job,
+      timing,
+      startedAt,
+      performance.now() - started,
+    );
   }
 }
 // Hingga WORKER_CONCURRENCY job (bawaan 3) berjalan bersamaan; urutan dan

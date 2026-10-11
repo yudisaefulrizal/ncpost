@@ -89,7 +89,7 @@ const navGroups: [string, [string, IconName][]][] = [
     [
       ["Kreat Konten", "grid"],
       ["List Antrian", "doc"],
-      ["List Cronjob", "gear"],
+      ["List Jadwal", "gear"],
     ],
   ],
   [
@@ -220,7 +220,7 @@ function App() {
       ? [
           ["Produksi Berita", "doc"],
           ["Pengaturan Berita", "sliders"],
-          ["Cronjob Berita", "gear"],
+          ["Jadwal Berita", "gear"],
         ]
       : [
           [
@@ -228,7 +228,7 @@ function App() {
             "video",
           ],
           ["Pengaturan Konten", "sliders"],
-          ["Cronjob", "gear"],
+          ["Jadwal", "gear"],
         ];
 
   const refresh = async () => {
@@ -823,8 +823,8 @@ function App() {
         ? "Produksi"
         : n === "Pengaturan Berita"
           ? "Pengaturan Konten"
-          : n === "Cronjob Berita"
-            ? "Cronjob"
+          : n === "Jadwal Berita"
+            ? "Jadwal"
             : n;
     return (
       <button
@@ -1591,8 +1591,8 @@ function App() {
         }
       />
     );
-  } else if (page === "List Cronjob") {
-    heading = "List Cronjob";
+  } else if (page === "List Jadwal") {
+    heading = "List Jadwal";
     sub = "";
     content = <UpcomingCronsPage />;
   } else if (page === "List Antrian") {
@@ -1653,7 +1653,7 @@ function App() {
         )}
       </ContentPlanCard>
     );
-  } else if (page === "Cronjob Berita") {
+  } else if (page === "Jadwal Berita") {
     sub =
       "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
     content = <NewsCronSettings key={activeType?.id} />;
@@ -1755,7 +1755,7 @@ function App() {
         </section>
       </div>
     );
-  } else if (page === "Cronjob") {
+  } else if (page === "Jadwal") {
     sub = "";
     content = activeType && (
       <section className="card pad stack">

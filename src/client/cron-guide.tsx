@@ -101,10 +101,10 @@ export function CronGuidePanel() {
     <div className="cron-guide-panel">
       <div className="guide-heading">
         <div>
-          <h2 className="h3">Guide waktu cronjob</h2>
+          <h2 className="h3">Guide waktu jadwal</h2>
           <p className="muted">
             Acuan global durasi dan jam ideal untuk auto buat serta optimasi
-            cronjob.
+            jadwal.
           </p>
         </div>
         <span className="cron-chart-zone">WIB</span>

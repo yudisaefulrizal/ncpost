@@ -4,6 +4,7 @@ import { paginateRows } from "./pagination";
 import type { UpcomingCron } from "../server/cron-upcoming";
 import { CronChart } from "./cron-chart";
 import { CronGuidePanel } from "./cron-guide";
+import { ProcessTimingPanel } from "./process-timing";
 import { CronTable } from "./cron-settings";
 import { ContentTypeContext } from "./content-types";
 import { contentAllows, type ContentType } from "../server/content-type-domain";
@@ -16,7 +17,9 @@ const cronStages = (type: ContentType) =>
     contentAllows(type, kind),
   );
 export function UpcomingCronsPage() {
-  const [tab, setTab] = useState<"list" | "chart" | "guide">("list");
+  const [tab, setTab] = useState<
+    "list" | "chart" | "guide" | "history" | "eta"
+  >("list");
   const [types, setTypes] = useState<ContentType[]>([]);
   const [selected, setSelected] = useState<ContentType | null>(null);
   const [adding, setAdding] = useState(false);
@@ -45,7 +48,7 @@ export function UpcomingCronsPage() {
         null,
       );
       setShiftMessage(
-        `${result.updated} cronjob digeser.${result.skipped ? ` ${result.skipped} jadwal lama berbasis interval dilewati.` : ""}`,
+        `${result.updated} jadwal digeser.${result.skipped ? ` ${result.skipped} jadwal lama berbasis interval dilewati.` : ""}`,
       );
       setShiftOpen(false);
       setRefresh((v) => v + 1);
@@ -79,7 +82,7 @@ export function UpcomingCronsPage() {
   }
   async function remove(item: UpcomingCron) {
     if (
-      !window.confirm(`Hapus cronjob ${item.label} untuk ${item.contentType}?`)
+      !window.confirm(`Hapus jadwal ${item.label} untuk ${item.contentType}?`)
     )
       return;
     setBusy(`${item.contentTypeId}:${item.id}`);
@@ -163,7 +166,7 @@ export function UpcomingCronsPage() {
       <div
         className="cron-page-tabs"
         role="tablist"
-        aria-label="Tampilan cronjob"
+        aria-label="Tampilan jadwal"
       >
         <button
           role="tab"
@@ -172,7 +175,7 @@ export function UpcomingCronsPage() {
           aria-controls="cron-list-panel"
           onClick={() => setTab("list")}
         >
-          List Cronjob
+          List Jadwal
         </button>
         <button
           role="tab"
@@ -192,6 +195,24 @@ export function UpcomingCronsPage() {
         >
           Guide
         </button>
+        <button
+          role="tab"
+          id="cron-history-tab"
+          aria-selected={tab === "history"}
+          aria-controls="cron-history-panel"
+          onClick={() => setTab("history")}
+        >
+          Histori
+        </button>
+        <button
+          role="tab"
+          id="cron-eta-tab"
+          aria-selected={tab === "eta"}
+          aria-controls="cron-eta-panel"
+          onClick={() => setTab("eta")}
+        >
+          ETA
+        </button>
       </div>
       {tab === "list" && (
         <div
@@ -201,14 +222,14 @@ export function UpcomingCronsPage() {
         >
           <div className="upcoming-toolbar">
             <div className="cron-heading">
-              <h2 className="h3">Semua cronjob</h2>
+              <h2 className="h3">Semua jadwal</h2>
               <span className="cron-count">{items.length}</span>
             </div>
             <div className="upcoming-controls">
               <div className="upcoming-search">
                 <UpcomingIcon name="search" />
                 <input
-                  aria-label="Cari cronjob"
+                  aria-label="Cari jadwal"
                   placeholder="Cari jenis konten atau aksi"
                   value={search}
                   onChange={(e) => {
@@ -235,7 +256,7 @@ export function UpcomingCronsPage() {
                 onClick={() => void add()}
               >
                 {adding && <span className="spinner" aria-hidden="true" />}{" "}
-                Tambah Cronjob
+                Tambah Jadwal
               </button>
               <button
                 className="btn btn-sec"
@@ -255,7 +276,7 @@ export function UpcomingCronsPage() {
               }}
             >
               <div className="cron-heading">
-                <h3 className="h3">Geser semua waktu cronjob</h3>
+                <h3 className="h3">Geser semua waktu jadwal</h3>
               </div>
               <div className="cron-bulk-shift-controls">
                 <label>
@@ -286,7 +307,7 @@ export function UpcomingCronsPage() {
                   {busy === "shift-all" && (
                     <span className="spinner" aria-hidden="true" />
                   )}{" "}
-                  Terapkan ke semua cronjob
+                  Terapkan ke semua jadwal
                 </button>
                 <button
                   className="btn btn-sec"
@@ -390,7 +411,7 @@ export function UpcomingCronsPage() {
                             <button
                               className="btn btn-sec btn-sm cron-icon-btn"
                               aria-label="Sunting"
-                              title="Sunting cronjob"
+                              title="Sunting jadwal"
                               disabled={!!busy}
                               onClick={() => void edit(c)}
                             >
@@ -399,7 +420,7 @@ export function UpcomingCronsPage() {
                             <button
                               className="btn btn-sec btn-sm cron-icon-btn"
                               aria-label="Duplikasi"
-                              title="Duplikasi cronjob"
+                              title="Duplikasi jadwal"
                               disabled={!!busy}
                               onClick={() => void edit(c, true)}
                             >
@@ -408,7 +429,7 @@ export function UpcomingCronsPage() {
                             <button
                               className="btn btn-sec btn-sm cron-icon-btn cron-delete"
                               aria-label="Hapus"
-                              title="Hapus cronjob"
+                              title="Hapus jadwal"
                               disabled={!!busy}
                               onClick={() => void remove(c)}
                             >
@@ -427,7 +448,7 @@ export function UpcomingCronsPage() {
                         <td colSpan={6} className="cron-empty">
                           {search
                             ? "Tidak ada jadwal yang sesuai pencarian."
-                            : "Belum ada cronjob. Tambahkan jadwal melalui tombol Tambah Cronjob."}
+                            : "Belum ada jadwal. Tambahkan jadwal melalui tombol Tambah Jadwal."}
                         </td>
                       </tr>
                     )}
@@ -493,6 +514,15 @@ export function UpcomingCronsPage() {
           aria-labelledby="cron-guide-tab"
         >
           <CronGuidePanel />
+        </div>
+      )}
+      {(tab === "history" || tab === "eta") && (
+        <div
+          role="tabpanel"
+          id={`cron-${tab}-panel`}
+          aria-labelledby={`cron-${tab}-tab`}
+        >
+          <ProcessTimingPanel key={tab} mode={tab} />
         </div>
       )}
       {selected && (

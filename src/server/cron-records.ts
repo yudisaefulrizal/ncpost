@@ -31,7 +31,7 @@ export async function saveCronRecord(
   kinds: readonly string[],
   now = Date.now(),
 ) {
-  if (!input || typeof input !== "object") throw Error("Cronjob tidak valid");
+  if (!input || typeof input !== "object") throw Error("Jadwal tidak valid");
   const id = input.id === undefined ? randomUUID() : validId(input.id);
   let existing: any;
   if (input.id !== undefined) {
@@ -40,7 +40,7 @@ export async function saveCronRecord(
       [...scope.params, id],
     );
     existing = found[0];
-    if (!existing) throw Error("Cronjob tidak ditemukan pada jenis konten ini");
+    if (!existing) throw Error("Jadwal tidak ditemukan pada jenis konten ini");
   }
   const legacy = existing && !existing.schedule_json && input.schedule == null;
   const schedule = legacy ? null : normalizeSchedule(input?.schedule);
@@ -70,7 +70,7 @@ export async function saveCronRecord(
       [...fields, ...scope.params, id],
     );
     if (!result.affectedRows)
-      throw Error("Cronjob tidak ditemukan pada jenis konten ini");
+      throw Error("Jadwal tidak ditemukan pada jenis konten ini");
   } else if (scope.table === "book_cron") {
     await db.query(
       "INSERT INTO book_cron(kind,enabled,batch_size,schedule_json,next_run,interval_hours,content_type_id,book_key,schedule_id) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -94,10 +94,10 @@ export async function deleteCronRecord(
     [...scope.params, validId(id)],
   );
   if (!result.affectedRows)
-    throw Error("Cronjob tidak ditemukan pada jenis konten ini");
+    throw Error("Jadwal tidak ditemukan pada jenis konten ini");
 }
 function validId(id: unknown) {
   if (typeof id !== "string" || !/^[a-f\d-]{36}$/i.test(id))
-    throw Error("ID cronjob tidak valid");
+    throw Error("ID jadwal tidak valid");
   return id;
 }
