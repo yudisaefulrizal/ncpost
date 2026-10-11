@@ -37,6 +37,21 @@ export function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [clearing, setClearing] = useState(false);
+  async function clear() {
+    setBusy("clear");
+    setError("");
+    try {
+      await api("/queue/clear", "POST", {}, null);
+      await load();
+      setPage(1);
+      setClearing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
   const endpoint =
     "/queue" + (state ? "?" + new URLSearchParams({ state }) : "");
   async function load() {
@@ -102,6 +117,14 @@ export function QueuePage() {
       <div className="queue-page-heading">
         <h2 className="h3">Pekerjaan</h2>
         <span className="cron-count">{items.length}</span>
+        <button
+          className="btn btn-sec btn-sm"
+          style={{ marginLeft: "auto" }}
+          disabled={!!busy || loading}
+          onClick={() => setClearing(true)}
+        >
+          Clear antrean
+        </button>
       </div>
       <div className="queue-filters">
         <div className="upcoming-search">
@@ -355,6 +378,44 @@ export function QueuePage() {
             </div>
           </div>
         </>
+      )}
+      {clearing && (
+        <Modal
+          title="Clear antrean"
+          onClose={() => {
+            if (!busy) setClearing(false);
+          }}
+        >
+          <div className="stack">
+            <p>Bersihkan antrean seluruh jenis konten?</p>
+            <p>
+              Pekerjaan yang menunggu akan dibatalkan dan riwayat dibersihkan
+              dari daftar. Pekerjaan yang sedang berjalan tetap berlangsung.
+              Artikel dan hasil produksi tetap tersimpan.
+            </p>
+            {error && (
+              <p role="alert" className="warn">
+                {error}
+              </p>
+            )}
+            <div className="toolbar">
+              <button
+                className="btn btn-sec"
+                disabled={!!busy}
+                onClick={() => setClearing(false)}
+              >
+                Batal
+              </button>
+              <button
+                className="btn btn-pri"
+                disabled={!!busy}
+                onClick={() => void clear()}
+              >
+                {busy ? "Membersihkan…" : "Clear antrean"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
       {viewing && (
         <Modal

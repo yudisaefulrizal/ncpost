@@ -27,14 +27,14 @@ export async function listQueue(store: Store, state?: string) {
     SELECT 'book' AS source,j.id,j.chapter_id AS content_id,c.content_type_id,t.name AS content_type,
       CONCAT(c.book,' · ',c.title) AS title,j.kind,j.state,j.error,j.created_at,
       (j.state='failed' AND j.revision=c.revision AND NOT EXISTS(SELECT 1 FROM jobs newer WHERE newer.chapter_id=j.chapter_id AND newer.kind=j.kind AND newer.id>j.id)) AS can_retry
-      FROM jobs j JOIN chapters c ON c.id=j.chapter_id JOIN content_types t ON t.id=c.content_type_id
+      FROM jobs j JOIN chapters c ON c.id=j.chapter_id JOIN content_types t ON t.id=c.content_type_id WHERE j.queue_cleared_at IS NULL
     UNION ALL
     SELECT 'news-article',n.id,n.id,n.content_type_id,t.name,COALESCE(NULLIF(n.title,''),'Artikel baru'),
-      'ARTICLE',n.state,n.error,n.created_at,(n.state='failed') FROM news_articles n JOIN content_types t ON t.id=n.content_type_id
+      'ARTICLE',n.state,n.error,n.created_at,(n.state='failed') FROM news_articles n JOIN content_types t ON t.id=n.content_type_id WHERE n.queue_cleared_at IS NULL
     UNION ALL
     SELECT 'news-media',j.id,j.news_id,n.content_type_id,t.name,n.title,j.kind,j.state,j.error,j.created_at,
       (j.state='failed' AND j.revision=n.attempts AND NOT EXISTS(SELECT 1 FROM news_media_jobs newer WHERE newer.news_id=j.news_id AND newer.kind=j.kind AND newer.id>j.id))
-      FROM news_media_jobs j JOIN news_articles n ON n.id=j.news_id JOIN content_types t ON t.id=n.content_type_id
+      FROM news_media_jobs j JOIN news_articles n ON n.id=j.news_id JOIN content_types t ON t.id=n.content_type_id WHERE j.queue_cleared_at IS NULL
     ) queue ${state ? "WHERE state=?" : ""}
     ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'failed' THEN 2 ELSE 3 END,created_at DESC,id DESC LIMIT 500`;
   const params = state ? [state] : [];
@@ -53,6 +53,26 @@ export async function listQueue(store: Store, state?: string) {
       params,
     );
     return items as QueueItem[];
+  }
+}
+export async function clearQueue(store: Store) {
+  const connection = await store.db.getConnection();
+  let cleared = 0;
+  try {
+    await connection.beginTransaction();
+    for (const table of ["jobs", "news_articles", "news_media_jobs"]) {
+      const [result]: any = await connection.query(
+        `UPDATE ${table} SET lease=0,state=IF(state='queued','cancelled',state),queue_cleared_at=CURRENT_TIMESTAMP WHERE state IN ('queued','failed','completed','cancelled') AND queue_cleared_at IS NULL`,
+      );
+      cleared += result.affectedRows;
+    }
+    await connection.commit();
+    return { cleared };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
 }
 export async function queueAction(

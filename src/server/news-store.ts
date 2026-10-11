@@ -44,7 +44,7 @@ export class NewsStore {
   }
   async retry(id: number) {
     const [r] = await this.db.query<mysql.ResultSetHeader>(
-      "UPDATE news_articles SET state='queued',error=NULL,lease=0 WHERE id=? AND state='failed'",
+      "UPDATE news_articles SET state='queued',error=NULL,lease=0,queue_cleared_at=NULL WHERE id=? AND state='failed'",
       [id],
     );
     if (!r.affectedRows)
@@ -83,7 +83,7 @@ export class NewsStore {
           "Periksa status publikasi Instagram sebelum membuat ulang artikel",
         );
       await c.query(
-        "UPDATE news_articles SET state='queued',error=NULL,lease=0 WHERE id=?",
+        "UPDATE news_articles SET state='queued',error=NULL,lease=0,queue_cleared_at=NULL WHERE id=?",
         [id],
       );
       await c.commit();

@@ -1,5 +1,5 @@
 import { listUpcomingCrons } from "./cron-upcoming";
-import { listQueue, queueAction } from "./queue";
+import { listQueue, queueAction, clearQueue } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
   ContentTypeStore,
@@ -483,6 +483,9 @@ app.get("/api/queue", async (req, res) =>
 app.post("/api/queue/:source/:id/:action", async (req, res) => {
   await queueAction(store, req.params.source, req.params.id, req.params.action);
   res.json({ ok: true });
+});
+app.post("/api/queue/clear", async (_req, res) => {
+  res.json(await clearQueue(store));
 });
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));

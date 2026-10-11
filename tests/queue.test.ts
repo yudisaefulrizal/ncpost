@@ -168,3 +168,46 @@ it("does not hide unrelated database errors", async () => {
   await expect(listQueue(store)).rejects.toThrow("other");
   expect(query).toHaveBeenCalledTimes(1);
 });
+
+it("clears all waiting and historical items while keeping running work and content", async () => {
+  const { clearQueue } = await import("../src/server/queue");
+  const connection = {
+    beginTransaction: vi.fn(),
+    commit: vi.fn(),
+    rollback: vi.fn(),
+    release: vi.fn(),
+    query: vi.fn().mockResolvedValue([{ affectedRows: 4 }]),
+  };
+  const store = { db: { getConnection: async () => connection } } as any;
+  expect(await clearQueue(store)).toEqual({ cleared: 12 });
+  expect(connection.query).toHaveBeenCalledTimes(3);
+  for (const [sql] of connection.query.mock.calls) {
+    expect(sql).toContain(
+      "state IN ('queued','failed','completed','cancelled')",
+    );
+    expect(sql).toContain("state=IF(state='queued','cancelled',state)");
+    expect(sql).toContain("queue_cleared_at IS NULL");
+    expect(sql).not.toContain("DELETE");
+  }
+  expect(connection.commit).toHaveBeenCalledOnce();
+  expect(connection.release).toHaveBeenCalledOnce();
+});
+it("rolls back clearing all queues if one source fails", async () => {
+  const { clearQueue } = await import("../src/server/queue");
+  const connection = {
+    beginTransaction: vi.fn(),
+    commit: vi.fn(),
+    rollback: vi.fn(),
+    release: vi.fn(),
+    query: vi
+      .fn()
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockRejectedValueOnce(Error("Database error")),
+  };
+  await expect(
+    clearQueue({ db: { getConnection: async () => connection } } as any),
+  ).rejects.toThrow("Database error");
+  expect(connection.commit).not.toHaveBeenCalled();
+  expect(connection.rollback).toHaveBeenCalledOnce();
+  expect(connection.release).toHaveBeenCalledOnce();
+});

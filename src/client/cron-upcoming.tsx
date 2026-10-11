@@ -2,7 +2,42 @@ import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import { paginateRows } from "./pagination";
 import type { UpcomingCron } from "../server/cron-upcoming";
+import { CronTable } from "./cron-settings";
+import { ContentTypeContext } from "./content-types";
+import { contentAllows, type ContentType } from "../server/content-type-domain";
+import { CRON_TYPES } from "../server/cron";
+import { NEWS_CRON_TYPES } from "../server/news-production-domain";
+const cronStages = (type: ContentType) =>
+  (type.engine === "news" ? NEWS_CRON_TYPES : CRON_TYPES).filter(([kind]) =>
+    contentAllows(type, kind),
+  );
 export function UpcomingCronsPage() {
+  const [types, setTypes] = useState<ContentType[]>([]);
+  const [selected, setSelected] = useState<ContentType | null>(null);
+  const [adding, setAdding] = useState(false);
+  async function add() {
+    setAdding(true);
+    setError("");
+    try {
+      const available: ContentType[] = await api(
+        "/content-types",
+        "GET",
+        undefined,
+        null,
+      );
+      const eligible = available.filter((type) => cronStages(type).length);
+      if (!eligible.length)
+        throw Error(
+          "Tambahkan jenis konten dan atur target output terlebih dahulu.",
+        );
+      setTypes(eligible);
+      setSelected(eligible[0]);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setAdding(false);
+    }
+  }
   const [items, setItems] = useState<UpcomingCron[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,6 +107,14 @@ export function UpcomingCronsPage() {
             )}{" "}
             Perbarui
           </button>
+          <button
+            className="btn btn-pri"
+            disabled={adding}
+            onClick={() => void add()}
+          >
+            {adding && <span className="spinner" aria-hidden="true" />} Tambah
+            Cronjob
+          </button>
         </div>
       </div>
       {error && (
@@ -130,7 +173,7 @@ export function UpcomingCronsPage() {
                     <td colSpan={3} className="cron-empty">
                       {search
                         ? "Tidak ada jadwal yang sesuai pencarian."
-                        : "Belum ada cronjob aktif. Atur jadwal di submenu Cronjob jenis konten."}
+                        : "Belum ada cronjob aktif. Tambahkan jadwal melalui tombol Tambah Cronjob."}
                     </td>
                   </tr>
                 )}
@@ -168,6 +211,31 @@ export function UpcomingCronsPage() {
             </div>
           </div>
         </>
+      )}
+      {selected && (
+        <ContentTypeContext.Provider value={selected}>
+          <CronTable<string>
+            key={selected.id}
+            createOnly
+            items={[]}
+            stages={cronStages(selected)}
+            typeOptions={types}
+            onTypeChange={(id) =>
+              setSelected(types.find((type) => type.id === id) || null)
+            }
+            onClose={() => setSelected(null)}
+            onDelete={async () => {}}
+            onSave={async (cron) => {
+              await api(
+                selected.engine === "news" ? "/news-crons" : "/book-crons",
+                "PUT",
+                cron,
+                selected.id,
+              );
+              setRefresh((v) => v + 1);
+            }}
+          />
+        </ContentTypeContext.Provider>
       )}
     </section>
   );

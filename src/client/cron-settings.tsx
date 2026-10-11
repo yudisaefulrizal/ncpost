@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Modal } from "./modal";
 import type { BookCron } from "../server/cron";
 import {
@@ -8,17 +8,26 @@ import {
   type CronSchedule,
 } from "../server/cron-schedule";
 import { useContentType } from "./content-types";
+import type { ContentType } from "../server/content-type-domain";
 
 export function CronTable<K extends string>({
   items,
   stages,
   onSave,
   onDelete,
+  createOnly = false,
+  typeOptions,
+  onTypeChange,
+  onClose,
 }: {
   items: BookCron<K>[];
   stages: readonly (readonly [K, string])[];
   onSave: (cron: BookCron<K>) => Promise<void>;
   onDelete: (cron: BookCron<K>) => Promise<void>;
+  createOnly?: boolean;
+  typeOptions?: ContentType[];
+  onTypeChange?: (id: number) => void;
+  onClose?: () => void;
 }) {
   const type = useContentType();
   const [draft, setDraft] = useState<BookCron<K> | null>(null);
@@ -33,7 +42,10 @@ export function CronTable<K extends string>({
     setError("");
     try {
       await action();
-      if (close) setDraft(null);
+      if (close) {
+        setDraft(null);
+        if (createOnly) onClose?.();
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -74,202 +86,220 @@ export function CronTable<K extends string>({
     );
   };
   const schedule = draft?.schedule;
+  useEffect(() => {
+    if (createOnly && stages.length) edit();
+  }, [createOnly, type?.id]);
   const changeSchedule = (value: Partial<CronSchedule>) => {
     if (draft && schedule)
       setDraft({ ...draft, schedule: { ...schedule, ...value } });
   };
   return (
     <div className="stack cron-settings">
-      <div className="card-title cron-header">
-        <div className="cron-heading">
-          <h2 className="h3">{type?.name || "Cronjob"}</h2>
-          <span className="cron-count">{items.length} jadwal</span>
-        </div>
-        <button
-          className="btn btn-pri"
-          disabled={busy || !stages.length}
-          onClick={() => edit()}
-        >
-          <CronIcon name="plus" /> Tambah Cronjob
-        </button>
-      </div>
-      {error && !draft && (
-        <p className="warn" role="alert">
-          {error}
-        </p>
-      )}
-      {busy && !draft && (
-        <p className="lab-run-status" role="status">
-          <span className="spinner" aria-hidden="true" />
-          Menyimpan perubahan…
-        </p>
-      )}
-      <div className="table">
-        <table className="cron-table">
-          <thead>
-            <tr>
-              <th>Konten</th>
-              <th>Proses</th>
-              <th>Jadwal</th>
-              <th>Status</th>
-              <th>Berikutnya</th>
-              <th>Hasil terakhir</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((cron) => (
-              <tr key={cron.id || cron.kind}>
-                <td className="cron-content">{type?.name || cron.book}</td>
-                <td>
-                  {stages.find(([kind]) => kind === cron.kind)?.[1] ||
-                    cron.kind}
-                </td>
-                <td>
-                  <div className="cron-schedule-cell">
-                    <span className="cron-frequency">
-                      {cron.schedule?.mode === "weekly"
-                        ? "Mingguan"
-                        : cron.schedule
-                          ? "Harian"
-                          : "Interval lama"}
-                    </span>
-                    {cron.schedule ? (
-                      <>
-                        {cron.schedule.mode === "weekly" && (
-                          <span className="cron-weekdays">
-                            {cron.schedule.days
-                              .map((day) => CRON_DAYS[day])
-                              .join(", ")}
+      {!createOnly && (
+        <>
+          <div className="card-title cron-header">
+            <div className="cron-heading">
+              <h2 className="h3">{type?.name || "Cronjob"}</h2>
+              <span className="cron-count">{items.length} jadwal</span>
+            </div>
+            <button
+              className="btn btn-pri"
+              disabled={busy || !stages.length}
+              onClick={() => edit()}
+            >
+              <CronIcon name="plus" /> Tambah Cronjob
+            </button>
+          </div>
+          {error && !draft && (
+            <p className="warn" role="alert">
+              {error}
+            </p>
+          )}
+          {busy && !draft && (
+            <p className="lab-run-status" role="status">
+              <span className="spinner" aria-hidden="true" />
+              Menyimpan perubahan…
+            </p>
+          )}
+          <div className="table">
+            <table className="cron-table">
+              <thead>
+                <tr>
+                  <th>Konten</th>
+                  <th>Proses</th>
+                  <th>Jadwal</th>
+                  <th>Status</th>
+                  <th>Berikutnya</th>
+                  <th>Hasil terakhir</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((cron) => (
+                  <tr key={cron.id || cron.kind}>
+                    <td className="cron-content">{type?.name || cron.book}</td>
+                    <td>
+                      {stages.find(([kind]) => kind === cron.kind)?.[1] ||
+                        cron.kind}
+                    </td>
+                    <td>
+                      <div className="cron-schedule-cell">
+                        <span className="cron-frequency">
+                          {cron.schedule?.mode === "weekly"
+                            ? "Mingguan"
+                            : cron.schedule
+                              ? "Harian"
+                              : "Interval lama"}
+                        </span>
+                        {cron.schedule ? (
+                          <>
+                            {cron.schedule.mode === "weekly" && (
+                              <span className="cron-weekdays">
+                                {cron.schedule.days
+                                  .map((day) => CRON_DAYS[day])
+                                  .join(", ")}
+                              </span>
+                            )}
+                            <div className="cron-hours">
+                              {cron.schedule.times.map((time) => (
+                                <span key={time}>{time}</span>
+                              ))}
+                              <small>WIB</small>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="muted">
+                            {scheduleLabel(null, cron.intervalHours)}
                           </span>
                         )}
-                        <div className="cron-hours">
-                          {cron.schedule.times.map((time) => (
-                            <span key={time}>{time}</span>
-                          ))}
-                          <small>WIB</small>
-                        </div>
-                      </>
-                    ) : (
-                      <span className="muted">
-                        {scheduleLabel(null, cron.intervalHours)}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td>
-                  <label className="cron-status-control">
-                    <input
-                      className="cron-switch"
-                      role="switch"
-                      type="checkbox"
-                      aria-label={`Aktifkan ${cron.kind}`}
-                      checked={
-                        toggling?.id === cron.id
-                          ? (toggling?.enabled ?? cron.enabled)
-                          : cron.enabled
-                      }
-                      disabled={busy}
-                      title="Aktifkan cronjob"
-                      onChange={(e) => {
-                        const enabled = e.target.checked;
-                        setToggling({ id: cron.id, enabled });
-                        void act(async () => {
-                          try {
-                            await onSave({ ...cron, enabled });
-                          } finally {
-                            setToggling(null);
+                      </div>
+                    </td>
+                    <td>
+                      <label className="cron-status-control">
+                        <input
+                          className="cron-switch"
+                          role="switch"
+                          type="checkbox"
+                          aria-label={`Aktifkan ${cron.kind}`}
+                          checked={
+                            toggling?.id === cron.id
+                              ? (toggling?.enabled ?? cron.enabled)
+                              : cron.enabled
                           }
-                        });
-                      }}
-                    />
-                    <span>
-                      {(
-                        toggling?.id === cron.id
-                          ? (toggling?.enabled ?? cron.enabled)
-                          : cron.enabled
-                      )
-                        ? "Aktif"
-                        : "Nonaktif"}
-                    </span>
-                  </label>
-                </td>
-                <td>
-                  {cron.enabled && cron.next_run ? (
-                    <div className="cron-next">
-                      <strong>
-                        {new Date(cron.next_run).toLocaleTimeString("id-ID", {
-                          timeZone: "Asia/Jakarta",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        <small>WIB</small>
-                      </strong>
-                      <span>
-                        {new Date(cron.next_run).toLocaleDateString("id-ID", {
-                          timeZone: "Asia/Jakarta",
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
+                          disabled={busy}
+                          title="Aktifkan cronjob"
+                          onChange={(e) => {
+                            const enabled = e.target.checked;
+                            setToggling({ id: cron.id, enabled });
+                            void act(async () => {
+                              try {
+                                await onSave({ ...cron, enabled });
+                              } finally {
+                                setToggling(null);
+                              }
+                            });
+                          }}
+                        />
+                        <span>
+                          {(
+                            toggling?.id === cron.id
+                              ? (toggling?.enabled ?? cron.enabled)
+                              : cron.enabled
+                          )
+                            ? "Aktif"
+                            : "Nonaktif"}
+                        </span>
+                      </label>
+                    </td>
+                    <td>
+                      {cron.enabled && cron.next_run ? (
+                        <div className="cron-next">
+                          <strong>
+                            {new Date(cron.next_run).toLocaleTimeString(
+                              "id-ID",
+                              {
+                                timeZone: "Asia/Jakarta",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}{" "}
+                            <small>WIB</small>
+                          </strong>
+                          <span>
+                            {new Date(cron.next_run).toLocaleDateString(
+                              "id-ID",
+                              {
+                                timeZone: "Asia/Jakarta",
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
+                    <td className="cron-result">
+                      <span
+                        className={
+                          cron.last_result?.startsWith("Gagal")
+                            ? "warn"
+                            : "muted"
+                        }
+                      >
+                        {cron.last_result || "Belum dijalankan"}
                       </span>
-                    </div>
-                  ) : (
-                    <span className="muted">—</span>
-                  )}
-                </td>
-                <td className="cron-result">
-                  <span
-                    className={
-                      cron.last_result?.startsWith("Gagal") ? "warn" : "muted"
-                    }
-                  >
-                    {cron.last_result || "Belum dijalankan"}
-                  </span>
-                </td>
-                <td>
-                  <div className="cron-actions">
-                    <button
-                      className="btn btn-sec btn-sm cron-icon-btn"
-                      aria-label="Sunting"
-                      title="Sunting cronjob"
-                      disabled={busy}
-                      onClick={() => edit(cron)}
-                    >
-                      <CronIcon name="edit" />
-                    </button>
-                    <button
-                      className="btn btn-sec btn-sm cron-icon-btn cron-delete"
-                      aria-label="Hapus"
-                      title="Hapus cronjob"
-                      disabled={busy}
-                      onClick={() => {
-                        if (window.confirm("Hapus cronjob ini?"))
-                          void act(() => onDelete(cron));
-                      }}
-                    >
-                      <CronIcon name="delete" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!items.length && (
-              <tr>
-                <td colSpan={7} className="cron-empty">
-                  Belum ada cronjob. Tambahkan jadwal untuk aksi yang ingin
-                  dijalankan.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                    </td>
+                    <td>
+                      <div className="cron-actions">
+                        <button
+                          className="btn btn-sec btn-sm cron-icon-btn"
+                          aria-label="Sunting"
+                          title="Sunting cronjob"
+                          disabled={busy}
+                          onClick={() => edit(cron)}
+                        >
+                          <CronIcon name="edit" />
+                        </button>
+                        <button
+                          className="btn btn-sec btn-sm cron-icon-btn cron-delete"
+                          aria-label="Hapus"
+                          title="Hapus cronjob"
+                          disabled={busy}
+                          onClick={() => {
+                            if (window.confirm("Hapus cronjob ini?"))
+                              void act(() => onDelete(cron));
+                          }}
+                        >
+                          <CronIcon name="delete" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!items.length && (
+                  <tr>
+                    <td colSpan={7} className="cron-empty">
+                      Belum ada cronjob. Tambahkan jadwal untuk aksi yang ingin
+                      dijalankan.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
       {draft && schedule && (
         <Modal
           title={draft.id ? "Sunting Cronjob" : "Tambah Cronjob"}
           onClose={() => {
-            if (!busy) setDraft(null);
+            if (!busy) {
+              setDraft(null);
+              if (createOnly) onClose?.();
+            }
           }}
         >
           <form
@@ -285,7 +315,21 @@ export function CronTable<K extends string>({
             <fieldset className="cron-form stack" disabled={busy}>
               <label className="field">
                 Jenis konten
-                <input value={type?.name || draft.book} readOnly />
+                {typeOptions ? (
+                  <select
+                      aria-label="Jenis konten"
+                    value={type?.id}
+                    onChange={(e) => onTypeChange?.(Number(e.target.value))}
+                  >
+                    {typeOptions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input value={type?.name || draft.book} readOnly />
+                )}
               </label>
               <label className="field">
                 Aksi
