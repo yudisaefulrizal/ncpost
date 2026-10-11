@@ -95,6 +95,7 @@ function queryMock(duplicate = false) {
           {
             id: 1,
             title: "News",
+            article: "# News\n\n## Hook\n\nFirst paragraph.\n\nTag: testing",
             attempts: 1,
             kind: "VIDEO_KALIMAT",
             data: JSON.stringify({
@@ -119,6 +120,10 @@ it("records the provider post id and status after sending a server-owned video",
   });
   const { handler, request, response } = setup(query);
   await handler(request, response);
+  expect(
+    JSON.parse(vi.mocked(zernioRequest).mock.calls[0][1]!.body as string)
+      .content,
+  ).toBe("#testing");
   expect(response.status).toHaveBeenCalledWith(201);
   expect(query).toHaveBeenCalledWith(expect.stringContaining("SET post_id=?"), [
     postId,
@@ -216,6 +221,7 @@ it("publishes a panel carousel in slide order including the closing slide", asyn
           {
             id: 1,
             title: "News",
+            article: "# News\n\n## Hook\n\nFirst paragraph.\n\nTag: testing",
             attempts: 1,
             kind: "PANEL",
             data: JSON.stringify({

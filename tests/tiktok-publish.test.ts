@@ -17,12 +17,12 @@ const settings = {
     autoMusic: true,
   }),
 };
-it("quick publication uses first paragraph, saved account, media and options", () => {
+it("quick publication uses tags, saved account, media and options", () => {
   const input = tiktokPublishInput("news:7", newsFixture().article, "Judul", {
     ...settings,
     socialTargets: [...settings.socialTargets],
   });
-  expect(input.content).toBe(newsFixture().article.split("\n\n")[1]);
+  expect(input.content).toBe("#teknologi #perangkat");
   expect(input.content).not.toContain("Sumber:");
   expect(input).toMatchObject({
     mediaKey: "news:7:photo",

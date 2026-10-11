@@ -1,3 +1,4 @@
+import { socialCaption } from "./social-caption";
 import { articleData, mediaUnits } from "./content-contract";
 import {
   type BookSettings,
@@ -171,24 +172,5 @@ export function newsStageDone(
   return !!p.outputs[stage];
 }
 export function newsCaption(article: string) {
-  const c = newsContent(article);
-  const source = c.source;
-  const tags = [
-    ...new Set(
-      ["berita", ...c.tags].map(
-        (t) => "#" + t.replace(/^#/, "").replace(/[^\p{L}\p{N}_]/gu, ""),
-      ),
-    ),
-  ];
-  const caption = [
-    c.title,
-    ...c.paragraphs,
-    source ? `Sumber: ${source}` : "",
-    tags.join(" "),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-  if (caption.length > 2200)
-    throw Error("Caption berita melebihi 2.200 karakter");
-  return caption;
+  return socialCaption(article);
 }

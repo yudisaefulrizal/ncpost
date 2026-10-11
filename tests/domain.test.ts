@@ -109,13 +109,12 @@ it("nomor bagian per buku, tanpa beda huruf besar/kecil dan spasi", async () => 
   ];
   expect(rows.map((c) => partNumber(rows, c))).toEqual([1, 1, 2]);
 });
-it("caption IG: teks biasa, #buku + tag tanpa duplikat, maks 2.200", async () => {
+it("caption IG hanya tag artikel tanpa tambahan otomatis", async () => {
   const { instagramCaption } = await import("../src/server/domain");
   const article =
     "# Judul *Tebal*\n\n## Judul *Tebal*\n\nSatu *miring*.\n\nDua.\n\nTiga.\n\nEmpat.\n\nLima.\n\nBerdasarkan buku Buku, Penulis.\n\nTag: Buku, Hubungan Kerja, kekuasaan";
   const c = instagramCaption(article);
-  expect(c.startsWith("Judul Tebal\n\nSatu miring.")).toBe(true);
-  expect(c).toContain("Berdasarkan buku Buku, Penulis.");
+  expect(c).toBe("#buku #hubungankerja #kekuasaan");
   expect(c.endsWith("#buku #hubungankerja #kekuasaan")).toBe(true);
   expect(c).not.toMatch(/[*#]{2}|\*/);
   const long = article

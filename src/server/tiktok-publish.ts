@@ -1,5 +1,4 @@
-import { validateArticle, validateContentText } from "./domain";
-import { validateNewsArticle } from "./news";
+import { socialCaption } from "./social-caption";
 import { socialTargets, type BookSettings } from "./book-settings";
 import { normalizeTikTokSettings } from "./tiktok-settings";
 export function tiktokPublishInput(
@@ -15,13 +14,8 @@ export function tiktokPublishInput(
     throw Error("Aktifkan target dan pilih akun TikTok di Pengaturan Konten");
   const options = normalizeTikTokSettings(settings.tiktok);
   if (!options.privacy) throw Error("Atur privasi TikTok di Pengaturan Konten");
-  const first = (
-    source.startsWith("news:")
-      ? validateNewsArticle(article, settings.articleConfig)
-      : validateContentText(article, engine, settings.articleConfig)
-  ).paragraphs[0];
-  const content = first?.replace(/[*_`]/g, "").trim();
-  if (!content) throw Error("Paragraf pertama artikel belum tersedia");
+  const content = socialCaption(article, engine);
+  if (!content) throw Error("Tag atau paragraf pertama artikel belum tersedia");
   return {
     mediaKey: `${source}:${options.media}`,
     accountId: settings.tiktokAccountId,

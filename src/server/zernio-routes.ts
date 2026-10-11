@@ -1,3 +1,4 @@
+import { socialCaption } from "./social-caption";
 import {
   connectionSummaries,
   saveZernioConnection,
@@ -31,6 +32,7 @@ async function mediaLibrary(store: Store) {
     previews: string[];
     mediaType: "video" | "photo";
     version: string;
+    caption: string;
   }[] = [];
   for (const c of await store.list()) {
     for (const [field, orientation] of [
@@ -41,6 +43,7 @@ async function mediaLibrary(store: Store) {
       const m = JSON.parse(c[field]!);
       if (typeof m.file !== "string") continue;
       videos.push({
+        caption: socialCaption(c.article, c.content_engine),
         key: `book:${c.id}:${orientation}`,
         title: `${c.book} · ${c.title} · ${orientation.toUpperCase()}`,
         files: [path.join(chapterDir(c), m.file)],
@@ -59,6 +62,7 @@ async function mediaLibrary(store: Store) {
       ].filter((f): f is string => typeof f === "string");
       if (files.length >= 2)
         videos.push({
+          caption: socialCaption(c.article, c.content_engine),
           key: `book:${c.id}:photo`,
           title: `${c.book} · ${c.title} · Carousel`,
           files: files.map((f) => path.join(panelDir(c), f)),
@@ -71,7 +75,7 @@ async function mediaLibrary(store: Store) {
     }
   }
   const [news]: any = await store.db.query(
-    "SELECT n.id,n.title,n.attempts,o.kind,o.data FROM news_articles n JOIN news_media_outputs o ON o.news_id=n.id AND o.revision=n.attempts WHERE o.kind IN ('VIDEO_KALIMAT','VIDEO_KALIMAT_H','PANEL')",
+    "SELECT n.id,n.title,n.article,n.attempts,o.kind,o.data FROM news_articles n JOIN news_media_outputs o ON o.news_id=n.id AND o.revision=n.attempts WHERE o.kind IN ('VIDEO_KALIMAT','VIDEO_KALIMAT_H','PANEL')",
   );
   for (const n of news) {
     const m = JSON.parse(n.data);
@@ -82,6 +86,7 @@ async function mediaLibrary(store: Store) {
       ].filter((f): f is string => typeof f === "string");
       if (files.length >= 2)
         videos.push({
+          caption: socialCaption(n.article),
           key: `news:${n.id}:photo`,
           title: `Berita · ${n.title} · Carousel`,
           files: files.map((f) => path.join(ROOT, f)),
@@ -93,6 +98,7 @@ async function mediaLibrary(store: Store) {
     }
     if (typeof m.file !== "string") continue;
     videos.push({
+      caption: socialCaption(n.article),
       key: `news:${n.id}:${n.kind === "VIDEO_KALIMAT_H" ? "h" : "v"}`,
       title: `Berita · ${n.title} · ${n.kind === "VIDEO_KALIMAT_H" ? "H" : "V"}`,
       files: [path.join(ROOT, m.file)],
@@ -200,7 +206,7 @@ export async function publishZernio(store: Store, input: any) {
   if (urls.some((url) => url.protocol !== "https:"))
     throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
   const body = await zernioPostBody(
-    input,
+    { ...input, content: video.caption },
     video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
     account,
     (id, mediaType) => zernioCreatorInfo(id, mediaType, account.connectionId),

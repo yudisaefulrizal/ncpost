@@ -1,3 +1,4 @@
+import { socialCaption } from "./social-caption";
 import { validateUnifiedArticle, type ArticleConfig } from "./content-contract";
 import { quoteText } from "./quote-text";
 import { STOCK_KINDS, isStockKind, isSentenceKind } from "./book-settings";
@@ -183,34 +184,8 @@ export function partNumber<
       x.id <= c.id,
   ).length;
 }
-// Caption Instagram (skill-ncpost-buku-produksi §3): artikel final sebagai teks
-// biasa, memuat #buku dan seluruh tag artikel tanpa duplikat, maks 2.200 karakter.
-export function instagramCaption(article: string, config?: ArticleConfig) {
-  const v = config
-    ? validateUnifiedArticle(article, config.paragraphCount)
-    : validateArticle(article);
-  const plain = (t: string) =>
-    t.replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
-  const tags = [
-    ...new Set(
-      [...(config ? [] : ["buku"]), ...v.tags].map(
-        (t) =>
-          "#" +
-          t
-            .replace(/^#/, "")
-            .toLowerCase()
-            .replace(/[^\p{L}\p{N}_]/gu, ""),
-      ),
-    ),
-  ].filter((t) => t.length > 1);
-  const tail = [plain(v.attribution), tags.join(" ")].filter(Boolean);
-  let body = v.paragraphs.map(plain);
-  const build = () =>
-    [plain(v.title), ...body, ...tail].filter(Boolean).join("\n\n");
-  // Bila terlalu panjang, paragraf terakhir dikurangi; judul, atribusi, dan tag tetap utuh.
-  while ([...build()].length > 2200 && body.length > 1)
-    body = body.slice(0, -1);
-  return [...build()].slice(0, 2200).join("");
+export function instagramCaption(article: string, _config?: ArticleConfig) {
+  return socialCaption(article);
 }
 // Aturan job paralel per bagian: Artikel/Review mengubah artikel sehingga
 // berjalan sendiri; Panel menunggu job stok yang antre lebih dulu (sumber

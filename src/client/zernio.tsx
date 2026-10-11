@@ -16,6 +16,7 @@ async function api(route: string, body?: unknown) {
 }
 type Account = { id: string; username: string; platform: "youtube" | "tiktok" };
 type Video = {
+  caption: string;
   key: string;
   title: string;
   previews: string[];
@@ -173,6 +174,9 @@ export function ZernioPanel({
     synthetic,
     interactions,
   ]);
+  useEffect(() => {
+    setContent(video?.caption || "");
+  }, [videoKey, video?.caption]);
   async function connect(platform: string) {
     await action(async () => {
       if (!profile) throw Error("Pilih profil Zernio terlebih dahulu");
@@ -602,7 +606,7 @@ export function ZernioPanel({
                       : 2200
                     : 5000
                 }
-                onChange={(e) => setContent(e.target.value)}
+                readOnly
               />
             </label>
             {mediaType === "photo" && (
