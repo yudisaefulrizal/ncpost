@@ -7,6 +7,7 @@ import { ContentTypeContext } from "./content-types";
 import { contentAllows, type ContentType } from "../server/content-type-domain";
 import { CRON_TYPES } from "../server/cron";
 import { NEWS_CRON_TYPES } from "../server/news-production-domain";
+import { duplicateCron } from "./cron-form";
 import { scheduleLabel } from "../server/cron-schedule";
 const cronStages = (type: ContentType) =>
   (type.engine === "news" ? NEWS_CRON_TYPES : CRON_TYPES).filter(([kind]) =>
@@ -18,7 +19,7 @@ export function UpcomingCronsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<UpcomingCron | null>(null);
   const [busy, setBusy] = useState("");
-  async function edit(item: UpcomingCron) {
+  async function edit(item: UpcomingCron, copy = false) {
     setBusy(`${item.contentTypeId}:${item.id}`);
     try {
       const available: ContentType[] = await api(
@@ -29,7 +30,10 @@ export function UpcomingCronsPage() {
       );
       const type = available.find((t) => t.id === item.contentTypeId);
       if (!type) throw Error("Jenis konten tidak ditemukan");
-      setEditing(item);
+      setTypes(available.filter((t) => cronStages(t).length));
+      setEditing(
+        copy && item.cron ? { ...item, cron: duplicateCron(item.cron) } : item,
+      );
       setSelected(type);
     } catch (e) {
       setError((e as Error).message);
@@ -240,6 +244,15 @@ export function UpcomingCronsPage() {
                           <UpcomingIcon name="edit" />
                         </button>
                         <button
+                          className="btn btn-sec btn-sm cron-icon-btn"
+                          aria-label="Duplikasi"
+                          title="Duplikasi cronjob"
+                          disabled={!!busy}
+                          onClick={() => void edit(c, true)}
+                        >
+                          <UpcomingIcon name="copy" />
+                        </button>
+                        <button
                           className="btn btn-sec btn-sm cron-icon-btn cron-delete"
                           aria-label="Hapus"
                           title="Hapus cronjob"
@@ -303,12 +316,11 @@ export function UpcomingCronsPage() {
       {selected && (
         <ContentTypeContext.Provider value={selected}>
           <CronTable<string>
-            key={selected.id}
             createOnly
             initialCron={editing?.cron}
             items={[]}
             stages={cronStages(selected)}
-            typeOptions={editing ? undefined : types}
+            typeOptions={editing?.cron?.id ? undefined : types}
             onTypeChange={(id) =>
               setSelected(types.find((type) => type.id === id) || null)
             }
@@ -333,7 +345,7 @@ export function UpcomingCronsPage() {
 function UpcomingIcon({
   name,
 }: {
-  name: "search" | "refresh" | "left" | "right" | "edit" | "delete";
+  name: "search" | "refresh" | "left" | "right" | "edit" | "delete" | "copy";
 }) {
   return (
     <svg
@@ -347,7 +359,12 @@ function UpcomingIcon({
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {name === "edit" ? (
+      {name === "copy" ? (
+        <>
+          <rect x="8" y="8" width="13" height="13" rx="2" />
+          <path d="M16 8V3H3v13h5" />
+        </>
+      ) : name === "edit" ? (
         <>
           <path d="m16 3 5 5-12 12-6 1 1-6Z" />
           <path d="m14 5 5 5" />

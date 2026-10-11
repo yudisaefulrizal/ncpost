@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Modal } from "./modal";
 import type { BookCron } from "../server/cron";
 import {
@@ -8,6 +8,7 @@ import {
   type CronSchedule,
 } from "../server/cron-schedule";
 import { useContentType } from "./content-types";
+import { duplicateCron, shiftCronTimes, generateCronTimes } from "./cron-form";
 import type { ContentType } from "../server/content-type-domain";
 
 export function CronTable<K extends string>({
@@ -56,6 +57,7 @@ export function CronTable<K extends string>({
   };
   const edit = (cron?: BookCron<K>) => {
     setError("");
+    setOffset("0");
     setDraft(
       cron
         ? {
@@ -88,9 +90,30 @@ export function CronTable<K extends string>({
     );
   };
   const schedule = draft?.schedule;
+  const [offset, setOffset] = useState("0");
+  const [spacing, setSpacing] = useState("60");
+  const [startTime, setStartTime] = useState("09:00");
+  const [interval, setInterval] = useState("60");
+  const [count, setCount] = useState("3");
+  const previousType = useRef(type?.id);
   useEffect(() => {
     if (createOnly && (stages.length || initialCron)) edit(initialCron);
-  }, [createOnly, type?.id]);
+  }, [createOnly]);
+  useEffect(() => {
+    if (previousType.current === type?.id) return;
+    previousType.current = type?.id;
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            book: type?.name || current.book,
+            kind: stages.some(([kind]) => kind === current.kind)
+              ? current.kind
+              : stages[0]?.[0] || current.kind,
+          }
+        : current,
+    );
+  }, [type?.id]);
   const changeSchedule = (value: Partial<CronSchedule>) => {
     if (draft && schedule)
       setDraft({ ...draft, schedule: { ...schedule, ...value } });
@@ -264,6 +287,15 @@ export function CronTable<K extends string>({
                           onClick={() => edit(cron)}
                         >
                           <CronIcon name="edit" />
+                        </button>
+                        <button
+                          className="btn btn-sec btn-sm cron-icon-btn"
+                          aria-label="Duplikasi"
+                          title="Duplikasi cronjob"
+                          disabled={busy}
+                          onClick={() => edit(duplicateCron(cron))}
+                        >
+                          <CronIcon name="copy" />
                         </button>
                         <button
                           className="btn btn-sec btn-sm cron-icon-btn cron-delete"
@@ -443,6 +475,144 @@ export function CronTable<K extends string>({
                   Tambah jam
                 </button>
               </div>
+              <div className="field">
+                Geser semua jam
+                <div className="cron-shift">
+                  <input
+                    type="number"
+                    aria-label="Pergeseran menit"
+                    min={-1439}
+                    max={1439}
+                    step={1}
+                    value={offset}
+                    onChange={(e) => setOffset(e.target.value)}
+                  />
+                  <span>menit</span>
+                  <button
+                    type="button"
+                    className="btn btn-sec btn-sm"
+                    disabled={!offset || Number(offset) === 0}
+                    onClick={() => {
+                      try {
+                        changeSchedule({
+                          times: shiftCronTimes(schedule.times, Number(offset)),
+                        });
+                        setError("");
+                      } catch (e) {
+                        setError((e as Error).message);
+                      }
+                    }}
+                  >
+                    Terapkan
+                  </button>
+                </div>
+                <small className="muted">
+                  Positif untuk memajukan jam, negatif untuk memundurkan. Hari
+                  pilihan tetap sama.
+                </small>
+              </div>
+              {schedule.times.length > 1 && (
+                <div className="field">
+                  Atur rentang
+                  <div className="cron-shift">
+                    <input
+                      type="number"
+                      aria-label="Jarak antarjam"
+                      min={1}
+                      max={1439}
+                      step={1}
+                      value={spacing}
+                      onChange={(e) => setSpacing(e.target.value)}
+                    />
+                    <span>menit</span>
+                    <button
+                      type="button"
+                      className="btn btn-sec btn-sm"
+                      onClick={() => {
+                        try {
+                          changeSchedule({
+                            times: generateCronTimes(
+                              schedule.times[0],
+                              Number(spacing),
+                              schedule.times.length,
+                            ),
+                          });
+                          setError("");
+                        } catch (e) {
+                          setError((e as Error).message);
+                        }
+                      }}
+                    >
+                      Atur rentang
+                    </button>
+                  </div>
+                  <small className="muted">
+                    Dimulai dari jam pertama, jumlah jam tetap sama.
+                  </small>
+                </div>
+              )}
+              <details className="cron-generate">
+                <summary>Generate beberapa jam</summary>
+                <div className="cron-generate-fields">
+                  <label className="field">
+                    Jam awal
+                    <input
+                      type="time"
+                      aria-label="Jam awal"
+                      value={startTime}
+                      onChange={(e) => setStartTime(e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    Jarak (menit)
+                    <input
+                      type="number"
+                      aria-label="Jarak generate menit"
+                      min={1}
+                      max={1439}
+                      step={1}
+                      value={interval}
+                      onChange={(e) => setInterval(e.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    Jumlah jam
+                    <input
+                      type="number"
+                      aria-label="Jumlah jam"
+                      min={1}
+                      max={48}
+                      step={1}
+                      value={count}
+                      onChange={(e) => setCount(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sec btn-sm"
+                  onClick={() => {
+                    try {
+                      changeSchedule({
+                        times: generateCronTimes(
+                          startTime,
+                          Number(interval),
+                          Number(count),
+                        ),
+                      });
+                      setError("");
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                >
+                  Generate jam
+                </button>
+                <small className="muted">
+                  Mengganti daftar jam di form. Hari pilihan tetap sama,
+                  termasuk jika jam melewati tengah malam.
+                </small>
+              </details>
               <label className="check-row">
                 <input
                   type="checkbox"
@@ -469,7 +639,7 @@ export function CronTable<K extends string>({
   );
 }
 
-function CronIcon({ name }: { name: "plus" | "edit" | "delete" }) {
+function CronIcon({ name }: { name: "plus" | "edit" | "delete" | "copy" }) {
   return (
     <svg
       width="18"
@@ -482,7 +652,12 @@ function CronIcon({ name }: { name: "plus" | "edit" | "delete" }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {name === "plus" ? (
+      {name === "copy" ? (
+        <>
+          <rect x="8" y="8" width="13" height="13" rx="2" />
+          <path d="M16 8V3H3v13h5" />
+        </>
+      ) : name === "plus" ? (
         <path d="M12 5v14M5 12h14" />
       ) : name === "edit" ? (
         <>

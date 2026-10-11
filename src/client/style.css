@@ -2338,3 +2338,39 @@ dialog.app-dialog::backdrop {
     justify-content: flex-end;
   }
 }
+.cron-shift {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cron-shift input {
+  width: 110px;
+}
+.global-cron-table th:last-child {
+  width: 130px;
+}
+.cron-generate {
+  padding: 12px 14px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+.cron-generate summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.cron-generate-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 14px 0;
+}
+.cron-generate > small {
+  display: block;
+  margin-top: 10px;
+}
+@media (max-width: 600px) {
+  .cron-generate-fields {
+    grid-template-columns: 1fr;
+  }
+}
