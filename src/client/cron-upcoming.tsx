@@ -21,6 +21,39 @@ export function UpcomingCronsPage() {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<UpcomingCron | null>(null);
   const [busy, setBusy] = useState("");
+  const [shiftOpen, setShiftOpen] = useState(false);
+  const [shiftMinutes, setShiftMinutes] = useState("15");
+  const [shiftDirection, setShiftDirection] = useState("later");
+  const [shiftMessage, setShiftMessage] = useState("");
+  async function shiftAll() {
+    const amount = Number(shiftMinutes);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 1439) {
+      setError("Isi pergeseran 1–1439 menit");
+      return;
+    }
+    setBusy("shift-all");
+    setError("");
+    setShiftMessage("");
+    try {
+      const result = await api(
+        "/crons/shift",
+        "POST",
+        {
+          minutes: shiftDirection === "earlier" ? -amount : amount,
+        },
+        null,
+      );
+      setShiftMessage(
+        `${result.updated} cronjob digeser.${result.skipped ? ` ${result.skipped} jadwal lama berbasis interval dilewati.` : ""}`,
+      );
+      setShiftOpen(false);
+      setRefresh((v) => v + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
   async function edit(item: UpcomingCron, copy = false) {
     setBusy(`${item.contentTypeId}:${item.id}`);
     try {
@@ -194,8 +227,78 @@ export function UpcomingCronsPage() {
                 {adding && <span className="spinner" aria-hidden="true" />}{" "}
                 Tambah Cronjob
               </button>
+              <button
+                className="btn btn-sec"
+                disabled={loading || !!busy || !items.length}
+                onClick={() => setShiftOpen((v) => !v)}
+              >
+                Geser semua waktu
+              </button>
             </div>
           </div>
+          {shiftOpen && (
+            <form
+              className="cron-bulk-shift"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void shiftAll();
+              }}
+            >
+              <div className="cron-heading">
+                <h3 className="h3">Geser semua waktu cronjob</h3>
+              </div>
+              <div className="cron-bulk-shift-controls">
+                <label>
+                  Arah
+                  <select
+                    aria-label="Arah"
+                    value={shiftDirection}
+                    disabled={!!busy}
+                    onChange={(e) => setShiftDirection(e.target.value)}
+                  >
+                    <option value="later">Lebih lambat (+)</option>
+                    <option value="earlier">Lebih awal (−)</option>
+                  </select>
+                </label>
+                <label>
+                  Menit
+                  <input
+                    type="number"
+                    min="1"
+                    max="1439"
+                    required
+                    value={shiftMinutes}
+                    disabled={!!busy}
+                    onChange={(e) => setShiftMinutes(e.target.value)}
+                  />
+                </label>
+                <button className="btn btn-pri" disabled={!!busy} type="submit">
+                  {busy === "shift-all" && (
+                    <span className="spinner" aria-hidden="true" />
+                  )}{" "}
+                  Terapkan ke semua cronjob
+                </button>
+                <button
+                  className="btn btn-sec"
+                  type="button"
+                  disabled={!!busy}
+                  onClick={() => setShiftOpen(false)}
+                >
+                  Batal
+                </button>
+              </div>
+              <p className="muted">
+                Berlaku untuk jadwal harian dan mingguan, aktif maupun nonaktif,
+                di semua jenis konten. Hari tetap sama; jam melewati 00:00
+                berputar dalam 24 jam. Jadwal lama berbasis interval dilewati.
+              </p>
+            </form>
+          )}
+          {shiftMessage && (
+            <p role="status" className="cron-shift-result">
+              {shiftMessage}
+            </p>
+          )}
           {error && (
             <p role="alert" className="warn">
               {error}

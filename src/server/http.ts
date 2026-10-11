@@ -1,4 +1,5 @@
 import { listUpcomingCrons } from "./cron-upcoming";
+import { shiftAllCrons } from "./cron-shift";
 import { listQueue, queueAction, clearQueue } from "./queue";
 import { labImageKind } from "./lab-image-types";
 import {
@@ -472,6 +473,9 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
 app.get("/api/crons", async (_, res) =>
   res.json(await listUpcomingCrons(store, true)),
 );
+app.post("/api/crons/shift", async (req, res) => {
+  res.json(await shiftAllCrons(store.db, req.body?.minutes));
+});
 app.get("/api/cron-upcoming", async (_, res) =>
   res.json(await listUpcomingCrons(store)),
 );

@@ -1741,6 +1741,7 @@ input.cron-switch:checked::after {
 }
 .upcoming-controls {
   flex: 1;
+  flex-wrap: wrap;
   justify-content: flex-end;
 }
 .upcoming-search {
@@ -1992,6 +1993,7 @@ input.cron-switch:checked::after {
   .upcoming-search {
     width: auto;
     flex: 1;
+    flex-basis: 100%;
     min-width: 0;
   }
   .cron-table.upcoming-table {
@@ -2479,6 +2481,34 @@ dialog.app-dialog::backdrop {
     flex-basis: 100%;
   }
   .cron-chart-controls .btn {
+    width: 100%;
+  }
+}
+.cron-bulk-shift {
+  padding: 18px;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.cron-bulk-shift-controls {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 14px 0;
+}
+.cron-bulk-shift-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+.cron-shift-result {
+  color: var(--brand);
+  margin-bottom: 16px;
+}
+@media (max-width: 640px) {
+  .cron-bulk-shift-controls > * {
     width: 100%;
   }
 }
