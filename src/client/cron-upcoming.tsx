@@ -3,6 +3,7 @@ import { api } from "./api";
 import { paginateRows } from "./pagination";
 import type { UpcomingCron } from "../server/cron-upcoming";
 import { CronChart } from "./cron-chart";
+import { CronGuidePanel } from "./cron-guide";
 import { CronTable } from "./cron-settings";
 import { ContentTypeContext } from "./content-types";
 import { contentAllows, type ContentType } from "../server/content-type-domain";
@@ -15,7 +16,7 @@ const cronStages = (type: ContentType) =>
     contentAllows(type, kind),
   );
 export function UpcomingCronsPage() {
-  const [tab, setTab] = useState<"list" | "chart">("list");
+  const [tab, setTab] = useState<"list" | "chart" | "guide">("list");
   const [types, setTypes] = useState<ContentType[]>([]);
   const [selected, setSelected] = useState<ContentType | null>(null);
   const [adding, setAdding] = useState(false);
@@ -181,6 +182,15 @@ export function UpcomingCronsPage() {
           onClick={() => setTab("chart")}
         >
           Grafik
+        </button>
+        <button
+          role="tab"
+          id="cron-guide-tab"
+          aria-selected={tab === "guide"}
+          aria-controls="cron-guide-panel"
+          onClick={() => setTab("guide")}
+        >
+          Guide
         </button>
       </div>
       {tab === "list" && (
@@ -474,6 +484,15 @@ export function UpcomingCronsPage() {
             loading={loading}
             onRefresh={() => setRefresh((v) => v + 1)}
           />
+        </div>
+      )}
+      {tab === "guide" && (
+        <div
+          id="cron-guide-panel"
+          role="tabpanel"
+          aria-labelledby="cron-guide-tab"
+        >
+          <CronGuidePanel />
         </div>
       )}
       {selected && (

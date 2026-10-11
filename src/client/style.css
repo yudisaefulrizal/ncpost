@@ -2512,3 +2512,138 @@ dialog.app-dialog::backdrop {
     width: 100%;
   }
 }
+.guide-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+  margin: 20px 0;
+}
+.guide-heading p {
+  margin: 8px 0 0;
+}
+.guide-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 24px;
+}
+.guide-section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.guide-section > h3 {
+  padding: 18px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.guide-table {
+  width: 100%;
+}
+.guide-table th,
+.guide-table td {
+  padding: 14px 18px;
+  vertical-align: middle;
+}
+.guide-duration {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.guide-duration input {
+  width: 80px;
+}
+.guide-duration span,
+.guide-note {
+  color: var(--muted);
+  font-size: 12px;
+}
+.guide-note {
+  display: block;
+  margin-top: 6px;
+}
+.guide-time-range {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.guide-time-range input {
+  width: 112px;
+  min-width: 0;
+}
+.guide-policy {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 20px;
+  margin-top: 24px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.guide-policy p {
+  max-width: 650px;
+  margin: 8px 0 0;
+}
+.guide-policy label {
+  display: grid;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.guide-estimate {
+  font-size: 12px;
+  margin: 16px 0;
+}
+.guide-savebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+.guide-savebar > div {
+  display: flex;
+  gap: 8px;
+}
+.guide-savebar > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .guide-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .guide-policy,
+  .guide-savebar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .guide-table th,
+  .guide-table td {
+    padding: 12px 10px;
+  }
+  .guide-time-range input {
+    width: 100%;
+  }
+  .guide-time-range {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .guide-time-range > span {
+    display: none;
+  }
+  .guide-savebar > div {
+    justify-content: flex-end;
+  }
+}
