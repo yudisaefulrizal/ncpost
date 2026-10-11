@@ -1,3 +1,8 @@
+import {
+  socialAccounts,
+  ncwaYouTubeRequest,
+  ncwaYouTubeSummary,
+} from "./ncwa-youtube";
 import { socialCaption } from "./social-caption";
 import {
   connectionSummaries,
@@ -153,7 +158,7 @@ export async function publishZernio(store: Store, input: any) {
     );
   }
   const id = zernioId(input?.accountId);
-  const connection = await zernioAccounts();
+  const connection = await socialAccounts();
   const account = connection.accounts.find((a) => a.id === id);
   if (!account) throw Error("Pilih akun YouTube/TikTok yang aktif");
   const video = (await mediaLibrary(store)).find(
@@ -205,12 +210,31 @@ export async function publishZernio(store: Store, input: any) {
   const urls = names.map((name) => new URL(`/pub/${name}`, origin));
   if (urls.some((url) => url.protocol !== "https:"))
     throw Error("Domain publik HTTPS diperlukan untuk mengirim video");
-  const body = await zernioPostBody(
-    { ...input, content: video.caption },
-    video.mediaType === "photo" ? urls.map((url) => url.href) : urls[0].href,
-    account,
-    (id, mediaType) => zernioCreatorInfo(id, mediaType, account.connectionId),
-  );
+  const officialYouTube = account.connectionId === "ncwa-youtube";
+  if (
+    officialYouTube &&
+    (input.consent !== true ||
+      typeof input.title !== "string" ||
+      !input.title.trim() ||
+      input.title.length > 100 ||
+      !["public", "private", "unlisted"].includes(input.visibility) ||
+      typeof input.madeForKids !== "boolean" ||
+      typeof input.synthetic !== "boolean")
+  )
+    throw Error(
+      "Judul, privasi, pengaturan anak, konten sintetis, dan persetujuan YouTube wajib diisi",
+    );
+  const body = officialYouTube
+    ? null
+    : await zernioPostBody(
+        { ...input, content: video.caption },
+        video.mediaType === "photo"
+          ? urls.map((url) => url.href)
+          : urls[0].href,
+        account,
+        (id, mediaType) =>
+          zernioCreatorInfo(id, mediaType, account.connectionId),
+      );
   if (repostOf !== undefined) {
     const [history]: any = await store.db.query(
       "SELECT id,status FROM zernio_publications WHERE source_key LIKE ? AND account_id=? AND platform=? ORDER BY id DESC LIMIT 1",
@@ -269,18 +293,41 @@ export async function publishZernio(store: Store, input: any) {
     throw error;
   }
   try {
-    const data = await zernioRequest(
-      "/posts",
-      {
-        method: "POST",
-        headers: { "x-request-id": fingerprint },
-        body: JSON.stringify(body),
-      },
-      fetch,
-      account.connectionId,
-    );
+    if (officialYouTube)
+      await store.db.query(
+        "UPDATE zernio_publications SET post_id=?,result=? WHERE id=?",
+        [
+          fingerprint.slice(0, 24),
+          JSON.stringify({ connectionId: "ncwa-youtube" }),
+          publicationId,
+        ],
+      );
+    const data = officialYouTube
+      ? await ncwaYouTubeRequest("/posts", {
+          method: "POST",
+          body: JSON.stringify({
+            requestId: fingerprint.slice(0, 24),
+            channelId: account.channelId,
+            videoUrl: urls[0].href,
+            title: input.title,
+            description: video.caption,
+            privacyStatus: input.visibility,
+            madeForKids: input.madeForKids,
+            containsSyntheticMedia: input.synthetic,
+          }),
+        })
+      : await zernioRequest(
+          "/posts",
+          {
+            method: "POST",
+            headers: { "x-request-id": fingerprint },
+            body: JSON.stringify(body),
+          },
+          fetch,
+          account.connectionId,
+        );
     const result = {
-      ...zernioPostSummary(data),
+      ...(officialYouTube ? ncwaYouTubeSummary(data) : zernioPostSummary(data)),
       connectionId: account.connectionId || "legacy",
     };
     await store.db.query(
@@ -294,7 +341,7 @@ export async function publishZernio(store: Store, input: any) {
       [publicationId],
     );
     throw Error(
-      "Hasil pengiriman belum dapat dipastikan. Periksa dashboard Zernio sebelum mengirim ulang; riwayat tersimpan.",
+      "Hasil pengiriman belum dapat dipastikan. Periksa status publikasi sebelum mengirim ulang; riwayat tersimpan.",
     );
   }
 }
@@ -306,7 +353,7 @@ export function zernioRouter(getStore: () => Store) {
     saveZernioConnection(req.body);
     res.json(connectionSummaries());
   });
-  router.get("/accounts", async (_, res) => res.json(await zernioAccounts()));
+  router.get("/accounts", async (_, res) => res.json(await socialAccounts()));
   router.get("/profiles", async (req, res) => {
     const connection = zernioConnection(
       String(req.query.connectionId || "legacy"),
@@ -371,7 +418,7 @@ export function zernioRouter(getStore: () => Store) {
   });
   router.get("/creator/:id", async (req, res) => {
     const id = zernioId(req.params.id);
-    const connection = await zernioAccounts();
+    const connection = await socialAccounts();
     if (
       !connection.accounts.some((a) => a.id === id && a.platform === "tiktok")
     )
@@ -431,12 +478,24 @@ export function zernioRouter(getStore: () => Store) {
     const savedConnection = rows[0].result
       ? JSON.parse(rows[0].result).connectionId
       : null;
-    const accounts = savedConnection ? null : await zernioAccounts();
+    const accounts = savedConnection ? null : await socialAccounts();
     const connectionId =
       savedConnection ||
       accounts?.accounts.find((a) => a.id === rows[0].account_id)
         ?.connectionId ||
       "legacy";
+    if (connectionId === "ncwa-youtube") {
+      const result = ncwaYouTubeSummary(
+        await ncwaYouTubeRequest(
+          `/posts/${encodeURIComponent(rows[0].post_id)}`,
+        ),
+      );
+      await getStore().db.query(
+        "UPDATE zernio_publications SET status=?,result=? WHERE id=?",
+        [result.status, JSON.stringify(result), id],
+      );
+      return res.json(result);
+    }
     zernioConnection(connectionId);
     const result = zernioPostSummary(
       await zernioRequest(

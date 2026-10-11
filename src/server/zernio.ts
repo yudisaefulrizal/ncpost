@@ -233,13 +233,14 @@ export async function validateZernioSettings(
     return settings[key] && settings[key] !== current[key];
   });
   if (!changed.length) return;
-  const connection = await zernioAccounts();
+  const { socialAccounts } = await import("./ncwa-youtube");
+  const connection = await socialAccounts();
   for (const platform of changed) {
     const id =
       settings[platform === "youtube" ? "youtubeAccountId" : "tiktokAccountId"];
     if (
       !connection.accounts.some((a) => a.id === id && a.platform === platform)
     )
-      throw Error(`Akun ${platform} tidak tersedia melalui Zernio`);
+      throw Error(`Akun ${platform} tidak tersedia pada koneksi aktif`);
   }
 }
