@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import { optimizeCronRecords } from "../src/server/cron-optimize-store";
 import { DEFAULT_CRON_GUIDE } from "../src/server/cron-guide-domain";
 
-function database(failWrite = false) {
+function database(failWrite = false, posting = false) {
   let guide = {
     ...DEFAULT_CRON_GUIDE,
     production: { start: "23:50", end: "05:00" },
@@ -41,6 +41,7 @@ function database(failWrite = false) {
       last_result: "keep",
     },
   ];
+  if (posting) rows[0].kind = "POST_IG";
   const connection = {
     beginTransaction: vi.fn(),
     commit: vi.fn(),
@@ -53,7 +54,7 @@ function database(failWrite = false) {
             id,
             name: `Type ${id}`,
             engine: "book",
-            outputs: '["ARTICLE"]',
+            outputs: '["ARTICLE","PANEL"]',
             settings: null,
           })),
         ];
@@ -104,6 +105,19 @@ it("previews without writing and applies recomputed day groups in one transactio
   expect(JSON.parse(writes[1][1]![4]).days).toEqual([6]);
   expect(connection.commit).toHaveBeenCalledTimes(2);
   expect(connection.release).toHaveBeenCalledTimes(2);
+});
+it("applies exactly the randomized posting allocation from the preview", async () => {
+  const { db } = database(false, true);
+  const preview = await optimizeCronRecords(db);
+  const applied = await optimizeCronRecords(db, preview.revision);
+  expect(applied.entries.map((entry) => entry.schedule)).toEqual(
+    preview.entries.map((entry) => entry.schedule),
+  );
+  expect(preview.entries[0].schedule.times).toHaveLength(2);
+  const hours = preview.entries[0].schedule.times.map(
+    (time) => time.split(":")[0],
+  );
+  expect(new Set(hours).size).toBe(2);
 });
 it("rejects a stale preview before any write", async () => {
   const { db, connection, change } = database();

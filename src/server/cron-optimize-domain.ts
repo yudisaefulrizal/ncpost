@@ -55,9 +55,22 @@ function segments(start: number, length: number): [number, number][] {
         [0, value + length - WEEK],
       ];
 }
+// Reproducible randomness keeps apply identical to the preview.
+function seededRandom(seed: string) {
+  let state = 2166136261;
+  for (const character of seed)
+    state = Math.imul(state ^ character.charCodeAt(0), 16777619);
+  return () => {
+    state += 0x6d2b79f5;
+    let value = Math.imul(state ^ (state >>> 15), state | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 export function optimizeCrons(
   input: UpcomingCron[],
   rawGuide: CronGuide,
+  seed?: string,
 ): CronOptimization {
   const guide = normalizeCronGuide(rawGuide);
   const active = input.filter(
@@ -77,6 +90,8 @@ export function optimizeCrons(
     Math.min(...item.cron!.schedule!.times.map(phase));
   active.sort(
     (a, b) =>
+      Number(cronStage(a.kind).stage === "post") -
+        Number(cronStage(b.kind).stage === "post") ||
       a.contentTypeId - b.contentTypeId ||
       cronStage(a.kind).rank - cronStage(b.kind).rank ||
       a.kind.localeCompare(b.kind) ||
@@ -92,6 +107,17 @@ export function optimizeCrons(
     .sort((a, b) => a[0] - b[0]);
   const occupied: [number, number][] = [];
   const ready = new Map<number, number>();
+  const postCounts = new Map<number, number[]>();
+  const random = seededRandom(
+    seed ??
+      JSON.stringify({
+        guide,
+        schedules: active.map((item) => [
+          cronSource(item),
+          item.cron!.schedule,
+        ]),
+      }),
+  );
   const entries: OptimizedCron[] = [];
   let executions = 0;
   for (const item of active) {
@@ -112,7 +138,18 @@ export function optimizeCrons(
           : original.days.map((day) => (day - previousNight + 7) % 7);
       let chosen: number | undefined;
       let slot: [number, number][] = [];
-      for (const [start, end] of stage === "post" ? posting : production) {
+      let chosenWindow = -1;
+      const counts = postCounts.get(item.contentTypeId) || [0, 0, 0];
+      const candidates: {
+        minute: number;
+        ranges: [number, number][];
+        window: number;
+        count: number;
+        load: number;
+        tie: number;
+      }[] = [];
+      const windows = stage === "post" ? posting : production;
+      for (const [window, [start, end]] of windows.entries()) {
         for (
           let candidate = Math.max(start, earliest);
           candidate + duration <= end;
@@ -130,12 +167,49 @@ export function optimizeCrons(
             !selfOverlap &&
             !ranges.some(([a, b]) => occupied.some(([c, d]) => a < d && c < b))
           ) {
-            chosen = candidate;
-            slot = ranges;
+            if (stage === "post") {
+              const effectiveStart = Math.max(start, earliest);
+              const windowRanges = days.flatMap((day) =>
+                segments(
+                  day * 1440 + origin + effectiveStart,
+                  end - effectiveStart,
+                ),
+              );
+              const used = windowRanges.reduce(
+                (sum, [a, b]) =>
+                  sum +
+                  occupied.reduce(
+                    (subtotal, [c, d]) =>
+                      subtotal + Math.max(0, Math.min(b, d) - Math.max(a, c)),
+                    0,
+                  ),
+                0,
+              );
+              candidates.push({
+                minute: candidate,
+                ranges,
+                window,
+                count: counts[window],
+                load: used / ((end - effectiveStart) * days.length),
+                tie: random(),
+              });
+            } else {
+              chosen = candidate;
+              slot = ranges;
+            }
             break;
           }
         }
         if (chosen !== undefined) break;
+      }
+      if (stage === "post" && candidates.length) {
+        candidates.sort(
+          (a, b) => a.count - b.count || a.load - b.load || a.tie - b.tie,
+        );
+        const preferred = candidates[0];
+        chosen = preferred.minute;
+        slot = preferred.ranges;
+        chosenWindow = preferred.window;
       }
       if (chosen === undefined)
         throw Error(
@@ -160,8 +234,13 @@ export function optimizeCrons(
       );
       if (existing) existing.schedule.times.push(schedule.times[0]);
       else entries.push({ source, item, schedule, duration });
-      earliest = chosen + reserved;
-      ready.set(item.contentTypeId, earliest);
+      if (stage === "post") {
+        counts[chosenWindow] += days.length;
+        postCounts.set(item.contentTypeId, counts);
+      } else {
+        earliest = chosen + reserved;
+        ready.set(item.contentTypeId, earliest);
+      }
       executions += days.length;
     }
   }

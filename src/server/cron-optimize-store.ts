@@ -59,6 +59,7 @@ export async function optimizeCronRecords(
       }
     }
     const snapshot = {
+      version: 2,
       guide,
       types,
       schedules: items.map((item) => ({
@@ -76,7 +77,7 @@ export async function optimizeCronRecords(
       throw Error(
         "Cronjob atau Guide berubah sejak pratinjau. Jalankan Optimasi lagi sebelum menerapkan.",
       );
-    const plan = optimizeCrons(items, guide);
+    const plan = optimizeCrons(items, guide, token);
     if (revision !== undefined) {
       const used = new Set<string>();
       for (const entry of plan.entries) {

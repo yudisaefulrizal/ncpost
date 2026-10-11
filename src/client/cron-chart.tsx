@@ -184,7 +184,8 @@ export function CronChart({
             <p className="muted">
               Semua jenis konten dihitung bersama. Frekuensi tetap; hari
               mingguan dapat bergeser saat melewati tengah malam. Slot memakai
-              durasi dan jeda di Guide.
+              durasi dan jeda di Guide. Posting sejenis dibagi ke pagi, siang,
+              dan sore menurut slot yang tersedia.
             </p>
           </div>
           <div className="cron-optimization-actions">
