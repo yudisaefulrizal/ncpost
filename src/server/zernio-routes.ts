@@ -4,7 +4,7 @@ import {
   ncwaYouTubeRequest,
   ncwaYouTubeSummary,
 } from "./ncwa-youtube";
-import { socialCaption } from "./social-caption";
+import { socialCaption, socialTags } from "./social-caption";
 import {
   connectionSummaries,
   saveZernioConnection,
@@ -39,6 +39,8 @@ async function mediaLibrary(store: Store) {
     mediaType: "video" | "photo";
     version: string;
     caption: string;
+    topic: string;
+    tags: string;
   }[] = [];
   for (const c of await store.list()) {
     for (const [field, orientation] of [
@@ -50,6 +52,8 @@ async function mediaLibrary(store: Store) {
       if (typeof m.file !== "string") continue;
       videos.push({
         caption: socialCaption(c.article, c.content_engine),
+        topic: c.title,
+        tags: socialTags(c.article, c.content_engine),
         key: `book:${c.id}:${orientation}`,
         title: `${c.book} · ${c.title} · ${orientation.toUpperCase()}`,
         files: [path.join(chapterDir(c), m.file)],
@@ -69,6 +73,8 @@ async function mediaLibrary(store: Store) {
       if (files.length >= 2)
         videos.push({
           caption: socialCaption(c.article, c.content_engine),
+          topic: c.title,
+          tags: socialTags(c.article, c.content_engine),
           key: `book:${c.id}:photo`,
           title: `${c.book} · ${c.title} · Carousel`,
           files: files.map((f) => path.join(panelDir(c), f)),
@@ -93,6 +99,8 @@ async function mediaLibrary(store: Store) {
       if (files.length >= 2)
         videos.push({
           caption: socialCaption(n.article),
+          topic: n.title,
+          tags: socialTags(n.article),
           key: `news:${n.id}:photo`,
           title: `Berita · ${n.title} · Carousel`,
           files: files.map((f) => path.join(ROOT, f)),
@@ -105,6 +113,8 @@ async function mediaLibrary(store: Store) {
     if (typeof m.file !== "string") continue;
     videos.push({
       caption: socialCaption(n.article),
+      topic: n.title,
+      tags: socialTags(n.article),
       key: `news:${n.id}:${n.kind === "VIDEO_KALIMAT_H" ? "h" : "v"}`,
       title: `Berita · ${n.title} · ${n.kind === "VIDEO_KALIMAT_H" ? "H" : "V"}`,
       files: [path.join(ROOT, m.file)],
@@ -219,7 +229,7 @@ export async function publishZernio(store: Store, input: any) {
       madeForKids: false,
       synthetic: false,
     };
-    input = { ...input, ...youtube };
+    input = { ...input, ...youtube, title: video.topic.slice(0, 100) };
   }
   const officialYouTube = account.connectionId === "ncwa-youtube";
   if (
@@ -238,7 +248,10 @@ export async function publishZernio(store: Store, input: any) {
   const body = officialYouTube
     ? null
     : await zernioPostBody(
-        { ...input, content: video.caption },
+        {
+          ...input,
+          content: account.platform === "youtube" ? video.tags : video.caption,
+        },
         video.mediaType === "photo"
           ? urls.map((url) => url.href)
           : urls[0].href,
@@ -321,7 +334,7 @@ export async function publishZernio(store: Store, input: any) {
             channelId: account.channelId,
             videoUrl: urls[0].href,
             title: input.title,
-            description: video.caption,
+            description: video.tags,
             privacyStatus: input.visibility,
             madeForKids: input.madeForKids,
             containsSyntheticMedia: input.synthetic,

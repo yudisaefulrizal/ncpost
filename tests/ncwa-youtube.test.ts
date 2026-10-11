@@ -168,18 +168,14 @@ it("sends a produced video to NC-WA and keeps request ID for uncertain delivery"
   vi.stubGlobal("fetch", mock);
   try {
     const result = await publishZernio(store, {
-      accountId: id,
-      mediaKey: "book:999997:v",
-      title: "Judul",
-      visibility: "private",
-      madeForKids: false,
-      synthetic: true,
-      consent: true,
+      quickYouTube: true,
+      source: "book:999997",
     });
     expect(result.connectionId).toBe("ncwa-youtube");
     expect(upload).toMatchObject({
       channelId: channel,
-      title: "Judul",
+      title: "Video",
+      description: "",
       privacyStatus: "unlisted",
       madeForKids: true,
       containsSyntheticMedia: false,

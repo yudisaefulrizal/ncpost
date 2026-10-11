@@ -23,3 +23,8 @@ it("limits captions to 2200 Unicode characters", () => {
     ...socialCaption("# Title\n\n## Heading\n\n" + "😀".repeat(2300)),
   ]).toHaveLength(2200);
 });
+
+import { socialTags } from "../src/server/social-caption";
+it("deskripsi YouTube tanpa tag kosong, tanpa fallback paragraf", () => {
+  expect(socialTags("Paragraf pertama.")).toBe("");
+});

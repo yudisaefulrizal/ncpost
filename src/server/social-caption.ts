@@ -1,6 +1,6 @@
 import { articleData } from "./content-contract";
 // One caption policy for all content types and social platforms.
-export function socialCaption(article: string, engine?: string) {
+function captionData(article: string, engine?: string) {
   const data = articleData(
     article,
     (engine === "quote" || !/\n\s*\n/.test(article.trim())) &&
@@ -18,6 +18,13 @@ export function socialCaption(article: string, engine?: string) {
       ),
     ),
   ].filter((tag) => tag.length > 1);
+  return { data, tags };
+}
+export function socialTags(article: string, engine?: string) {
+  return captionData(article, engine).tags.join(" ");
+}
+export function socialCaption(article: string, engine?: string) {
+  const { data, tags } = captionData(article, engine);
   const caption = tags.length
     ? tags.join(" ")
     : (data.paragraphs[0] || "")

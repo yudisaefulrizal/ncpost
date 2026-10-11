@@ -687,15 +687,9 @@ export function ZernioPanel({
             )}
             {account?.platform === "youtube" && (
               <>
-                <label className="field">
-                  Judul YouTube
-                  <input
-                    required
-                    maxLength={100}
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                </label>
+                <p className="muted">
+                  Judul diambil dari topik dan deskripsi hanya berisi tag.
+                </p>
                 <p className="muted">
                   Privasi, pengaturan anak-anak, dan konten sintetis mengikuti
                   Pengaturan Konten yang tersimpan.

@@ -4614,9 +4614,7 @@ function ZernioCell({
   accountId: string | null;
   ready: boolean;
 }) {
-  const [open, setOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [repostOf, setRepostOf] = useState<number | undefined>();
   const [latest, setLatest] = useState<any>(null);
   const [error, setError] = useState("");
   useEffect(() => {
@@ -4655,21 +4653,62 @@ function ZernioCell({
       window.removeEventListener("zernio-publication", refresh);
     };
   }, [source, platform, accountId]);
-  const publishTikTok = async (repostId?: number) => {
+  useEffect(() => {
+    if (
+      !Number.isSafeInteger(latest?.id) ||
+      ["published", "failed", "draft", "cancelled", "canceled"].includes(
+        latest.status,
+      )
+    )
+      return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const result = await api(`/zernio/posts/${latest.id}/refresh`, "POST");
+        if (!active) return;
+        setLatest((previous: any) =>
+          previous?.id === latest.id
+            ? { ...previous, status: result.status, result }
+            : previous,
+        );
+        setError("");
+        zernioHistory = null;
+        if (
+          ["published", "failed", "draft", "cancelled", "canceled"].includes(
+            result.status,
+          )
+        )
+          return;
+      } catch (error) {
+        if (active) setError((error as Error).message);
+      }
+      if (active) timer = setTimeout(poll, 10000);
+    };
+    timer = setTimeout(poll, 3000);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [latest?.id, source, platform, accountId]);
+  const publish = async (repostId?: number) => {
     if (publishing) return;
     setPublishing(true);
     setError("");
     try {
       const result = await api("/zernio/posts", "POST", {
-        quickTikTok: true,
+        quickTikTok: platform === "tiktok",
+        quickYouTube: platform === "youtube",
         source,
         ...(repostId ? { repostOf: repostId } : {}),
       });
-      setLatest(result);
+      setLatest(null);
       zernioHistory = null;
       window.dispatchEvent(new Event("zernio-publication"));
     } catch (error) {
       setError((error as Error).message);
+      zernioHistory = null;
+      window.dispatchEvent(new Event("zernio-publication"));
     } finally {
       setPublishing(false);
     }
@@ -4679,12 +4718,7 @@ function ZernioCell({
       <div className="stage-cell">
         <button
           className="play"
-          disabled={
-            publishing ||
-            (platform === "tiktok"
-              ? !!latest || !ready || !accountId
-              : !latest && (!ready || !accountId))
-          }
+          disabled={publishing || !!latest || !ready || !accountId}
           aria-label={`Publikasi ${platform} ${title}`}
           title={
             !accountId
@@ -4693,11 +4727,9 @@ function ZernioCell({
                 ? "Butuh video atau panel selesai"
                 : `Publikasi ${platform}`
           }
-          onClick={() =>
-            platform === "tiktok"
-              ? void publishTikTok()
-              : (setRepostOf(undefined), setOpen(true))
-          }
+          onClick={() => {
+            if (!latest) void publish();
+          }}
         >
           {publishing ? <span className="spinner" /> : latest ? "◉" : "▶"}
         </button>
@@ -4714,11 +4746,7 @@ function ZernioCell({
                 )
               )
                 return;
-              if (platform === "tiktok") void publishTikTok(latest.id);
-              else {
-                setRepostOf(latest.id);
-                setOpen(true);
-              }
+              void publish(latest.id);
             }}
           >
             <Icon name="redo" size={14} />
@@ -4732,23 +4760,6 @@ function ZernioCell({
         </small>
       </div>
       {error && <small className="warn">{error}</small>}
-      {open && (
-        <Modal
-          c={{ title }}
-          title={`Publikasi ${platform === "youtube" ? "YouTube" : "TikTok"}`}
-          subtitle={title}
-          onClose={() => setOpen(false)}
-          wide
-        >
-          <ZernioPanel
-            publication={{ source, platform, accountId, repostOf }}
-            onPublished={() => {
-              zernioHistory = null;
-              window.dispatchEvent(new Event("zernio-publication"));
-            }}
-          />
-        </Modal>
-      )}
     </>
   );
 }
