@@ -45,9 +45,10 @@ async function upload() {
 }
 it("stores a private normalized image and rejects invalid uploads and paths", async () => {
   const { file } = await upload();
+  expect(file).toMatch(/\.jpg$/);
   expect((await stat(file)).mode & 0o777).toBe(0o600);
   expect(await sharp(file).metadata()).toMatchObject({
-    format: "png",
+    format: "jpeg",
     width: 10,
     height: 15,
   });
@@ -63,6 +64,30 @@ it("stores a private normalized image and rejects invalid uploads and paths", as
   await symlink(file, link);
   files.push(link);
   await expect(labImageFile(path.basename(link))).rejects.toThrow();
+});
+it("converts transparent PNG uploads to JPEG without changing dimensions", async () => {
+  const bytes = await sharp({
+    create: { width: 17, height: 23, channels: 4, background: "#00000000" },
+  })
+    .png()
+    .toBuffer();
+  const id = await saveLabImage(bytes);
+  const file = await labImageFile(id);
+  files.push(file);
+  expect(id).toMatch(/\.jpg$/);
+  expect(await sharp(file).metadata()).toMatchObject({
+    format: "jpeg",
+    width: 17,
+    height: 23,
+    hasAlpha: false,
+  });
+  const { data } = await sharp(file)
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  expect([...data.subarray(0, 3)]).toEqual([255, 255, 255]);
+  expect(labImageId("00000000-0000-4000-8000-000000000001.png")).toBe(
+    "00000000-0000-4000-8000-000000000001.png",
+  );
 });
 it("snapshots the reference on a run and passes its private file to the image adapter", async () => {
   const { id, file } = await upload();
@@ -151,7 +176,7 @@ it("accepts binary uploads through the same JSON parsers as the app and serves t
     const preview = await fetch(`${base}/${id}`);
     expect(preview.status).toBe(200);
     expect(preview.headers.get("cache-control")).toBe("private, no-store");
-    expect(preview.headers.get("content-type")).toContain("image/png");
+    expect(preview.headers.get("content-type")).toContain("image/jpeg");
     expect(
       await sharp(Buffer.from(await preview.arrayBuffer())).metadata(),
     ).toMatchObject({ width: 12, height: 16 });

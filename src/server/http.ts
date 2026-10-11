@@ -591,7 +591,7 @@ chapterFile(
 app.get("/api/media/:job/:file", (req, res) => {
   if (
     !/^\d+$/.test(String(req.params.job)) ||
-    !/^panel-[1-6]\.png$/.test(String(req.params.file))
+    !/^panel-[1-6]\.(jpg|png)$/.test(String(req.params.file))
   )
     return void res.sendStatus(404);
   res.sendFile(

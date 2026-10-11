@@ -322,16 +322,20 @@ async function runJob(job: Job) {
         c.content_engine === "quote",
       );
       for (let i = 0; i < units.length; i++) {
-        const name = `panel-${i + 1}.png`;
+        const name = `panel-${i + 1}.jpg`;
         writeFileSync(
           path.join(work, name),
-          await renderPanel(
-            "1",
-            i + 1,
-            i === 0 ? v.heading : "",
-            units[i].text,
-            `${c.book} - Bagian ${part}`,
-          ),
+          await sharp(
+            await renderPanel(
+              "1",
+              i + 1,
+              i === 0 ? v.heading : "",
+              units[i].text,
+              `${c.book} - Bagian ${part}`,
+            ),
+          )
+            .jpeg(PANEL_JPEG)
+            .toBuffer(),
         );
         files.push(`work/${job.id}/${name}`);
       }
@@ -475,7 +479,7 @@ async function runJob(job: Job) {
       for (const [i, s] of sentences.entries()) {
         const binding = stock.find((b) => b.panel === i + 1);
         if (!binding) throw Error(`Gambar kalimat ${i + 1} belum ada`);
-        const image = path.join(work, `kalimat-${i + 1}.png`);
+        const image = path.join(work, `kalimat-${i + 1}.jpg`);
         const layout = subtitleLayout(s.text, spec);
         writeFileSync(
           image,

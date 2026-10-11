@@ -24,7 +24,7 @@ if (text.trim() !== "NCPOST_TEXT_OK")
   throw Error("Probe text tidak menghasilkan marker yang diminta");
 console.log("TEXT LIVE PASS", version);
 if (process.argv.includes("--image")) {
-  const output = path.join(directory, "cli-image.png");
+  const output = path.join(directory, "cli-image.jpg");
   const result = await generateCodexImage(
     "Editorial photorealistic stock photo of a closed notebook beside a small potted green plant on a wooden desk, soft natural daylight, no people.",
     directory,

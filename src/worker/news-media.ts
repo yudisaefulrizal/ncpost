@@ -410,7 +410,7 @@ export async function runNewsMediaJob(
         );
         if (!binding) throw Error(`Gambar kalimat ${i + 1} belum tersedia`);
         const layout = subtitleLayout(s.text, spec);
-        const image = path.join(work, `kalimat-${i + 1}.png`);
+        const image = path.join(work, `kalimat-${i + 1}.jpg`);
         writeFileSync(
           image,
           await renderSubtitleFrame(

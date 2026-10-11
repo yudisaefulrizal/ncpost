@@ -612,10 +612,11 @@ export async function buildReels(
   const manifest = [];
   for (const [i, s] of slides.entries()) {
     const id = String(i + 1).padStart(2, "0");
-    const frame = path.join(work, `frame_${id}.png`);
+    const frame = path.join(work, `frame_${id}.jpg`);
     await sharp(s.image)
       .resize(format.width, format.height, { kernel: "lanczos3" })
-      .png({ compressionLevel: 1 })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" })
       .toFile(frame);
     frames.push(frame);
     const narration = await duration(s.audio);

@@ -47,7 +47,7 @@ export function labRouter(getStore: () => LabStore) {
   router.get("/images/:id", async (req, res) => {
     res.set("Cache-Control", "private, no-store");
     res
-      .type("png")
+      .type(String(req.params.id).endsWith(".jpg") ? "jpg" : "png")
       .sendFile(await labImageFile(req.params.id), { dotfiles: "allow" });
   });
   router.get("/image-types", async (_req, res) =>

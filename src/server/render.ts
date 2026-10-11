@@ -362,7 +362,7 @@ ${opening ? openingSvg(opening, spec) : `<rect x="0" y="${height - scrim.height}
       { input: Buffer.from(svg) },
     ])
     .flatten({ background: "#1C1C1C" })
-    .png()
+    .jpeg({ quality: 90, mozjpeg: true, chromaSubsampling: "4:4:4" })
     .toBuffer();
 }
 
