@@ -1,3 +1,8 @@
+import {
+  checkGeneration,
+  watchGenerationChild,
+  generationSignal,
+} from "./generation-cancel";
 // Pipeline video per kalimat (port render_tiktok_video.py + render_audio_visualizer.py
 // dari Hermes), dirancang untuk server kecil
 // (2 core, RAM terbatas) dan satu keluaran saja: versi upload.
@@ -38,9 +43,12 @@ export const CLOSING_CTA_VIDEO = path.join(
 const FONTS_DIR = "/usr/share/fonts/truetype/dejavu";
 export function run(cmd: string, args: string[], input?: Buffer) {
   return new Promise<Buffer>((resolve, reject) => {
+    checkGeneration();
     const child = spawn(cmd, args, {
+      detached: true,
       stdio: [input ? "pipe" : "ignore", "pipe", "pipe"],
     });
+    watchGenerationChild(child);
     const out: Buffer[] = [];
     let err = "";
     child.stdout!.on("data", (d) => out.push(d));
@@ -56,7 +64,12 @@ export function run(cmd: string, args: string[], input?: Buffer) {
 }
 // Frame mentah ditulis bertahap ke stdin ffmpeg (tidak ditampung di memori).
 async function pipeFrames(args: string[], frames: Iterable<Buffer>) {
-  const child = spawn("ffmpeg", args, { stdio: ["pipe", "ignore", "pipe"] });
+  checkGeneration();
+  const child = spawn("ffmpeg", args, {
+    detached: true,
+    stdio: ["pipe", "ignore", "pipe"],
+  });
+  watchGenerationChild(child);
   let err = "";
   child.stderr!.on("data", (d) => (err = (err + d).slice(-2000)));
   const done = new Promise<void>((resolve, reject) => {
@@ -68,6 +81,7 @@ async function pipeFrames(args: string[], frames: Iterable<Buffer>) {
   done.catch(() => {});
   child.stdin!.on("error", () => {});
   for (const frame of frames) {
+    checkGeneration();
     if (!child.stdin!.write(frame))
       await Promise.race([
         new Promise<void>((resolve) => child.stdin!.once("drain", resolve)),

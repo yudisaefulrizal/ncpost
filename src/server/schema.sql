@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS chapters (
 -- active_key hanya terisi untuk job queued/running sehingga satu bab
 -- tidak bisa punya dua job aktif berjenis sama.
 CREATE TABLE IF NOT EXISTS jobs (
+  cancel_version INT NOT NULL DEFAULT 0,
   queue_cleared_at DATETIME NULL,
   id INT AUTO_INCREMENT PRIMARY KEY,
   chapter_id INT NOT NULL,
@@ -142,6 +143,7 @@ CREATE TABLE IF NOT EXISTS book_cron (
 
 -- Tahap artikel berita terpisah dari data dan antrean produksi buku.
 CREATE TABLE IF NOT EXISTS news_articles (
+  cancel_version INT NOT NULL DEFAULT 0,
   queue_cleared_at DATETIME NULL,
   id INT AUTO_INCREMENT PRIMARY KEY,
   category VARCHAR(32) NOT NULL DEFAULT 'teknologi',
@@ -165,6 +167,7 @@ CREATE TABLE IF NOT EXISTS news_content_settings (
  settings TEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS news_media_jobs (
+  cancel_version INT NOT NULL DEFAULT 0,
   queue_cleared_at DATETIME NULL,
  id INT AUTO_INCREMENT PRIMARY KEY,
  news_id INT NOT NULL,
@@ -241,6 +244,7 @@ CREATE TABLE IF NOT EXISTS lab_prompts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS lab_runs (
+  cancel_version INT NOT NULL DEFAULT 0,
   id INT AUTO_INCREMENT PRIMARY KEY,
   reference_key VARCHAR(64) NULL,
   reference_image VARCHAR(40) NULL,

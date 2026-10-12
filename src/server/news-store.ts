@@ -44,7 +44,7 @@ export class NewsStore {
   }
   async retry(id: number) {
     const [r] = await this.db.query<mysql.ResultSetHeader>(
-      "UPDATE news_articles SET state='queued',error=NULL,lease=0,queue_cleared_at=NULL WHERE id=? AND state='failed'",
+      "UPDATE news_articles SET state='queued',error=NULL,lease=0,queue_cleared_at=NULL WHERE id=? AND state IN ('failed','cancelled')",
       [id],
     );
     if (!r.affectedRows)

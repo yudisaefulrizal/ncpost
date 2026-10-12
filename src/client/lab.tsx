@@ -46,6 +46,7 @@ type Run = {
 const states: Record<string, string> = {
   queued: "Menunggu",
   running: "Berjalan",
+  cancelled: "Dibatalkan",
   completed: "Selesai",
   failed: "Gagal",
 };
@@ -458,6 +459,23 @@ export function PromptLab({ kind }: { kind: Kind }) {
                           >
                             Uji
                           </button>
+                          {matching.find((r) => r.state === "running") && (
+                            <button
+                              className="btn btn-sec btn-sm"
+                              disabled={busy}
+                              onClick={() =>
+                                void action(async () => {
+                                  const run = matching.find(
+                                    (r) => r.state === "running",
+                                  )!;
+                                  await api(`/runs/${run.id}/cancel`, "POST");
+                                  setRuns(await api(`/runs?kind=${kind}`));
+                                })
+                              }
+                            >
+                              Stop
+                            </button>
+                          )}
                           <button
                             className="btn btn-sec btn-sm"
                             onClick={() => {
@@ -835,7 +853,22 @@ export function PromptLab({ kind }: { kind: Kind }) {
                 <p>Menunggu worker menjalankan pengujian.</p>
               )}
               {selected.state === "running" && (
-                <p>Pengujian sedang berjalan. Status diperbarui otomatis.</p>
+                <div className="row-gap">
+                  <p>Pengujian sedang berjalan. Status diperbarui otomatis.</p>
+                  <button
+                    className="btn btn-sec btn-sm"
+                    disabled={busy}
+                    onClick={() =>
+                      void action(async () => {
+                        await api(`/runs/${selected.id}/cancel`, "POST");
+                        setRuns(await api(`/runs?kind=${kind}`));
+                        setSelected(await api(`/runs/${selected.id}`));
+                      })
+                    }
+                  >
+                    Stop
+                  </button>
+                </div>
               )}
               {selected.error && (
                 <p className="warn" role="alert">

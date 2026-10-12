@@ -1,3 +1,4 @@
+import { checkGeneration, generationSignal } from "./generation-cancel";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, statSync, writeFileSync, rmSync } from "node:fs";
@@ -33,6 +34,7 @@ export async function edgeTts(
   file: string,
   config = newsTtsConfig(),
 ) {
+  checkGeneration();
   if (!config.enabled) throw Error(config.reason);
   if (!text.trim()) throw Error("Teks audio berita kosong");
   const input = `${file}.txt`;
@@ -49,7 +51,12 @@ export async function edgeTts(
         "--write-media",
         file,
       ],
-      { timeout: 120000, maxBuffer: 1024 * 1024, env: privateEnv() },
+      {
+        timeout: 120000,
+        maxBuffer: 1024 * 1024,
+        env: privateEnv(),
+        signal: generationSignal(),
+      },
     );
     if (!existsSync(file) || statSync(file).size < 100)
       throw Error("Edge TTS tidak menghasilkan audio MP3");

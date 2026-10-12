@@ -1,3 +1,4 @@
+import { checkGeneration, generationSignal } from "./generation-cancel";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { mkdir, readdir, lstat, rename, rm } from "node:fs/promises";
@@ -37,7 +38,11 @@ export async function withPresetLock<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   if (catalog) {
+    checkGeneration();
     const db = await mysql.createConnection(dbConfig());
+    const signal = generationSignal();
+    const stopWaiting = () => db.destroy();
+    signal?.addEventListener("abort", stopWaiting, { once: true });
     const key =
       "ncpost-stock-" +
       createHash("sha256")
@@ -45,6 +50,7 @@ export async function withPresetLock<T>(
         .digest("hex")
         .slice(0, 48);
     try {
+      checkGeneration();
       const [rows]: any = await db.query("SELECT GET_LOCK(?,600) AS acquired", [
         key,
       ]);
@@ -56,7 +62,8 @@ export async function withPresetLock<T>(
         await db.query("SELECT RELEASE_LOCK(?)", [key]);
       }
     } finally {
-      await db.end();
+      signal?.removeEventListener("abort", stopWaiting);
+      await db.end().catch(() => {});
     }
   }
   const base = path.join(outputRoot(), "cache", "stock-locks");
@@ -64,6 +71,7 @@ export async function withPresetLock<T>(
   const lock = path.join(base, `${category}-${stockPart(identity)}`);
   const deadline = Date.now() + 600000;
   for (;;) {
+    checkGeneration();
     try {
       await mkdir(lock);
       break;
@@ -116,6 +124,7 @@ export async function sharedMedia({
     presetId ? "preset" : category,
     presetId ? `preset-${presetId}` : folder,
     async () => {
+      checkGeneration();
       if (catalog && presetId) {
         const [presets]: any = await catalog.query(
           "SELECT name FROM lab_prompts WHERE id=? AND kind='image'",
@@ -178,7 +187,9 @@ export async function sharedMedia({
           `.pending-${process.pid}-${Date.now()}.${category === "image" ? "jpg" : category === "audio" ? "mp3" : "mp4"}`,
         );
         try {
+          checkGeneration();
           await generate(temporary);
+          checkGeneration();
           const stat = await lstat(temporary);
           if (!stat.isFile() || stat.isSymbolicLink() || stat.size === 0)
             throw Error("Hasil stok kosong atau tidak valid");
@@ -189,6 +200,7 @@ export async function sharedMedia({
             // Generated outputs are JPEG; an old PNG is preserved until replacement succeeds.
             file = path.join(dir, `${name}.jpg`);
           }
+          checkGeneration();
           await rename(temporary, file);
           if (existing && path.join(dir, existing) !== file)
             await rm(path.join(dir, existing));

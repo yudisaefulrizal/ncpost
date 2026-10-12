@@ -1,3 +1,4 @@
+import { cancellableGeneration } from "../server/generation-cancel";
 import { existsSync } from "node:fs";
 import {
   configureMediaStock,
@@ -243,6 +244,19 @@ function publicVideo(c: Chapter) {
       .slice(0, 32) + ".mp4";
   copyFileSync(resolveMedia(m.file, chapterDir(c)), path.join(dir, name));
   return `${origin}/pub/${name}`;
+}
+function generation(
+  table: string,
+  job: { id: number; cancel_version?: number },
+  run: () => Promise<void>,
+) {
+  return cancellableGeneration(
+    store.db,
+    table,
+    job.id,
+    run,
+    Number(job.cancel_version || 0),
+  );
 }
 async function runJob(job: Job) {
   const startedAt = Date.now(),
@@ -1122,7 +1136,9 @@ while (!stop) {
       const news = await newsStore.claim();
       if (news) {
         newsRunning = true;
-        const task: Promise<void> = runNewsJob(newsStore, news)
+        const task: Promise<void> = generation("news_articles", news, () =>
+          runNewsJob(newsStore, news),
+        )
           .catch((e) =>
             console.error("Artikel berita gagal:", (e as Error).message),
           )
@@ -1141,10 +1157,8 @@ while (!stop) {
     try {
       const job = await newsMediaStore.claim();
       if (!job) break;
-      const task: Promise<void> = runNewsMediaJob(
-        newsMediaStore,
-        store,
-        job,
+      const task: Promise<void> = generation("news_media_jobs", job, () =>
+        runNewsMediaJob(newsMediaStore, store, job),
       ).finally(() => running.delete(task));
       running.add(task);
     } catch (e) {
@@ -1156,16 +1170,18 @@ while (!stop) {
   while (running.size < CONCURRENCY) {
     const job = await store.claim();
     if (!job) break;
-    const task: Promise<void> = runJob(job).finally(() => running.delete(task));
+    const task: Promise<void> = generation("jobs", job, () =>
+      runJob(job),
+    ).finally(() => running.delete(task));
     running.add(task);
   }
   if (running.size < CONCURRENCY) {
     try {
       const job = await labStore.claim();
       if (job) {
-        const task = runLabJob(labStore, job).finally(() =>
-          running.delete(task),
-        );
+        const task = generation("lab_runs", job, () =>
+          runLabJob(labStore, job),
+        ).finally(() => running.delete(task));
         running.add(task);
       }
     } catch (e) {

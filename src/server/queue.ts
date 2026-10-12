@@ -26,14 +26,14 @@ export async function listQueue(store: Store, state?: string) {
   const sql = `SELECT * FROM (
     SELECT 'book' AS source,j.id,j.chapter_id AS content_id,c.content_type_id,t.name AS content_type,
       CONCAT(c.book,' · ',c.title) AS title,j.kind,j.state,j.error,j.created_at,
-      (j.state='failed' AND j.revision=c.revision AND NOT EXISTS(SELECT 1 FROM jobs newer WHERE newer.chapter_id=j.chapter_id AND newer.kind=j.kind AND newer.id>j.id)) AS can_retry
+      (j.state IN ('failed','cancelled') AND j.revision=c.revision AND NOT EXISTS(SELECT 1 FROM jobs newer WHERE newer.chapter_id=j.chapter_id AND newer.kind=j.kind AND newer.id>j.id)) AS can_retry
       FROM jobs j JOIN chapters c ON c.id=j.chapter_id JOIN content_types t ON t.id=c.content_type_id WHERE j.queue_cleared_at IS NULL
     UNION ALL
     SELECT 'news-article',n.id,n.id,n.content_type_id,t.name,COALESCE(NULLIF(n.title,''),'Artikel baru'),
-      'ARTICLE',n.state,n.error,n.created_at,(n.state='failed') FROM news_articles n JOIN content_types t ON t.id=n.content_type_id WHERE n.queue_cleared_at IS NULL
+      'ARTICLE',n.state,n.error,n.created_at,(n.state IN ('failed','cancelled')) FROM news_articles n JOIN content_types t ON t.id=n.content_type_id WHERE n.queue_cleared_at IS NULL
     UNION ALL
     SELECT 'news-media',j.id,j.news_id,n.content_type_id,t.name,n.title,j.kind,j.state,j.error,j.created_at,
-      (j.state='failed' AND j.revision=n.attempts AND NOT EXISTS(SELECT 1 FROM news_media_jobs newer WHERE newer.news_id=j.news_id AND newer.kind=j.kind AND newer.id>j.id))
+      (j.state IN ('failed','cancelled') AND j.revision=n.attempts AND NOT EXISTS(SELECT 1 FROM news_media_jobs newer WHERE newer.news_id=j.news_id AND newer.kind=j.kind AND newer.id>j.id))
       FROM news_media_jobs j JOIN news_articles n ON n.id=j.news_id JOIN content_types t ON t.id=n.content_type_id WHERE j.queue_cleared_at IS NULL
     ) queue ${state ? "WHERE state=?" : ""}
     ORDER BY CASE state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'failed' THEN 2 ELSE 3 END,created_at DESC,id DESC LIMIT 500`;
@@ -97,13 +97,13 @@ export async function queueAction(
         ? "news_media_jobs"
         : "news_articles";
   if (action === "cancel") {
-    // Atomic condition prevents cancellation if a worker has already claimed this item.
+    // The generation token remains changed even if a cancelled item is immediately retried.
     const [result]: any = await store.db.query(
-      `UPDATE ${table} SET state='cancelled',lease=0 WHERE id=? AND state='queued'`,
+      `UPDATE ${table} SET state='cancelled',lease=0,cancel_version=cancel_version+1,error='Generate dibatalkan oleh pengguna' WHERE id=? AND (state='queued' OR (state='running'${source === "news-article" ? "" : " AND kind NOT IN ('POST_IG','REELS_IG')"}))`,
       [id],
     );
     if (!result.affectedRows)
-      throw Error("Hanya pekerjaan yang menunggu dapat dibatalkan");
+      throw Error("Pekerjaan sudah selesai atau sedang melakukan posting");
     return;
   }
   const sql =
@@ -114,8 +114,8 @@ export async function queueAction(
         : "SELECT * FROM news_articles WHERE id=?";
   const [rows]: any = await store.db.query(sql, [id]);
   const job = rows[0];
-  if (!job || job.state !== "failed")
-    throw Error("Hanya pekerjaan gagal dapat dicoba ulang");
+  if (!job || !["failed", "cancelled"].includes(job.state))
+    throw Error("Hanya pekerjaan gagal atau dibatalkan dapat dicoba ulang");
   if (source !== "news-article" && job.revision !== job.current_revision)
     throw Error("Konten sudah berubah. Jalankan aksi dari Produksi terbaru.");
   if (job.latest_id !== undefined && Number(job.latest_id) !== id)

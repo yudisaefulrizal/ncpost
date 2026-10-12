@@ -301,11 +301,23 @@ export function QueuePage() {
                           >
                             <QueueIcon name="info" />
                           </button>
-                          {item.state === "queued" && (
+                          {(item.state === "queued" ||
+                            (item.state === "running" &&
+                              !["POST_IG", "REELS_IG"].includes(
+                                item.kind,
+                              ))) && (
                             <button
                               className="btn btn-sec btn-sm queue-icon-btn"
-                              aria-label="Batalkan"
-                              title="Batalkan pekerjaan"
+                              aria-label={
+                                item.state === "running"
+                                  ? "Stop generate"
+                                  : "Batalkan"
+                              }
+                              title={
+                                item.state === "running"
+                                  ? "Stop generate"
+                                  : "Batalkan pekerjaan"
+                              }
                               disabled={!!busy}
                               onClick={() => void act(item, "cancel")}
                             >
@@ -316,21 +328,25 @@ export function QueuePage() {
                               )}
                             </button>
                           )}
-                          {item.state === "failed" && !!item.can_retry && (
-                            <button
-                              className="btn btn-sec btn-sm queue-icon-btn"
-                              aria-label="Coba ulang"
-                              title="Coba ulang pekerjaan"
-                              disabled={!!busy}
-                              onClick={() => void act(item, "retry")}
-                            >
-                              {busy === key ? (
-                                <span className="spinner" aria-hidden="true" />
-                              ) : (
-                                <QueueIcon name="refresh" />
-                              )}
-                            </button>
-                          )}
+                          {["failed", "cancelled"].includes(item.state) &&
+                            !!item.can_retry && (
+                              <button
+                                className="btn btn-sec btn-sm queue-icon-btn"
+                                aria-label="Coba ulang"
+                                title="Coba ulang pekerjaan"
+                                disabled={!!busy}
+                                onClick={() => void act(item, "retry")}
+                              >
+                                {busy === key ? (
+                                  <span
+                                    className="spinner"
+                                    aria-hidden="true"
+                                  />
+                                ) : (
+                                  <QueueIcon name="refresh" />
+                                )}
+                              </button>
+                            )}
                         </div>
                       </td>
                     </tr>

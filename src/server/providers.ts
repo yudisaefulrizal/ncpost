@@ -1,3 +1,8 @@
+import {
+  checkGeneration,
+  watchGenerationChild,
+  generationSignal,
+} from "./generation-cancel";
 import { spawn } from "node:child_process";
 import { privateEnv } from "./config";
 export function runCli(
@@ -9,12 +14,15 @@ export function runCli(
   captureStderr = false,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
+    checkGeneration();
     const child = spawn(executable, args, {
       cwd,
       env: privateEnv(),
       shell: false,
+      detached: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    watchGenerationChild(child);
     let out = "",
       settled = false;
     const done = (err?: Error) => {
@@ -155,6 +163,7 @@ export async function tts(
       method: "POST",
       headers: { "xi-api-key": config.key, "Content-Type": "application/json" },
       body: JSON.stringify({ text, model_id: "eleven_v3" }),
+      signal: generationSignal(),
     },
   );
   if (!res.ok) throw Error("ElevenLabs gagal");

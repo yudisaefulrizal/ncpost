@@ -40,6 +40,11 @@ export async function migrateDatabase(connection: Connection) {
   }
   for (const [table, column, definition] of [
     ["media_stock", "metadata", "MEDIUMTEXT NULL"],
+    ...["jobs", "news_articles", "news_media_jobs", "lab_runs"].map((table) => [
+      table,
+      "cancel_version",
+      "INT NOT NULL DEFAULT 0",
+    ]),
     ["content_types", "deleted_at", "DATETIME NULL"],
     ["jobs", "queue_cleared_at", "DATETIME NULL"],
     ["news_articles", "queue_cleared_at", "DATETIME NULL"],

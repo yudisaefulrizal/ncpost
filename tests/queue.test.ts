@@ -28,24 +28,26 @@ function fixture(job: any = {}) {
   return { store, query };
 }
 it.each(["book", "news-article", "news-media"])(
-  "cancels only queued %s jobs atomically",
+  "cancels queued or running generation %s jobs atomically",
   async (source) => {
     const { store, query } = fixture();
     query.mockResolvedValue([{ affectedRows: 1 }]);
     await queueAction(store, source, 5, "cancel");
-    expect(query.mock.calls[0][0]).toContain("WHERE id=? AND state='queued'");
+    expect(query.mock.calls[0][0]).toContain(
+      "WHERE id=? AND (state='queued' OR (state='running'",
+    );
     expect(query.mock.calls[0][1]).toEqual([5]);
     expect(store.enqueue).not.toHaveBeenCalled();
   },
 );
-it("cannot cancel a job already claimed by a worker", async () => {
+it("cannot cancel a finished job", async () => {
   const { store, query } = fixture();
   query.mockResolvedValue([{ affectedRows: 0 }]);
   await expect(queueAction(store, "book", 5, "cancel")).rejects.toThrow(
-    "menunggu",
+    "sudah selesai",
   );
 });
-it.each(["queued", "running", "completed", "cancelled"])(
+it.each(["queued", "running", "completed"])(
   "cannot retry a %s job",
   async (state) => {
     const { store } = fixture({ state });

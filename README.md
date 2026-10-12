@@ -319,3 +319,10 @@ npm run reset:media -- --apply --services-stopped
 ```
 
 Reset menolak job yang masih berjalan, mencadangkan data database dan direktori media ke `output/media-backups/<waktu>/`, lalu membersihkan stok dan hasil produksi. Artikel, topik, preset, referensi/logo, pengaturan, akun, kredensial, jadwal, dan riwayat posting eksternal tetap dipertahankan. Cadangan tidak dihapus otomatis. Jika reset berhenti akibat proses/server mati, jangan langsung menjalankan ulang: periksa cadangan dan penanda `data/media-reset.guard` dahulu. Skrip ini terpisah dari migrasi skema agar pembaruan aplikasi tidak otomatis menghapus media.
+
+
+## Menghentikan generate
+
+Tombol **Stop** tersedia pada aktivitas worker di Produksi, produksi berita, dan pengujian Lab. List Antrian juga dapat menghentikan job generate yang sedang berjalan. Worker memeriksa pembatalan setiap satu detik, menghentikan proses CLI/render dan permintaan TTS, lalu membersihkan file stok sementara. Stok yang sudah berhasil dibuat tetap tersimpan. Job ditandai **Dibatalkan** dan dapat dicoba ulang; stok lama tetap dipertahankan jika regenerate dibatalkan. Job publikasi yang sedang dikirim tidak memiliki tombol Stop.
+
+Pembaruan ini menambahkan `cancel_version` pada tabel pekerjaan. Jalankan `npm run migrate`, kemudian restart aplikasi web dan worker agar fitur Stop aktif. Penanda pembatalan mencegah proses lama melanjutkan pekerjaan ketika job segera dicoba ulang.

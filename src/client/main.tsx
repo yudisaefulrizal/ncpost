@@ -1463,6 +1463,19 @@ function App() {
                 </small>
               </div>
               <Chip s={status(j.state)} />
+              {j.state === "running" &&
+                !["POST_IG", "REELS_IG"].includes(j.kind) && (
+                  <button
+                    className="btn btn-sec btn-sm"
+                    onClick={() =>
+                      action(async () => {
+                        await api(`/queue/book/${j.id}/cancel`, "POST");
+                      })
+                    }
+                  >
+                    Stop
+                  </button>
+                )}
             </li>
           ))}
         </ol>
@@ -2977,13 +2990,13 @@ function NewsProduction({
     title:
       n.state === "completed"
         ? "Artikel selesai"
-        : n.state === "failed"
+        : ["failed", "cancelled"].includes(n.state)
           ? "Coba ulang artikel"
           : "Artikel sedang diproses",
     done: n.state === "completed",
     busy: n.state === "queued" || n.state === "running",
     run:
-      n.state === "failed" && !busy
+      ["failed", "cancelled"].includes(n.state) && !busy
         ? () => run(() => api(`/news/${n.id}/retry`, "POST"))
         : undefined,
     redo:
@@ -3168,6 +3181,37 @@ function NewsProduction({
                       <small className="block muted">
                         {n.title || `Artikel berita #${n.id}`}
                       </small>
+                      {(n.state === "running" ||
+                        n.production?.jobs.some(
+                          (j) =>
+                            j.state === "running" &&
+                            !["POST_IG", "REELS_IG"].includes(j.kind),
+                        )) && (
+                        <button
+                          className="btn btn-sec btn-sm"
+                          disabled={busy}
+                          onClick={() =>
+                            run(async () => {
+                              if (n.state === "running")
+                                await api(
+                                  `/queue/news-article/${n.id}/cancel`,
+                                  "POST",
+                                );
+                              for (const job of n.production?.jobs || [])
+                                if (
+                                  job.state === "running" &&
+                                  !["POST_IG", "REELS_IG"].includes(job.kind)
+                                )
+                                  await api(
+                                    `/queue/news-media/${job.id}/cancel`,
+                                    "POST",
+                                  );
+                            })
+                          }
+                        >
+                          Stop generate
+                        </button>
+                      )}
                       {n.error && (
                         <small className="block warn">{n.error}</small>
                       )}

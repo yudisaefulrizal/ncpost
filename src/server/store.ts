@@ -82,6 +82,7 @@ export interface Job {
   lease: number;
   revision: number;
   force_new: number;
+  cancel_version?: number;
   error: string | null;
 }
 export interface Asset {
@@ -107,7 +108,7 @@ export interface User {
 }
 type Db = mysql.Pool | mysql.PoolConnection;
 const JOB_COLUMNS =
-  "id,chapter_id,kind,state,attempts,lease,revision,force_new,error";
+  "id,chapter_id,kind,state,attempts,lease,revision,force_new,error,cancel_version";
 async function rows<T>(db: Db, sql: string, params: unknown[] = []) {
   const [result] = await db.query(sql, params);
   return result as T[];

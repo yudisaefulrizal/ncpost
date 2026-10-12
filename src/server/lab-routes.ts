@@ -71,6 +71,14 @@ export function labRouter(getStore: () => LabStore) {
   router.post("/runs", async (req, res) =>
     res.status(202).json({ id: await getStore().enqueue(req.body) }),
   );
+  router.post("/runs/:id/cancel", async (req, res) => {
+    const [result]: any = await getStore().db.query(
+      "UPDATE lab_runs SET state='cancelled',cancel_version=cancel_version+1,error='Generate dibatalkan oleh pengguna',lease=0,finished_at=NOW() WHERE id=? AND state IN ('queued','running')",
+      [id(req.params.id)],
+    );
+    if (!result.affectedRows) throw Error("Pengujian sudah selesai");
+    res.json({ ok: true });
+  });
   router.get("/runs/:id", async (req, res) => {
     const run = await getStore().get(id(req.params.id));
     if (!run) return void res.sendStatus(404);

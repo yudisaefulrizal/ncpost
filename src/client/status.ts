@@ -16,7 +16,7 @@ const map: Record<string, Status> = {
   draft: { tone: "act", label: "Draf" },
   failed: { tone: "block", label: "Gagal" },
   unknown: { tone: "block", label: "Tidak pasti" },
-  cancelled: { tone: "none", label: "Batal" },
+  cancelled: { tone: "none", label: "Dibatalkan" },
   belum: { tone: "none", label: "Belum" },
 };
 
