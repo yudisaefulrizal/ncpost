@@ -31,7 +31,7 @@ export async function loadFinishedVideos(): Promise<Video[]> {
           if (!manifest?.file) return [];
           const base =
             type.engine !== "news"
-              ? `/api/video-kalimat${horizontal ? "-h" : ""}/${row.id}/${encodeURIComponent(manifest.file)}`
+              ? `/api/video-kalimat${horizontal ? "-h" : ""}/${row.id}/video-${horizontal ? "h" : "v"}.mp4`
               : `/api/news/${row.id}/media/${stage}/0`;
           return [
             {

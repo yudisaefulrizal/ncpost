@@ -1,3 +1,4 @@
+import { deleteImageStock } from "./stock-delete";
 import { configureMediaStock, resolveMedia } from "./media-stock";
 import { listUpcomingCrons } from "./cron-upcoming";
 import { shiftAllCrons } from "./cron-shift";
@@ -720,6 +721,12 @@ app.get("/api/stock-presets", async (_, res) => {
       })),
     })),
   );
+});
+app.delete("/api/media-stock/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  await deleteImageStock(store.db, id);
+  res.json({ ok: true });
 });
 app.get("/api/media-stock/:id/image", async (req, res) => {
   const id = Number(req.params.id);

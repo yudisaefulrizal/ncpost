@@ -2043,7 +2043,7 @@ function App() {
                       }
                       controls
                       autoPlay
-                      src={`${base}/${m.file}?v=${m.renderedAt}`}
+                      src={`${base}/video-${watching.horizontal ? "h" : "v"}.mp4?v=${encodeURIComponent(m.renderedAt || "")}`}
                     />
                     <p className="muted small">
                       {Math.round(m.duration)} dtk · {m.frames} frame · {m.fps}{" "}
@@ -4362,7 +4362,7 @@ function ReelsModal({
         className="reels-player"
         controls
         preload="metadata"
-        src={`/api/video-kalimat/${c.id}/${m.file}?v=${m.renderedAt}`}
+        src={`/api/video-kalimat/${c.id}/video-v.mp4?v=${encodeURIComponent(m.renderedAt || "")}`}
       />
       <label className="field">
         Caption ({caption ? [...caption].length : 0}/2200)
@@ -4538,6 +4538,25 @@ function StockGallery() {
   const [groups, setGroups] = useState<
     { key: string; name: string; items: any[] }[] | null
   >(null);
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const remove = async (id: number) => {
+    setDeleting(id);
+    setError("");
+    try {
+      await api(`/media-stock/${id}`, "DELETE");
+      setGroups(
+        (old) =>
+          old?.map((g) => ({
+            ...g,
+            items: g.items.filter((a) => a.id !== id),
+          })) || null,
+      );
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setDeleting(null);
+    }
+  };
   const [kind, setKind] = useState(""),
     [error, setError] = useState("");
   useEffect(() => {
@@ -4574,9 +4593,12 @@ function StockGallery() {
           ))}
         </div>
       </div>
-      {error ? (
-        <p className="muted">{error}</p>
-      ) : !groups ? (
+      {error && (
+        <p role="alert" className="warn">
+          {error}
+        </p>
+      )}
+      {!groups ? (
         <p className="muted">Memuat stok…</p>
       ) : !items?.length ? (
         <p className="muted">Belum ada gambar untuk preset ini.</p>
@@ -4584,6 +4606,15 @@ function StockGallery() {
         <div className={"gallery stock" + (horizontal ? " wide" : "")}>
           {items.map((a) => (
             <figure key={a.id}>
+              <button
+                className="stock-delete"
+                title="Hapus stok gambar"
+                aria-label={`Hapus stok gambar: ${a.description}`}
+                disabled={deleting !== null}
+                onClick={() => remove(a.id)}
+              >
+                ×
+              </button>
               <a href={a.url} target="_blank" rel="noreferrer">
                 <img src={a.url} alt={a.description} loading="lazy" />
               </a>

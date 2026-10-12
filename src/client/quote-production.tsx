@@ -281,7 +281,7 @@ export function QuoteProduction({
             <video
               className={`reels-player ${view.kind.endsWith("_H") ? "wide" : "tall"}`}
               controls
-              src={`/api/video-kalimat${view.kind.endsWith("_H") ? "-h" : ""}/${current.id}/${manifest?.file}?v=${encodeURIComponent(manifest?.renderedAt || "")}`}
+              src={`/api/video-kalimat${view.kind.endsWith("_H") ? "-h" : ""}/${current.id}/video-${view.kind.endsWith("_H") ? "h" : "v"}.mp4?v=${encodeURIComponent(manifest?.renderedAt || "")}`}
             />
           )}
         </Modal>
