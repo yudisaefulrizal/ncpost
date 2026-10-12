@@ -686,6 +686,53 @@ app.get("/api/media/:job/:file", (req, res) => {
     ),
   );
 });
+app.get("/api/stock-presets", async (_, res) => {
+  const [presets]: any = await store.db.query(
+    "SELECT id,name FROM lab_prompts WHERE kind='image' ORDER BY id",
+  );
+  const [stocks]: any = await store.db.query(
+    "SELECT id,preset_id,identity_name,source_text,file FROM media_stock WHERE category='image' ORDER BY id DESC",
+  );
+  const groups = presets.map((p: any) => ({
+    key: `preset-${p.id}`,
+    name: p.name,
+    items: stocks.filter((s: any) => s.preset_id === p.id),
+  }));
+  for (const s of stocks.filter(
+    (s: any) => !presets.some((p: any) => p.id === s.preset_id),
+  )) {
+    const key = s.identity_name.split("__")[0];
+    let group = groups.find((g: any) => g.key === key);
+    if (!group) {
+      group = { key, name: key, items: [] };
+      groups.push(group);
+    }
+    group.items.push(s);
+  }
+  res.json(
+    groups.map((g: any) => ({
+      ...g,
+      items: g.items.map((s: any) => ({
+        id: s.id,
+        description: s.source_text,
+        orientation: s.identity_name.split("__")[1] || "bebas",
+        url: `/api/media-stock/${s.id}/image`,
+      })),
+    })),
+  );
+});
+app.get("/api/media-stock/:id/image", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  const [rows]: any = await store.db.query(
+    "SELECT file FROM media_stock WHERE id=? AND category='image'",
+    [id],
+  );
+  if (!rows[0]) return void res.sendStatus(404);
+  res.sendFile(
+    safeFile(path.join(outputRoot(), "stock"), path.join(ROOT, rows[0].file)),
+  );
+});
 app.get("/api/stock", async (req, res) => {
   const kind = String(req.query.kind);
   if (!isStockKind(kind)) throw Error("Lajur stok tidak dikenal");

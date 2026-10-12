@@ -1835,7 +1835,7 @@ function App() {
     sub = "";
     content = <FinishedVideos />;
   } else if (page === "Stok Gambar") {
-    sub = "Kolam stok gambar per lajur.";
+    sub = "Stok gambar berdasarkan preset.";
     content = <StockGallery />;
   } else {
     // Produksi: halaman utama.
@@ -4188,7 +4188,8 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
-  const src = (f: string) => `/api/panels/${c.id}/${encodeURIComponent(f)}?v=${m.renderedAt}`;
+  const src = (f: string) =>
+    `/api/panels/${c.id}/${encodeURIComponent(f)}?v=${m.renderedAt}`;
   const label = (n: number) =>
     n < m.panels.length ? `Panel ${n + 1}` : "Slide penutup";
   return (
@@ -4534,32 +4535,38 @@ function FinishedImages({ rows }: { rows: any[] }) {
 }
 
 function StockGallery() {
-  const { lanes, imageType } = useImageCatalog();
-  const IMAGE_LANES = lanes.filter(([key]) => imageType(key) !== "ready_post");
-  const [kind, setKind] = useState(IMAGE_LANES[0][0]),
-    [items, setItems] = useState<any[] | null>(null),
+  const [groups, setGroups] = useState<
+    { key: string; name: string; items: any[] }[] | null
+  >(null);
+  const [kind, setKind] = useState(""),
     [error, setError] = useState("");
   useEffect(() => {
-    setItems(null);
-    setError("");
-    api("/stock?kind=" + kind)
-      .then(setItems)
-      .catch((e) => setError((e as Error).message));
-  }, [kind]);
-  useEffect(() => {
-    if (!IMAGE_LANES.some(([key]) => key === kind)) setKind(IMAGE_LANES[0][0]);
-  }, [kind, IMAGE_LANES.map(([key]) => key).join(",")]);
-  const horizontal = isHorizontalKind(kind);
+    let active = true;
+    api("/stock-presets")
+      .then((data) => {
+        if (active) setGroups(data);
+      })
+      .catch((e) => {
+        if (active) setError((e as Error).message);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const selected = groups?.find((g) => g.key === kind) || groups?.[0];
+  const items = selected?.items;
+  const horizontal =
+    !!items?.length && items.every((a) => a.orientation === "horizontal");
   return (
     <section className="card pad stack">
       <div className="card-title">
         <h2 className="h3">Kolam stok</h2>
-        <div className="seg" role="group" aria-label="Lajur stok">
-          {IMAGE_LANES.map(([k, name]) => (
+        <div className="seg" role="group" aria-label="Preset gambar">
+          {groups?.map(({ key: k, name }) => (
             <button
               key={k}
-              className={kind === k ? "on" : ""}
-              aria-pressed={kind === k}
+              className={selected?.key === k ? "on" : ""}
+              aria-pressed={selected?.key === k}
               onClick={() => setKind(k)}
             >
               {name}
@@ -4569,10 +4576,10 @@ function StockGallery() {
       </div>
       {error ? (
         <p className="muted">{error}</p>
-      ) : !items ? (
+      ) : !groups ? (
         <p className="muted">Memuat stok…</p>
-      ) : !items.length ? (
-        <p className="muted">Belum ada gambar di lajur ini.</p>
+      ) : !items?.length ? (
+        <p className="muted">Belum ada gambar untuk preset ini.</p>
       ) : (
         <div className={"gallery stock" + (horizontal ? " wide" : "")}>
           {items.map((a) => (
@@ -4583,7 +4590,11 @@ function StockGallery() {
               <figcaption>
                 <b>{a.description}</b>
                 <small className="muted">
-                  {a.usage ? `Dipakai ${a.usage} konten` : "Belum dipakai"}
+                  {a.orientation === "horizontal"
+                    ? "Horizontal"
+                    : a.orientation === "vertikal"
+                      ? "Vertikal"
+                      : "Orientasi bebas"}
                 </small>
               </figcaption>
             </figure>
