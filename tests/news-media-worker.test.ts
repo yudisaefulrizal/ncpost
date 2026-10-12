@@ -149,6 +149,31 @@ function harness() {
 beforeEach(async () => {
   process.env.NCPOST_TEST = "true";
   vi.clearAllMocks();
+  rmSync(path.join(process.cwd(), "output/.test/stock-video"), {
+    recursive: true,
+    force: true,
+  });
+  mkdirSync(path.join(process.cwd(), "output/.test/stock/news-fixture"), {
+    recursive: true,
+  });
+  writeFileSync(
+    path.join(process.cwd(), "output/.test/stock/news-fixture/test.jpg"),
+    "image",
+  );
+  writeFileSync(path.join(process.cwd(), "output/.test/audio.mp3"), "audio");
+  for (let i = 1; i <= 8; i++) {
+    writeFileSync(
+      path.join(
+        process.cwd(),
+        `output/.test/stock/news-fixture/frame-${i}.jpg`,
+      ),
+      "image",
+    );
+    writeFileSync(
+      path.join(process.cwd(), `output/.test/audio-${i}.mp3`),
+      "audio",
+    );
+  }
   vi.mocked(generateStock).mockResolvedValue(987);
   vi.mocked(bestAsset).mockReturnValue(undefined);
   vi.mocked(accounts).mockResolvedValue({
@@ -181,6 +206,21 @@ beforeEach(async () => {
     .toFile(path.join(dir, "slide-penutup-final.png"));
 });
 afterEach(() => {
+  rmSync(path.join(process.cwd(), "output/.test/stock/news-fixture"), {
+    recursive: true,
+    force: true,
+  });
+  for (const dir of [
+    "stock/infografis",
+    "stock/image-vertical",
+    "stock/image-horizontal",
+    "stock-audio/edge-tts__id-id-ardineural",
+    "stock-video",
+  ])
+    rmSync(path.join(process.cwd(), "output/.test", dir), {
+      recursive: true,
+      force: true,
+    });
   rmSync(root, { recursive: true, force: true });
   rmSync(assetRoot, { recursive: true, force: true });
 });
@@ -190,7 +230,7 @@ it("gambar panel berita membuat empat ikatan ke aset kolam bersama dan melanjutk
     kind: "IMAGE_VERTICAL",
     panel: 1,
     asset_id: 12,
-    file: "output/stock/test.jpg",
+    file: "output/.test/stock/news-fixture/test.jpg",
     description: "Sudah ada",
   });
   await runNewsMediaJob(h.store, h.assets, job("IMAGE_VERTICAL"));
@@ -199,17 +239,18 @@ it("gambar panel berita membuat empat ikatan ke aset kolam bersama dan melanjutk
   expect(h.p.stock).toHaveLength(4);
   expect(h.spies.fail).not.toHaveBeenCalled();
 });
-it("reuse stok global tidak memanggil generator baru", async () => {
+it("pencarian stok memakai nama tetap, bukan kemiripan kata", async () => {
   const h = harness();
   vi.mocked(bestAsset).mockReturnValue({ asset: { id: 55 }, score: 1 } as any);
   await runNewsMediaJob(h.store, h.assets, job("S_IMAGE_VERTICAL"));
-  expect(generateStock).not.toHaveBeenCalled();
+  expect(bestAsset).not.toHaveBeenCalled();
+  expect(generateStock).toHaveBeenCalledTimes(8);
   expect(h.spies.bind).toHaveBeenCalledTimes(8);
 });
 it("audio berisi kalimat berita saja; kegagalan provider tidak ditandai selesai", async () => {
   const h = harness();
   await runNewsMediaJob(h.store, h.assets, job("TTS_KALIMAT"));
-  expect(edgeTts).toHaveBeenCalledTimes(8);
+  expect(edgeTts).toHaveBeenCalledTimes(2);
   expect(tts).not.toHaveBeenCalled();
   expect(h.p.outputs.TTS_KALIMAT.provider).toBe("edge-tts");
   expect(h.p.outputs.TTS_KALIMAT.voice).toBe("id-ID-ArdiNeural");
@@ -217,7 +258,9 @@ it("audio berisi kalimat berita saja; kegagalan provider tidak ditandai selesai"
   expect(h.p.outputs.TTS_KALIMAT.sentences).toHaveLength(8);
   h.spies.complete.mockClear();
   vi.mocked(edgeTts).mockRejectedValueOnce(Error("Edge TTS tidak tersedia"));
-  await runNewsMediaJob(h.store, h.assets, job("TTS_KALIMAT"));
+  const retry = job("TTS_KALIMAT");
+  retry.force_new = 1;
+  await runNewsMediaJob(h.store, h.assets, retry);
   expect(h.spies.complete).not.toHaveBeenCalled();
   expect(h.spies.fail).toHaveBeenCalledWith(
     expect.anything(),
@@ -232,7 +275,7 @@ it("panel berita menghasilkan empat panel tanpa heading dan satu penutup", async
         kind,
         panel,
         asset_id: panel,
-        file: "output/stock/test.jpg",
+        file: "output/.test/stock/news-fixture/test.jpg",
         description: "Test",
       });
   await runNewsMediaJob(h.store, h.assets, job("PANEL"));
@@ -247,6 +290,30 @@ it("panel berita menghasilkan empat panel tanpa heading dan satu penutup", async
 });
 it("video V/H memakai audio yang sama dan sumber stok per orientasi", async () => {
   const h = harness();
+  h.store.db.query = vi.fn(async (sql: string) =>
+    sql.includes("lab_prompts")
+      ? [
+          [
+            {
+              id: 9,
+              kind: "image",
+              name: "Video Test",
+              prompt: "Render",
+              image_type: "ready_video",
+            },
+          ],
+        ]
+      : [
+          [
+            {
+              id: -902,
+              state: "completed",
+              attempts: 1,
+              article: newsFixture().article,
+            },
+          ],
+        ],
+  ) as any;
   h.p.outputs.TTS_KALIMAT = {
     sentences: Array.from({ length: 8 }, () => ({
       file: "output/.test/audio.mp3",
@@ -258,7 +325,7 @@ it("video V/H memakai audio yang sama dan sumber stok per orientasi", async () =
         kind,
         panel,
         asset_id: panel,
-        file: "output/stock/test.jpg",
+        file: "output/.test/stock/news-fixture/test.jpg",
         description: "Test",
       });
   await runNewsMediaJob(h.store, h.assets, job("VIDEO_KALIMAT"));
@@ -288,7 +355,7 @@ it("publikasi mencatat request sebelum mengirim; timeout menjadi unknown tanpa r
         kind,
         panel,
         asset_id: panel,
-        file: "output/stock/test.jpg",
+        file: "output/.test/stock/news-fixture/test.jpg",
         description: "Test",
       });
   await runNewsMediaJob(h.store, h.assets, job("PANEL"));
@@ -346,8 +413,12 @@ it("gambar post menghasilkan satu infografis dari seluruh paragraf tanpa prasyar
   const h = harness();
   vi.mocked(generateCodexImage).mockImplementation(
     async (_prompt, _work, file) => {
-      writeFileSync(file, Buffer.alloc(100));
-      return { width: 1024, height: 1536, thread: "test", output: file };
+      await sharp({
+        create: { width: 64, height: 96, channels: 3, background: "white" },
+      })
+        .jpeg()
+        .toFile(file);
+      return { width: 64, height: 96, thread: "test", output: file };
     },
   );
   await runNewsMediaJob(h.store, h.assets, job("POST_IMAGE"));
@@ -355,19 +426,21 @@ it("gambar post menghasilkan satu infografis dari seluruh paragraf tanpa prasyar
   expect(generateCodexImage).toHaveBeenCalledWith(
     newsPostImagePrompt(newsFixture().article),
     expect.any(String),
-    expect.stringMatching(/gambar-post\.jpg$/),
+    expect.stringContaining(".pending-"),
     "bebas",
   );
   expect(h.p.outputs.POST_IMAGE).toMatchObject({
-    width: 1024,
-    height: 1536,
+    width: 64,
+    height: 96,
     prompt: newsPostImagePrompt(newsFixture().article),
   });
-  expect(h.p.outputs.POST_IMAGE.file).toContain("berita/media/");
+  expect(h.p.outputs.POST_IMAGE.file).toContain("stock/infografis/");
   expect(h.spies.fail).not.toHaveBeenCalled();
   h.spies.complete.mockClear();
   vi.mocked(generateCodexImage).mockRejectedValueOnce(Error("Gambar gagal"));
-  await runNewsMediaJob(h.store, h.assets, job("POST_IMAGE"));
+  const retry = job("POST_IMAGE");
+  retry.force_new = 1;
+  await runNewsMediaJob(h.store, h.assets, retry);
   expect(h.spies.complete).not.toHaveBeenCalled();
   expect(h.spies.fail).toHaveBeenCalledWith(expect.anything(), "Gambar gagal");
 });
@@ -402,10 +475,12 @@ it("direct carousel generates final slides without stocks or template rendering"
   expect(h.p.outputs.PANEL).toMatchObject({
     mode: "direct",
     panels: expect.any(Array),
-    closing: expect.stringContaining("05-slide-penutup.jpg"),
+    closing: expect.stringContaining(
+      "__simpan-postingan-ini-untuk-dibaca-kembali-",
+    ),
   });
   expect(h.p.outputs.PANEL.panels).toHaveLength(4);
-  expect(generateCodexImage).toHaveBeenCalledTimes(5);
+  expect(generateCodexImage).toHaveBeenCalledTimes(2);
   expect(
     await sharp(
       path.join(process.cwd(), h.p.outputs.PANEL.panels[0].file),
@@ -445,6 +520,30 @@ it("direct single image is saved as a posting-ready JPEG with its final prompt",
 
 it("ready-video rendering uses original images and audio without invoking subtitle or template renderers", async () => {
   const h = harness();
+  h.store.db.query = vi.fn(async (sql: string) =>
+    sql.includes("lab_prompts")
+      ? [
+          [
+            {
+              id: 9,
+              kind: "image",
+              name: "Video Test",
+              prompt: "Render",
+              image_type: "ready_video",
+            },
+          ],
+        ]
+      : [
+          [
+            {
+              id: -902,
+              state: "completed",
+              attempts: 1,
+              article: newsFixture().article,
+            },
+          ],
+        ],
+  ) as any;
   h.p.outputs.TTS_KALIMAT = {
     sentences: Array.from({ length: 8 }, (_, i) => ({
       file: `output/.test/audio-${i + 1}.mp3`,
@@ -456,12 +555,13 @@ it("ready-video rendering uses original images and audio without invoking subtit
         kind,
         panel: i,
         asset_id: i,
-        file: `output/stock/frame-${i}.jpg`,
+        file: `output/.test/stock/news-fixture/frame-${i}.jpg`,
         description: "Final",
       });
-  vi.mocked(buildImageAudioVideo).mockResolvedValue({
-    mode: "image_audio",
-  } as any);
+  vi.mocked(buildImageAudioVideo).mockImplementation(async (_slides, file) => {
+    writeFileSync(file, "video");
+    return { mode: "image_audio" } as any;
+  });
   for (const kind of ["VIDEO_KALIMAT", "VIDEO_KALIMAT_H"]) {
     const j = job(kind);
     j.settings = JSON.stringify({
@@ -472,6 +572,7 @@ it("ready-video rendering uses original images and audio without invoking subtit
       sentenceVideoHMode: "direct",
     });
     await runNewsMediaJob(h.store, h.assets, j);
+    expect(h.spies.fail.mock.calls).toEqual([]);
     expect(h.p.outputs[kind].mode).toBe("image_audio");
   }
   expect(buildImageAudioVideo).toHaveBeenCalledTimes(2);
@@ -493,7 +594,7 @@ it("explicit repost sends a published news carousel with a new request and still
         kind,
         panel,
         asset_id: panel,
-        file: "output/stock/test.jpg",
+        file: "output/.test/stock/news-fixture/test.jpg",
         description: "Test",
       });
   await runNewsMediaJob(h.store, h.assets, job("PANEL"));

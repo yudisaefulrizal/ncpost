@@ -1,3 +1,5 @@
+import sharp from "sharp";
+import { outputRoot } from "../src/server/output-paths";
 import { afterEach, expect, it, vi } from "vitest";
 import { rmSync } from "node:fs";
 import path from "node:path";
@@ -14,13 +16,24 @@ const chapter = {
 };
 afterEach(() => {
   rmSync(chapterDir(chapter), { recursive: true, force: true });
+  rmSync(path.join(outputRoot(), "stock", "infografis"), {
+    recursive: true,
+    force: true,
+  });
   vi.unstubAllEnvs();
 });
-it("sends the entire article in one image request and records a revision-specific result", async () => {
+it("sends the entire article in one image request and records a shared stock result", async () => {
   vi.stubEnv("NCPOST_TEST", "true");
   const article =
     "# Judul\n\n## Hook\n\nParagraf pertama.\n\nParagraf terakhir.\n\nBerdasarkan buku Contoh.\n\nTag: #contoh";
-  const generate = vi.fn().mockResolvedValue({ width: 1024, height: 1536 });
+  const generate = vi.fn(async (_prompt, _cwd, file) => {
+    await sharp({
+      create: { width: 10, height: 15, channels: 3, background: "white" },
+    })
+      .jpeg()
+      .toFile(file);
+    return { width: 10, height: 15, thread: "fixture", output: file };
+  });
   const result = await generateWholeTextImage(
     chapter,
     article,
@@ -32,14 +45,14 @@ it("sends the entire article in one image request and records a revision-specifi
   expect(generate).toHaveBeenCalledExactlyOnceWith(
     wholeTextImagePrompt(article),
     "/tmp/text-image-test",
-    path.join(chapterDir(chapter), "gambar-teks-r4-j88.jpg"),
+    expect.stringContaining(".pending-"),
     "bebas",
   );
   expect(result).toMatchObject({
-    file: "gambar-teks-r4-j88.jpg",
+    file: expect.stringContaining("stock/infografis/infografis__"),
     prompt: expect.stringContaining(article),
-    width: 1024,
-    height: 1536,
+    width: 10,
+    height: 15,
   });
 });
 it("does not return a successful result if generation fails", async () => {

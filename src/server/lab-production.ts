@@ -14,6 +14,7 @@ export type ProductionPromptTarget =
   | string;
 export type ProductionLabPrompt = {
   id: number;
+  name?: string;
   prompt: string;
   images: string[];
   config?: import("./lab-config").LabConfig;
@@ -21,6 +22,7 @@ export type ProductionLabPrompt = {
   imageType?: "ready_video";
 };
 type SavedPrompt = {
+  name?: string;
   config?: string | null;
   image_type?: string;
   id: number;
@@ -230,6 +232,7 @@ export async function productionLabPrompt(
   if (!row) return null;
   return {
     id: row.id,
+    name: row.name,
     ...(labConfig(row.config)
       ? { config: labConfig(row.config)!, rawPrompt: row.prompt }
       : {}),

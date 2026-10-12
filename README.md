@@ -189,7 +189,7 @@ tersedia di Jadwal berita. Ukuran asli gambar dipertahankan.
 Gambar diikat ke artikel berita tetapi file/asetnya masuk ke kolam bersama
 `assets` / `output/stock`; stok yang cocok dapat dipakai ulang. Menambah jenis
 gambar hanya membuat lajur yang belum lengkap. Regenerate gambar membuat
-aset baru tanpa menghapus kolam stok atau render yang tidak bergantung padanya.
+mengganti stok dengan identitas yang sama setelah generasi berhasil, tanpa menghapus stok dengan teks berbeda.
 
 Panel berita berisi empat paragraf tanpa header dan satu slide penutup.
 Audio berita memakai Edge TTS per kalimat, default suara Indonesia
@@ -297,3 +297,25 @@ Konten dengan status **published** menyediakan aksi **Post ulang** pada kolom In
 Caption seluruh jenis konten dan platform memakai tag artikel jika tersedia (hashtag tanpa tag tambahan otomatis). Jika tag kosong, caption memakai paragraf pertama saja, tanpa judul, heading, sumber, atau paragraf lain. Caption dibatasi 2.200 karakter Unicode dan ditentukan server agar publikasi manual dan jadwal konsisten.
 
 YouTube dapat memakai channel yang dihubungkan melalui menu Integrasi NC-WA. Daftar akun tujuan menggabungkan channel NC-WA dan akun Zernio; autentikasi/token Google tetap di NC-WA. API key NC-WA di Kredensial memerlukan izin `youtube:accounts:read` dan `youtube:posts:publish` untuk daftar channel dan upload video. Key Instagram lama tanpa izin tersebut tetap dapat dipakai untuk Instagram, tetapi perlu dibuat key baru yang mencakup YouTube. Publikasi YouTube melalui NC-WA memakai video yang sudah tersedia, caption sesuai aturan umum, judul/privasi/pengaturan anak/pengungkapan AI yang disetujui pengguna, dan ID permintaan tetap untuk pemeriksaan status. Tidak ada autentikasi Google di NCPost.
+
+
+## Stok media bersama dan reset stok lama
+
+Gambar produksi memakai `output/stock/<nama-preset>/<nama-preset>__<orientasi>__<teks>.jpg`. Video memakai `output/stock-video/<nama-preset>/<orientasi>/<nama-preset>__<orientasi>__<teks>.mp4`. Audio memakai `output/stock-audio/<penyedia>__<suara>/<penyedia>__<suara>__<narasi>.mp3`. Orientasi `bebas` berarti generasi mengikuti prompt tanpa rasio yang dipaksakan. Nama dasar maksimal 200 karakter, tidak termasuk ekstensi; normalisasi huruf/pemisah dan pemangkasan menentukan identitas stok. Nomor panel, topik, revisi, dan job tidak termasuk identitas.
+
+Pencarian menggunakan nama dasar tanpa ekstensi. Stok yang tersedia dipakai ulang; regenerate menulis file sementara lalu mengganti stok setelah hasil valid. Video dibuat ulang jika sumber gambar/audio atau pengaturan render berubah. `media_stock` menyimpan teks asli, identitas preset, lokasi aktual, dan metadata; urutan panel tetap disimpan dalam manifest konten. Mengganti nama preset memindahkan stok gambar/video terkait dan memperbarui referensi database.
+
+Untuk server yang masih berisi stok lama, jalankan migrasi skema dahulu, kemudian periksa rencana reset:
+
+```sh
+npm run migrate
+npm run reset:media -- --dry-run
+```
+
+Setelah menghentikan aplikasi web dan seluruh worker, terapkan reset:
+
+```sh
+npm run reset:media -- --apply --services-stopped
+```
+
+Reset menolak job yang masih berjalan, mencadangkan data database dan direktori media ke `output/media-backups/<waktu>/`, lalu membersihkan stok dan hasil produksi. Artikel, topik, preset, referensi/logo, pengaturan, akun, kredensial, jadwal, dan riwayat posting eksternal tetap dipertahankan. Cadangan tidak dihapus otomatis. Jika reset berhenti akibat proses/server mati, jangan langsung menjalankan ulang: periksa cadangan dan penanda `data/media-reset.guard` dahulu. Skrip ini terpisah dari migrasi skema agar pembaruan aplikasi tidak otomatis menghapus media.

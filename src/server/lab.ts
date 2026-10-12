@@ -1,3 +1,5 @@
+import { stockPart } from "./media-stock";
+import { renamePresetStock } from "./preset-stock-rename";
 import { labConfig, labTestPrompt } from "./lab-config";
 import { labImageId, labImageFile, labImageIds } from "./lab-images";
 import { resolveLabPrompt } from "./lab-references";
@@ -99,22 +101,52 @@ export class LabStore {
   async save(input: unknown, id?: number) {
     const draft = labInput(input);
     await Promise.all(draft.referenceImages.map(labImageFile));
-    if (id !== undefined) {
-      const [r]: any = await this.db.query(
-        "UPDATE lab_prompts SET name=?,prompt=?,reference_key=?,reference_image=?,logo_image=?,reference_images=?,image_type=?,config=? WHERE id=? AND kind=?",
-        [
-          draft.name,
-          draft.prompt,
-          draft.referenceKey,
-          draft.referenceImage,
-          draft.logoImage,
-          JSON.stringify(draft.referenceImages),
-          draft.imageType,
-          draft.config ? JSON.stringify(draft.config) : null,
-          id,
-          draft.kind,
-        ],
+    if (draft.kind === "image") {
+      const [presets]: any = await this.db.query(
+        "SELECT id,name FROM lab_prompts WHERE kind='image'",
       );
+      if (
+        presets.some(
+          (preset: any) =>
+            preset.id !== id &&
+            stockPart(preset.name) === stockPart(draft.name),
+        )
+      )
+        throw Error("Nama folder preset sudah digunakan preset gambar lain");
+    }
+    if (id !== undefined) {
+      const update = (db: Pick<mysql.Pool, "query">) =>
+        db.query(
+          "UPDATE lab_prompts SET name=?,prompt=?,reference_key=?,reference_image=?,logo_image=?,reference_images=?,image_type=?,config=? WHERE id=? AND kind=?",
+          [
+            draft.name,
+            draft.prompt,
+            draft.referenceKey,
+            draft.referenceImage,
+            draft.logoImage,
+            JSON.stringify(draft.referenceImages),
+            draft.imageType,
+            draft.config ? JSON.stringify(draft.config) : null,
+            id,
+            draft.kind,
+          ],
+        );
+      const [previous]: any = await this.db.query(
+        "SELECT name FROM lab_prompts WHERE id=? AND kind=?",
+        [id, draft.kind],
+      );
+      const [r]: any =
+        draft.kind === "image" &&
+        previous[0]?.name &&
+        previous[0].name !== draft.name
+          ? await renamePresetStock(
+              this.db,
+              id,
+              previous[0].name,
+              draft.name,
+              update,
+            )
+          : await update(this.db);
       if (!r.affectedRows) throw Error("Prompt Lab tidak ditemukan");
       return id;
     }

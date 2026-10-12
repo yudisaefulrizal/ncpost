@@ -1,3 +1,4 @@
+import { outputRoot } from "../src/server/output-paths";
 import { afterEach, expect, it, vi } from "vitest";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
@@ -31,6 +32,13 @@ afterEach(async () => {
   );
 });
 async function fixture() {
+  vi.stubEnv("NCPOST_TEST", "true");
+  dirs.push(
+    path.join(outputRoot(), "stock", "gambar-siap-posting"),
+    path.join(outputRoot(), "stock", "image-horizontal"),
+    path.join(outputRoot(), "stock", "image-lab-5-v"),
+    path.join(outputRoot(), "stock", "image-lab-1-v"),
+  );
   const work = await mkdtemp(path.join(os.tmpdir(), "ncpost-ready-post-"));
   dirs.push(work);
   const generate = vi.fn(
@@ -135,12 +143,12 @@ it("single direct image preserves native dimensions and text without padding or 
   expect(generate.mock.calls[0][0]).not.toContain("1080 × 1350");
   expect(generate.mock.calls[0][0]).toContain(lab.prompt);
   expect((generate.mock.calls[0] as any)[4]).toEqual(lab.images);
-  expect(await sharp(file).metadata()).toMatchObject({
+  expect(await sharp(result.file).metadata()).toMatchObject({
     width: 400,
     height: 300,
     format: "jpeg",
   });
-  const pixel = await sharp(file)
+  const pixel = await sharp(result.file)
     .extract({ left: 0, top: 0, width: 1, height: 1 })
     .raw()
     .toBuffer();
@@ -174,7 +182,9 @@ it("carousel generates each paragraph and a closing slide with the same static r
   expect(labFor).toHaveBeenCalledOnce();
   for (const call of generate.mock.calls)
     expect(call[0]).not.toContain("__NCPOST_SLIDE_");
-  expect(result.closing).toContain("03-slide-penutup.jpg");
+  expect(result.closing).toContain(
+    "__simpan-postingan-ini-untuk-dibaca-kembali-buku-contoh.jpg",
+  );
   expect(await sharp(result.closing).metadata()).toMatchObject({
     width: 1080,
     height: 1350,

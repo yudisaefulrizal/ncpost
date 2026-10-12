@@ -2008,7 +2008,7 @@ function App() {
                         <audio
                           controls
                           preload="none"
-                          src={`/api/audio-kalimat/${listeningSentence.id}/${x.file}?v=${m.renderedAt}`}
+                          src={`/api/audio-kalimat/${listeningSentence.id}/${encodeURIComponent(x.file)}?v=${m.renderedAt}`}
                         />
                         <p className="muted small">{x.narration_text}</p>
                       </li>
@@ -2196,14 +2196,14 @@ function DetailView(p: any) {
     ? [
         ...rendered.panels.map((x: any, i: number) => ({
           label: String(i + 1),
-          src: `/api/panels/${detail.id}/${x.file}?v=${rendered.renderedAt}`,
+          src: `/api/panels/${detail.id}/${encodeURIComponent(x.file)}?v=${rendered.renderedAt}`,
           alt: `Slide ${i + 1}${rendered.mode === "direct" ? " · siap posting" : ` · template ${x.template}`}`,
         })),
         ...(rendered.closing
           ? [
               {
                 label: "CTA",
-                src: `/api/panels/${detail.id}/${rendered.closing}?v=${rendered.renderedAt}`,
+                src: `/api/panels/${detail.id}/${encodeURIComponent(rendered.closing)}?v=${rendered.renderedAt}`,
                 alt: "Slide penutup",
               },
             ]
@@ -3923,7 +3923,7 @@ function PanelContent({
             </div>
             <div className="panel-strip">
               {files.map((f: string, i: number) => {
-                const src = `/api/panels/${c.id}/${f}?v=${m.renderedAt}`;
+                const src = `/api/panels/${c.id}/${encodeURIComponent(f)}?v=${m.renderedAt}`;
                 return (
                   <a key={f} href={src} target="_blank" rel="noreferrer">
                     <img
@@ -4188,7 +4188,7 @@ function PanelModal({ c, onClose }: { c: any; onClose: () => void }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, []);
-  const src = (f: string) => `/api/panels/${c.id}/${f}?v=${m.renderedAt}`;
+  const src = (f: string) => `/api/panels/${c.id}/${encodeURIComponent(f)}?v=${m.renderedAt}`;
   const label = (n: number) =>
     n < m.panels.length ? `Panel ${n + 1}` : "Slide penutup";
   return (
@@ -4284,7 +4284,7 @@ function PostModal({
         {files.map((f) => (
           <img
             key={f}
-            src={`/api/panels/${c.id}/${f}?v=${m.renderedAt}`}
+            src={`/api/panels/${c.id}/${encodeURIComponent(f)}?v=${m.renderedAt}`}
             alt=""
           />
         ))}

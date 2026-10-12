@@ -9,12 +9,12 @@ import {
 } from "./book-settings";
 export const NEWS_MEDIA_STAGES = [
   ["POST_IMAGE", "Gambar per seluruh teks"],
-  ["IMAGES_PANEL", "Gambar Panel"],
+  ["IMAGES_PANEL", "Gambar carousel"],
   ["IMAGES_VIDEO", "Gambar Video"],
   ["TTS_KALIMAT", "Audio"],
   ["VIDEO_KALIMAT", "Video V"],
   ["VIDEO_KALIMAT_H", "Video H"],
-  ["PANEL", "Panel"],
+  ["PANEL", "Carousel"],
   ["POST_IG", "Post IG"],
   ["REELS_IG", "Reels IG"],
 ] as const;

@@ -1,3 +1,5 @@
+import path from "node:path";
+import { outputRoot } from "../src/server/output-paths";
 import { afterEach, expect, it, vi } from "vitest";
 import { rm } from "node:fs/promises";
 import sharp from "sharp";
@@ -147,7 +149,14 @@ it("passes the saved static attachment and tuned prompt to a real production ima
     { ...vars, teks: vars.artikel },
   );
   expect(lab?.images).toEqual([image]);
-  const generate = vi.fn().mockResolvedValue({ width: 10, height: 15 });
+  const generate = vi.fn(async (_prompt, _cwd, file) => {
+    await sharp({
+      create: { width: 10, height: 15, channels: 3, background: "white" },
+    })
+      .jpeg()
+      .toFile(file);
+    return { width: 10, height: 15, thread: "fixture", output: file };
+  });
   const chapter = {
     id: 991282,
     book: "__test-lab-production",
@@ -173,6 +182,10 @@ it("passes the saved static attachment and tuned prompt to a real production ima
     );
   } finally {
     await rm(chapterDir(chapter), { recursive: true, force: true });
+    await rm(path.join(outputRoot(), "stock", "lab-5"), {
+      recursive: true,
+      force: true,
+    });
   }
 });
 

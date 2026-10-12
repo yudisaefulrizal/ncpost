@@ -43,6 +43,7 @@ export async function collectCodexImage(
   const parsed = events
     .trim()
     .split("\n")
+    .filter((x) => x.trim())
     .map((x) => JSON.parse(x));
   if (
     parsed.some(
@@ -57,22 +58,63 @@ export async function collectCodexImage(
   if (typeof thread !== "string" || !/^[-a-f0-9]{36}$/.test(thread))
     throw Error("Thread image tidak valid");
   const root = path.join(opts.home, ".codex/generated_images", thread);
-  const actual = await realpath(root);
+  const actual = await realpath(root).catch((error) => {
+    if (error.code === "ENOENT")
+      throw Error(
+        `Hasil gambar belum tersedia: folder thread ${thread} tidak ditemukan`,
+      );
+    throw error;
+  });
   if (actual !== root) throw Error("Image directory symlink ditolak");
   const candidates = [];
+  let stale = 0,
+    empty = 0;
   for (const name of await readdir(root)) {
     if (!name.endsWith(".png")) continue;
     const file = path.join(root, name),
       st = await lstat(file);
     if (st.isSymbolicLink() || !st.isFile())
       throw Error("Image symlink ditolak");
-    if (st.mtimeMs >= opts.startedAt && st.size > 0) candidates.push(file);
+    if (!st.size) empty++;
+    else if (st.mtimeMs < opts.startedAt) stale++;
+    else candidates.push(file);
   }
-  if (candidates.length !== 1)
-    throw Error("PNG nyata dan fresh tidak tersedia atau ambigu");
-  const meta = await sharp(candidates[0]).metadata();
+  if (!candidates.length)
+    throw Error(
+      `Hasil gambar tidak tersedia: 0 PNG baru, ${stale} PNG lama, ${empty} PNG kosong (thread ${thread})`,
+    );
+  // Final text disambiguates only files already verified in this exact thread.
+  // Never use an arbitrary claimed path, or choose a file by newest timestamp.
+  const finalText = parsed
+    .filter(
+      (x) => x.type === "item.completed" && x.item?.type === "agent_message",
+    )
+    .at(-1)?.item.text;
+  const referenced =
+    typeof finalText === "string"
+      ? candidates.filter(
+          (file) =>
+            finalText.includes(file) &&
+            !/[\w.\/-]/.test(finalText[finalText.indexOf(file) - 1] || "") &&
+            !/[\w.\/-]/.test(
+              finalText[finalText.indexOf(file) + file.length] || "",
+            ),
+        )
+      : [];
+  if (candidates.length > 1 && referenced.length !== 1)
+    throw Error(
+      `Hasil gambar ambigu: ${candidates.length} PNG baru, jawaban akhir tidak menunjuk satu file valid (thread ${thread})`,
+    );
+  const source = candidates.length === 1 ? candidates[0] : referenced[0];
+  const meta = await sharp(source)
+    .metadata()
+    .catch(() => {
+      throw Error(
+        `Hasil gambar rusak atau tidak dapat dibaca (thread ${thread})`,
+      );
+    });
   if (meta.format !== "png" || !meta.width || !meta.height)
-    throw Error("Orientasi stok tidak sesuai");
+    throw Error(`Hasil gambar bukan PNG valid (thread ${thread})`);
   // Orientasi bebas (gambar quote): ukuran asli Codex dipertahankan.
   const free = opts.orientation === "bebas";
   const posting = opts.orientation === "posting";
@@ -95,7 +137,7 @@ export async function collectCodexImage(
   // Disimpan sebagai JPEG: PNG 1920×1080 dari Codex ±4 MB, JPEG ±0,4 MB.
   await writeFile(
     opts.output,
-    await sharp(candidates[0])
+    await sharp(source)
       .resize(
         width,
         height,

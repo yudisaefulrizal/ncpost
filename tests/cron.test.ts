@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { intervalDue, cronJobs, normalizeCron } from "../src/server/cron";
+import {
+  CRON_TYPES,
+  intervalDue,
+  cronJobs,
+  normalizeCron,
+} from "../src/server/cron";
 import { DEFAULT_BOOK_SETTINGS } from "../src/server/book-settings";
 import type { Chapter } from "../src/server/store";
 
@@ -150,4 +155,30 @@ it("validates batch sizes", () => {
       }),
     ).toThrow("Jumlah konten");
   }
+});
+
+it("jadwal Carousel tetap menjalankan PANEL saat stok siap atau mode siap posting", () => {
+  expect(CRON_TYPES.find(([kind]) => kind === "PANEL")?.[1]).toBe("Carousel");
+  const template = {
+    ...DEFAULT_BOOK_SETTINGS,
+    panelHorizontal: "IMAGE_HORIZONTAL",
+    panelVertical: null,
+    imageUnit: "paragraph" as const,
+  };
+  expect(
+    cronJobs(
+      "PANEL",
+      chapter({ stock_counts: { IMAGE_HORIZONTAL: 6 } }),
+      template,
+    ),
+  ).toEqual(["PANEL"]);
+  expect(
+    cronJobs("PANEL", chapter(), { ...template, carouselMode: "direct" }),
+  ).toEqual(["PANEL"]);
+  expect(
+    cronJobs("PANEL", chapter({ panels: "{}" }), {
+      ...template,
+      carouselMode: "direct",
+    }),
+  ).toEqual([]);
 });

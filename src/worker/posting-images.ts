@@ -1,3 +1,4 @@
+import { sharedMedia } from "../server/media-stock";
 import { fillVariables } from "../server/content-contract";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -24,10 +25,12 @@ export async function generateReadyPost({
   title,
   text,
   style,
+  kind,
   lab,
   index,
   total,
   context,
+  force = false,
   generate = generateCodexImage,
 }: {
   file: string;
@@ -35,10 +38,12 @@ export async function generateReadyPost({
   title: string;
   text: string;
   style?: string;
+  kind?: string;
   lab?: ProductionLabPrompt | null;
   index?: number;
   total?: number;
   context?: string;
+  force?: boolean;
   generate?: typeof generateCodexImage;
 }) {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -56,23 +61,36 @@ export async function generateReadyPost({
           total,
           context,
         );
-  const raw = path.join(work, `${path.basename(file)}.original.jpg`);
-  await generate(
+  const source = await sharedMedia({
+    category: "image",
+    identity: [
+      lab?.name || kind || "gambar-siap-posting",
+      (total ?? 1) > 1 ? "vertikal" : "bebas",
+    ],
+    text,
+    presetId: lab?.id,
     prompt,
-    work,
-    raw,
-    "bebas",
-    ...(lab ? ([lab.images] as [string[]]) : []),
-  );
-  // Only carousel slides share a fixed canvas; single images keep their native size.
-  const image = sharp(raw).rotate();
-  if (!lab?.config && (total ?? 1) > 1)
-    image.resize(1080, 1350, { fit: "contain", background: "#ffffff" });
-  const meta = await image
-    .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-    .toFile(file);
+    force,
+    generate: async (temporary) => {
+      const raw = path.join(work, "posting-original.jpg");
+      await generate(
+        prompt,
+        work,
+        raw,
+        "bebas",
+        ...(lab ? ([lab.images] as [string[]]) : []),
+      );
+      const image = sharp(raw).rotate();
+      if (!lab?.config && (total ?? 1) > 1)
+        image.resize(1080, 1350, { fit: "contain", background: "#ffffff" });
+      await image
+        .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
+        .toFile(temporary);
+    },
+  });
+  const meta = await sharp(source).metadata();
   return {
-    file,
+    file: source,
     prompt,
     width: meta.width,
     height: meta.height,
@@ -88,6 +106,7 @@ export async function generateDirectCarousel({
   footer,
   kind,
   labFor,
+  force = false,
   generate = generateCodexImage,
   filePrefix = "",
   variables,
@@ -101,6 +120,7 @@ export async function generateDirectCarousel({
   footer: string;
   kind: string;
   labFor: (kind: string, text: string) => Promise<ProductionLabPrompt | null>;
+  force?: boolean;
   generate?: typeof generateCodexImage;
 }) {
   if (!paragraphs.length) throw Error("Carousel membutuhkan teks");
@@ -136,20 +156,22 @@ export async function generateDirectCarousel({
           images: [...snapshot.images],
         }
       : null;
-    await generateReadyPost({
+    const image = await generateReadyPost({
       file,
       work,
       title,
       text,
       lab,
+      kind,
       style: lab ? undefined : stockPrompt(kind, title, text),
       index: i + 1,
       total: texts.length,
       context: paragraphs.join("\n\n"),
       generate,
+      force,
     });
-    if (!snapshot?.config && i === texts.length - 1) closing = file;
-    else panels.push({ file, template: "direct" });
+    if (!snapshot?.config && i === texts.length - 1) closing = image.file;
+    else panels.push({ file: image.file, template: "direct" });
   }
   return {
     panels,
@@ -167,6 +189,7 @@ export async function generateTemplatePost({
   footer,
   kind,
   lab,
+  force = false,
   generate = generateCodexImage,
 }: {
   file: string;
@@ -176,21 +199,35 @@ export async function generateTemplatePost({
   footer: string;
   kind: string;
   lab?: ProductionLabPrompt | null;
+  force?: boolean;
   generate?: typeof generateCodexImage;
 }) {
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   const prompt = `${lab?.prompt || stockPrompt(kind, title, text)}\n\nBuat hanya ilustrasi untuk latar konten. Jangan menambahkan teks, judul, atau huruf; teks ditambahkan melalui template.`;
-  const raw = path.join(work, `${path.basename(file)}.background.jpg`);
-  await generate(
+  const source = await sharedMedia({
+    category: "image",
+    identity: [lab?.name || kind, "vertikal"],
+    text,
+    presetId: lab?.id,
     prompt,
-    work,
-    raw,
-    "horizontal",
-    ...(lab ? ([lab.images] as [string[]]) : []),
-  );
-  writeFileSync(file, await renderSinglePost(title, text, footer, raw));
+    force,
+    generate: async (temporary) => {
+      const raw = path.join(work, "template-background.jpg");
+      await generate(
+        prompt,
+        work,
+        raw,
+        "horizontal",
+        ...(lab ? ([lab.images] as [string[]]) : []),
+      );
+      writeFileSync(
+        temporary,
+        await renderSinglePost(title, text, footer, raw),
+      );
+    },
+  });
   return {
-    file,
+    file: source,
     prompt,
     width: 1080,
     height: 1350,

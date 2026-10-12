@@ -1,3 +1,4 @@
+import { resolveMedia } from "./media-stock";
 import { youtubePublishInput } from "./youtube-publish";
 import {
   socialAccounts,
@@ -56,7 +57,7 @@ async function mediaLibrary(store: Store) {
         tags: socialTags(c.article, c.content_engine),
         key: `book:${c.id}:${orientation}`,
         title: `${c.book} · ${c.title} · ${orientation.toUpperCase()}`,
-        files: [path.join(chapterDir(c), m.file)],
+        files: [resolveMedia(m.file, chapterDir(c))],
         mediaType: "video",
         previews: [
           `/api/video-kalimat${orientation === "h" ? "-h" : ""}/${c.id}/video-${orientation}.mp4`,
@@ -77,7 +78,7 @@ async function mediaLibrary(store: Store) {
           tags: socialTags(c.article, c.content_engine),
           key: `book:${c.id}:photo`,
           title: `${c.book} · ${c.title} · Carousel`,
-          files: files.map((f) => path.join(panelDir(c), f)),
+          files: files.map((f) => resolveMedia(f, panelDir(c))),
           previews: files.map(
             (f) => `/api/panels/${c.id}/${encodeURIComponent(f)}`,
           ),

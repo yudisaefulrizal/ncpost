@@ -1,3 +1,4 @@
+import { configureMediaStock, resolveMedia } from "./media-stock";
 import { listUpcomingCrons } from "./cron-upcoming";
 import { shiftAllCrons } from "./cron-shift";
 import { loadCronGuide, saveCronGuide } from "./cron-guide-store";
@@ -79,13 +80,11 @@ app.use((req, res, next) => {
 // Hanya nama acak 128-bit di output/public, tidak ada traversal atau listing.
 app.get("/pub/:name", (req, res) => {
   const name = String(req.params.name);
-  const m = /^[a-f0-9]{32}\.(mp4|jpg)$/.exec(name);
+  const m = /^[a-f0-9]{32}\.(mp4|m4v|mov|webm|jpg|jpeg|png|webp)$/.exec(name);
   if (!m) return void res.sendStatus(404);
-  res
-    .type(m[1] === "jpg" ? "image/jpeg" : "video/mp4")
-    .sendFile(path.join(ROOT, "output/public", name), (e) =>
-      e && !res.headersSent ? res.sendStatus(404) : undefined,
-    );
+  res.sendFile(path.join(ROOT, "output/public", name), (e) =>
+    e && !res.headersSent ? res.sendStatus(404) : undefined,
+  );
 });
 let store: Store;
 let vite: any;
@@ -386,9 +385,7 @@ app.get("/api/news/:id/media/:kind/:index", async (req, res) => {
           ? m?.file
           : null;
   if (typeof file !== "string") return void res.sendStatus(404);
-  res.sendFile(
-    safeFile(path.join(outputRoot(), "berita/media"), path.join(ROOT, file)),
-  );
+  res.sendFile(safeFile(outputRoot(), path.join(ROOT, file)));
 });
 app.post("/api/news", async (_, res) =>
   res.status(201).json({ id: await new NewsStore(store.db).create() }),
@@ -603,23 +600,49 @@ function chapterFile(
 ) {
   app.get(route, async (req, res) => {
     const file = String(req.params.file ?? "quote.jpg");
-    if (!/^\d+$/.test(String(req.params.id)) || !allowed.test(file))
+    if (
+      !/^\d+$/.test(String(req.params.id)) ||
+      (!allowed.test(file) && !file.startsWith("output/stock"))
+    )
       return void res.sendStatus(404);
     const c = await store.chapter(Number(req.params.id));
     if (!c) return void res.sendStatus(404);
+    if (file.startsWith("output/stock")) {
+      const manifests = [
+        c.panels,
+        c.sentence_audio,
+        c.text_image,
+        c.quote_image,
+      ]
+        .filter(Boolean)
+        .map((x) => JSON.parse(x!));
+      const referenced = manifests.some(
+        (m) =>
+          m.file === file ||
+          m.closing === file ||
+          [...(m.panels || []), ...(m.sentences || [])].some(
+            (x) => x.file === file,
+          ),
+      );
+      if (!referenced) return void res.sendStatus(404);
+    }
     res.sendFile(safeFile(outputRoot(), resolve(c, file)));
   });
 }
 chapterFile(
   "/api/audio-kalimat/:id/:file",
   /^kalimat_\d{2,}\.mp3$/,
-  (c, file) => path.join(audioDir(c), file),
+  (c, file) => resolveMedia(file, audioDir(c)),
 );
 chapterFile("/api/video-kalimat-h/:id/:file", /^video-h\.mp4$/, (c, file) =>
-  path.join(chapterDir(c), file),
+  c.sentence_video_h
+    ? resolveMedia(JSON.parse(c.sentence_video_h).file, chapterDir(c))
+    : path.join(chapterDir(c), file),
 );
 chapterFile("/api/video-kalimat/:id/:file", /^video-v\.mp4$/, (c, file) =>
-  path.join(chapterDir(c), file),
+  c.sentence_video
+    ? resolveMedia(JSON.parse(c.sentence_video).file, chapterDir(c))
+    : path.join(chapterDir(c), file),
 );
 app.get("/api/text-image/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -629,18 +652,21 @@ app.get("/api/text-image/:id", async (req, res) => {
   const image = JSON.parse(c.text_image);
   if (
     typeof image.file !== "string" ||
-    !/^gambar-teks-r\d+-j\d+\.jpg$/.test(image.file)
+    (!/^gambar-teks-r\d+-j\d+\.jpg$/.test(image.file) &&
+      !image.file.startsWith("output/stock/"))
   )
     return void res.sendStatus(404);
-  res
-    .type("jpg")
-    .sendFile(safeFile(outputRoot(), path.join(chapterDir(c), image.file)));
+  res.sendFile(safeFile(outputRoot(), resolveMedia(image.file, chapterDir(c))));
 });
-chapterFile("/api/quote-image/:id", /^quote\.jpg$/, (c) => quoteImagePath(c));
+chapterFile("/api/quote-image/:id", /^quote\.jpg$/, (c) =>
+  c.quote_image
+    ? resolveMedia(JSON.parse(c.quote_image).file, chapterDir(c))
+    : quoteImagePath(c),
+);
 chapterFile(
   "/api/panels/:id/:file",
   /^(?:direct-r\d+-j\d+-)?0[1-7]-(panel|slide-penutup)\.(jpg|png)$/,
-  (c, file) => path.join(panelDir(c), file),
+  (c, file) => resolveMedia(file, panelDir(c)),
 );
 app.get("/api/media/:job/:file", (req, res) => {
   if (
@@ -692,7 +718,7 @@ app.get("/api/stock/:id/image", async (req, res) => {
     : undefined;
   if (!a) return void res.sendStatus(404);
   res.sendFile(
-    safeFile(path.join(ROOT, "output/stock"), path.join(ROOT, a.file)),
+    safeFile(path.join(outputRoot(), "stock"), path.join(ROOT, a.file)),
   );
 });
 app.get("/api/settings", async (_, res) => {
@@ -787,6 +813,7 @@ app.use(
 );
 const server = app.listen(8072, "127.0.0.1", async () => {
   store = new Store();
+  configureMediaStock(store.db);
   if (process.env.NODE_ENV !== "production") {
     const { createServer } = await import("vite");
     vite = await createServer({

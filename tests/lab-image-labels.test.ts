@@ -22,14 +22,26 @@ it("image labels default to illustration, validate values, and are unavailable t
   ).toThrow("hanya untuk Lab Gambar");
 });
 it("test runs snapshot the image label and saved prompts retain it", async () => {
-  const query = vi.fn().mockResolvedValue([{ insertId: 5, affectedRows: 1 }]);
+  const query = vi.fn(async (sql: string, args?: any[]) =>
+    sql.startsWith("SELECT") ? [[]] : [{ insertId: 5, affectedRows: 1 }],
+  );
   const store = new LabStore({ query } as any);
   await store.save({ ...input, imageType: "ready_post" });
-  expect(query.mock.calls[0][1]?.at(-2)).toBe("ready_post");
+  expect(
+    query.mock.calls
+      .find(([sql]) => sql.startsWith("INSERT INTO lab_prompts"))?.[1]
+      ?.at(-2),
+  ).toBe("ready_post");
   await store.enqueue({ ...input, imageType: "ready_post" });
-  expect(query.mock.calls[1][1]?.at(-2)).toBe("ready_post");
+  expect(
+    query.mock.calls
+      .find(([sql]) => sql.startsWith("INSERT INTO lab_runs"))?.[1]
+      ?.at(-2),
+  ).toBe("ready_post");
   await store.save({ ...input, imageType: "illustration" }, 5);
-  expect(query.mock.calls[2][1]).toContain("illustration");
+  expect(
+    query.mock.calls.find(([sql]) => sql.startsWith("UPDATE lab_prompts"))?.[1],
+  ).toContain("illustration");
 });
 it("labels determine production automatically even if submitted modes contradict them", () => {
   const selected = {

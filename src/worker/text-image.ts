@@ -1,8 +1,8 @@
+import { sharedMedia } from "../server/media-stock";
+import sharp from "sharp";
 import type { ProductionLabPrompt } from "../server/lab-production";
-import path from "node:path";
-import { mkdirSync } from "node:fs";
 import { generateCodexImage } from "../server/codex-image";
-import { chapterDir, type ChapterRef } from "../server/output-paths";
+import { type ChapterRef } from "../server/output-paths";
 export function wholeTextImagePrompt(text: string) {
   if (!text.trim()) throw Error("Teks artikel wajib diisi");
   return `buat menjadi infografis\n\n${text.trim()}`;
@@ -15,17 +15,26 @@ export async function generateWholeTextImage(
   jobId: number,
   generate = generateCodexImage,
   lab?: ProductionLabPrompt | null,
+  force = false,
 ) {
   const prompt = lab?.prompt || wholeTextImagePrompt(article);
-  const file = `gambar-teks-r${revision}-j${jobId}.jpg`;
-  mkdirSync(chapterDir(chapter), { recursive: true, mode: 0o700 });
-  const meta = await generate(
+  const file = await sharedMedia({
+    category: "image",
+    identity: [lab?.name || (lab ? `lab-${lab.id}` : "infografis"), "bebas"],
+    text: article,
+    presetId: lab?.id,
     prompt,
-    work,
-    path.join(chapterDir(chapter), file),
-    "bebas",
-    ...(lab ? ([lab.images] as [string[]]) : []),
-  );
+    force,
+    generate: (temporary) =>
+      generate(
+        prompt,
+        work,
+        temporary,
+        "bebas",
+        ...(lab ? ([lab.images] as [string[]]) : []),
+      ),
+  });
+  const meta = await sharp(file).metadata();
   return {
     file,
     prompt,

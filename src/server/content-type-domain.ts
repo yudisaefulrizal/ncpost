@@ -8,12 +8,12 @@ export const CONTENT_OUTPUTS = [
   ["QUOTE", "Quote"],
   ["QUOTE_IMAGE", "Gambar Quote"],
   ["POST_IMAGE", "Gambar per seluruh teks"],
-  ["IMAGES_PANEL", "Gambar Panel"],
+  ["IMAGES_PANEL", "Gambar carousel"],
   ["IMAGES_VIDEO", "Gambar Video"],
   ["TTS_KALIMAT", "Audio"],
   ["VIDEO_KALIMAT", "Video V"],
   ["VIDEO_KALIMAT_H", "Video H"],
-  ["PANEL", "Panel"],
+  ["PANEL", "Carousel"],
 ] as const;
 export const FINAL_OUTPUTS = [
   ["VIDEO_KALIMAT", "Video vertikal"],

@@ -273,7 +273,7 @@ export function QuoteProduction({
                 <audio
                   key={i}
                   controls
-                  src={`/api/audio-kalimat/${current.id}/${s.file}`}
+                  src={`/api/audio-kalimat/${current.id}/${encodeURIComponent(s.file)}`}
                 />
               ))}
             </div>

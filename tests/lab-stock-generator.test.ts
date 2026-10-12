@@ -52,7 +52,9 @@ it("generates a Lab lane with its exact prompt, static attachments, and orientat
     );
     expect(store.addAsset).toHaveBeenCalledWith(
       kind,
-      expect.stringContaining(`output/stock/${kind}/`),
+      expect.stringContaining(
+        `output/stock/${kind.toLowerCase().replaceAll("_", "-")}/`,
+      ),
       "Kalimat produksi",
       expect.stringContaining("Gaya merek"),
     );

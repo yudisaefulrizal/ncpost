@@ -181,3 +181,62 @@ it("ready-post collection produces 4:5 without cropping source text", async () =
     await rm(home, { recursive: true, force: true });
   }
 });
+
+it("selects the final referenced fresh image and refuses ambiguous, old or outside references", async () => {
+  const home = await mkdtemp(
+    path.join(process.cwd(), "data/ncpost-image-test-"),
+  );
+  try {
+    const dir = path.join(home, ".codex/generated_images", thread);
+    await mkdir(dir, { recursive: true });
+    const first = path.join(dir, "first.png");
+    const final = path.join(dir, "final.png");
+    for (const [file, background] of [
+      [first, "red"],
+      [final, "blue"],
+    ]) {
+      await writeFile(
+        file,
+        await sharp({
+          create: { width: 48, height: 32, channels: 3, background },
+        })
+          .png()
+          .toBuffer(),
+      );
+    }
+    const opts = {
+      home,
+      output: path.join(home, "out.jpg"),
+      startedAt: Date.now() - 2000,
+      orientation: "bebas" as const,
+    };
+    const withFinal = (text: string) =>
+      events() +
+      "\n" +
+      JSON.stringify({
+        type: "item.completed",
+        item: { type: "agent_message", text },
+      });
+    await expect(collectCodexImage(events(), opts)).rejects.toThrow(
+      /ambigu: 2 PNG/,
+    );
+    await expect(
+      collectCodexImage(withFinal(path.join(home, "outside.png")), opts),
+    ).rejects.toThrow(/ambigu/);
+    await expect(
+      collectCodexImage(withFinal(`${first}\n${final}`), opts),
+    ).rejects.toThrow(/ambigu/);
+    await collectCodexImage(withFinal(`\`${final}\``), opts);
+    const pixel = await sharp(opts.output).raw().toBuffer();
+    expect(pixel[2]).toBeGreaterThan(240);
+    expect(pixel[0]).toBeLessThan(15);
+    const { utimes } = await import("node:fs/promises");
+    await utimes(first, new Date(0), new Date(0));
+    await utimes(final, new Date(0), new Date(0));
+    await expect(collectCodexImage(withFinal(final), opts)).rejects.toThrow(
+      /0 PNG baru, 2 PNG lama/,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

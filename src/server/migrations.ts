@@ -10,6 +10,9 @@ export async function migrateDatabase(connection: Connection) {
   await connection.query(
     readFileSync(path.join(ROOT, "src/server/schema.sql"), "utf8"),
   );
+  await connection.query(
+    "ALTER TABLE assets MODIFY COLUMN description MEDIUMTEXT NOT NULL",
+  );
   const [newsOutputIndexes] = (await connection.query(
     "SHOW INDEX FROM news_media_outputs WHERE Key_name='PRIMARY'",
   )) as any;
@@ -36,6 +39,7 @@ export async function migrateDatabase(connection: Connection) {
     );
   }
   for (const [table, column, definition] of [
+    ["media_stock", "metadata", "MEDIUMTEXT NULL"],
     ["content_types", "deleted_at", "DATETIME NULL"],
     ["jobs", "queue_cleared_at", "DATETIME NULL"],
     ["news_articles", "queue_cleared_at", "DATETIME NULL"],

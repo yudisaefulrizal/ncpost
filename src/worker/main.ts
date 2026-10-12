@@ -1,3 +1,10 @@
+import { existsSync } from "node:fs";
+import {
+  configureMediaStock,
+  sharedMedia,
+  sharedVideo,
+  resolveMedia,
+} from "../server/media-stock";
 import { sendInstagramPublication } from "./instagram-publication";
 import { finishProcessTiming } from "../server/process-timing";
 import { timingStage } from "../server/process-timing-domain";
@@ -87,9 +94,10 @@ import {
   videoPath,
 } from "../server/output-paths";
 import { panelHeading, stripMarkdownEmphasis } from "../server/stock-prompts";
-import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
+import { panelTokens, tokenize } from "../server/stock-match";
 initConfig();
 const store = new Store();
+configureMediaStock(store.db);
 const newsStore = new NewsStore(store.db);
 const labStore = new LabStore(store.db);
 const newsMediaStore = new NewsMediaStore(store.db);
@@ -201,22 +209,26 @@ async function pollPosts() {
 }
 // Panel disalin ke output/public dengan nama tetap per hasil render, sehingga
 // permintaan ulang memakai URL yang sama (idempoten di NC-WA).
-function publicPanels(c: Chapter) {
+async function publicPanels(c: Chapter) {
   const m = JSON.parse(c.panels!);
   const origin = process.env.PUBLIC_ORIGIN || "https://ncpost.nuscode.id";
   const dir = path.join(ROOT, "output/public");
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  return [...m.panels.map((p: any) => p.file), m.closing]
-    .filter(Boolean)
-    .map((file: string) => {
-      const name =
-        createHash("sha256")
-          .update(`${c.id}:${m.renderedAt}:${file}`)
-          .digest("hex")
-          .slice(0, 32) + ".jpg";
-      copyFileSync(path.join(panelDir(c), file), path.join(dir, name));
-      return `${origin}/pub/${name}`;
-    });
+  return Promise.all(
+    [...m.panels.map((p: any) => p.file), m.closing]
+      .filter(Boolean)
+      .map(async (file: string) => {
+        const name =
+          createHash("sha256")
+            .update(`${c.id}:${m.renderedAt}:${file}`)
+            .digest("hex")
+            .slice(0, 32) + ".jpg";
+        await sharp(resolveMedia(file, panelDir(c)))
+          .jpeg({ quality: 90 })
+          .toFile(path.join(dir, name));
+        return `${origin}/pub/${name}`;
+      }),
+  );
 }
 // Video versi upload disalin ke output/public dengan nama tetap per render.
 function publicVideo(c: Chapter) {
@@ -229,7 +241,7 @@ function publicVideo(c: Chapter) {
       .update(`${c.id}:${m.renderedAt}:${m.file}`)
       .digest("hex")
       .slice(0, 32) + ".mp4";
-  copyFileSync(path.join(chapterDir(c), m.file), path.join(dir, name));
+  copyFileSync(resolveMedia(m.file, chapterDir(c)), path.join(dir, name));
   return `${origin}/pub/${name}`;
 }
 async function runJob(job: Job) {
@@ -381,8 +393,6 @@ async function runJob(job: Job) {
         voice: process.env.ELEVENLABS_VOICE_ID ?? "",
       };
       const dir = audioDir(c);
-      rmSync(dir, { recursive: true, force: true });
-      mkdirSync(dir, { recursive: true, mode: 0o700 });
       const sentences = [];
       // Kalimat 1 (paragraf hook) didahului heading hook, seperti panel 1.
       const { heading } = validateContentText(
@@ -396,8 +406,16 @@ async function runJob(job: Job) {
         c.content_engine === "quote",
       ).entries()) {
         const text = ttsNarration(heading, s.text, i === 0);
-        const file = `kalimat_${String(i + 1).padStart(2, "0")}.mp3`;
-        writeFileSync(path.join(dir, file), await tts(text, config));
+        const source = await sharedMedia({
+          category: "audio",
+          identity: ["elevenlabs", config.voice],
+          text,
+          prompt: JSON.stringify({ model: "eleven_v3" }),
+          force: !!job.force_new,
+          generate: async (temporary) =>
+            writeFileSync(temporary, await tts(text, config)),
+        });
+        const file = path.relative(ROOT, source);
         sentences.push({
           sentence: i + 1,
           paragraph: s.paragraph,
@@ -409,6 +427,7 @@ async function runJob(job: Job) {
         sentenceAudio: JSON.stringify({
           provider: "elevenlabs",
           model_id: "eleven_v3",
+          voice: config.voice,
           sentences,
           renderedAt: new Date().toISOString(),
         }),
@@ -452,21 +471,38 @@ async function runJob(job: Job) {
         (horizontal
           ? settings.sentenceVideoHMode
           : settings.sentenceVideoMode) === "direct";
+      const videoLab = await labFor(
+        sentenceVideoKind,
+        sentences.map((s) => s.text).join("\n\n"),
+      );
       if (direct) {
         const slides = sentences.map((_, i) => {
           const binding = stock.find((b) => b.panel === i + 1);
           if (!binding) throw Error(`Gambar kalimat ${i + 1} belum ada`);
           return {
             image: path.join(ROOT, binding.file),
-            audio: path.join(audioDir(c), audio.sentences[i].file),
+            audio: resolveMedia(audio.sentences[i].file, audioDir(c)),
           };
         });
-        const result = await buildImageAudioVideo(
-          slides,
-          videoPath(c, horizontal),
-          work,
-          horizontal ? LANDSCAPE : VERTICAL,
-        );
+        const result = await sharedVideo({
+          preset: videoLab?.name || sentenceVideoKind,
+          presetId: videoLab?.id,
+          horizontal,
+          text: sentences.map((s) => s.text).join("\n\n"),
+          recipe: {
+            mode: "image_audio",
+            format: horizontal ? LANDSCAPE : VERTICAL,
+          },
+          sources: slides.flatMap((s) => [s.image, s.audio]),
+          force: !!job.force_new,
+          generate: (temporary) =>
+            buildImageAudioVideo(
+              slides,
+              temporary,
+              work,
+              horizontal ? LANDSCAPE : VERTICAL,
+            ),
+        });
         const manifest = JSON.stringify({
           ...result,
           source: sentenceVideoKind,
@@ -480,7 +516,7 @@ async function runJob(job: Job) {
         );
         return;
       }
-      const panels = [];
+      const panels: Parameters<typeof buildReels>[0] = [];
       for (const [i, s] of sentences.entries()) {
         const binding = stock.find((b) => b.panel === i + 1);
         if (!binding) throw Error(`Gambar kalimat ${i + 1} belum ada`);
@@ -503,30 +539,38 @@ async function runJob(job: Job) {
         );
         panels.push({
           image,
-          audio: path.join(audioDir(c), audio.sentences[i].file),
+          audio: resolveMedia(audio.sentences[i].file, audioDir(c)),
           layout,
           // Karaoke kalimat 1 menunggu heading hook selesai dibacakan.
           heading: i === 0 ? stripMarkdownEmphasis(hookHeading) : "",
           paragraph: s.text,
         });
       }
-      const outFile = videoPath(c, horizontal);
-      rmSync(outFile, { force: true });
-      mkdirSync(path.dirname(outFile), { recursive: true, mode: 0o700 });
-      // Video vertikal dan horizontal memakai narasi dan jeda yang sama, jadi
-      // audio dan visualizer-nya dibagi lewat cache timeline.
-      let result;
-      try {
-        result = await buildReels(
-          panels,
-          outFile,
-          work,
-          horizontal ? LANDSCAPE : VERTICAL,
-          path.join(ROOT, "output/cache/timeline", String(c.id), "kalimat"),
-        );
-      } finally {
-        rmSync(work, { recursive: true, force: true });
-      }
+      const result = await sharedVideo({
+        preset: videoLab?.name || sentenceVideoKind,
+        presetId: videoLab?.id,
+        horizontal,
+        text: sentences.map((s) => s.text).join("\n\n"),
+        recipe: {
+          mode: "template",
+          format: horizontal ? LANDSCAPE : VERTICAL,
+          heading: hookHeading,
+          label: `${c.book} · Bagian ${part}`,
+        },
+        sources: [
+          ...stock.map((s) => path.join(ROOT, s.file)),
+          ...panels.map((p) => p.audio),
+        ],
+        force: !!job.force_new,
+        generate: (temporary) =>
+          buildReels(
+            panels,
+            temporary,
+            work,
+            horizontal ? LANDSCAPE : VERTICAL,
+            path.join(ROOT, "output/cache/timeline", String(c.id), "kalimat"),
+          ),
+      });
       const manifest = JSON.stringify({
         ...result,
         source: sentenceVideoKind,
@@ -581,6 +625,7 @@ async function runJob(job: Job) {
             ? ""
             : `${c.book} · Bagian ${partNumber(await store.list(), c)}`,
         kind: style,
+        force: !!job.force_new,
         lab,
       };
       const image =
@@ -620,11 +665,12 @@ async function runJob(job: Job) {
                     quote: "",
                   },
                 ),
+                !!job.force_new,
               );
       await store.complete(job.id, {
         textImage: JSON.stringify({
           ...image,
-          file: path.basename(image.file),
+          file: path.relative(ROOT, image.file),
         }),
       });
     } else if (job.kind === "QUOTE_IMAGE") {
@@ -639,30 +685,26 @@ async function runJob(job: Job) {
         ? await labFor(quoteImageStyle, c.quote, c.quote)
         : null;
       const prompt = lab?.prompt || quoteImagePrompt(quoteImageStyle, c.quote);
-      const file = quoteImagePath(c);
-      mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-      let failure = "";
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await generateCodexImage(
+      const file = await sharedMedia({
+        category: "image",
+        identity: [lab?.name || quoteImageStyle, "bebas"],
+        text: c.quote,
+        presetId: lab?.id,
+        prompt,
+        force: !!job.force_new,
+        generate: (temporary) =>
+          generateCodexImage(
             prompt,
             work,
-            file,
+            temporary,
             "bebas",
             ...(lab ? ([lab.images] as [string[]]) : []),
-          );
-          failure = "";
-          break;
-        } catch (e) {
-          failure = (e as Error).message;
-        }
-      }
-      if (failure)
-        throw Error(`Gambar quote gagal setelah 3 percobaan: ${failure}`);
+          ),
+      });
       await store.complete(job.id, {
         quoteImage: JSON.stringify({
           style: quoteImageStyle,
-          file: "quote.jpg",
+          file: path.relative(ROOT, file),
           prompt,
           renderedAt: new Date().toISOString(),
         }),
@@ -688,7 +730,7 @@ async function runJob(job: Job) {
       const payload = {
         requestId,
         igUserId,
-        imageUrls: publicPanels(c),
+        imageUrls: await publicPanels(c),
         caption: instagramCaption(c.article, c.article_config),
       };
       await sendInstagramPublication(store, c.id, "POST_IG", requestId, () =>
@@ -744,7 +786,7 @@ async function runJob(job: Job) {
         const manifest = await generateDirectCarousel({
           dir,
           work,
-          filePrefix: `direct-r${job.revision}-j${job.id}-`,
+          force: !!job.force_new,
           title: stripMarkdownEmphasis(v.heading),
           paragraphs: mediaUnits(
             c.article,
@@ -769,10 +811,10 @@ async function runJob(job: Job) {
             ...manifest,
             panels: manifest.panels.map((p) => ({
               ...p,
-              file: path.relative(panelDir(c), p.file),
+              file: path.relative(ROOT, p.file),
             })),
             closing: manifest.closing
-              ? path.relative(panelDir(c), manifest.closing)
+              ? path.relative(ROOT, manifest.closing)
               : null,
           }),
         });
@@ -902,17 +944,16 @@ async function runJob(job: Job) {
             c.title,
           ),
         );
-        const match =
-          job.force_new || lab
-            ? undefined
-            : bestAsset(
-                tokenize([sentence, ...v.tags].join(" ")),
-                await store.assets(kind),
-                new Set(taken.map((b) => b.asset_id)),
-              );
-        const assetId =
-          match?.asset.id ??
-          (await generateStock(store, kind, sentence, "", work, i + 1, lab));
+        const assetId = await generateStock(
+          store,
+          kind,
+          sentence,
+          "",
+          work,
+          i + 1,
+          lab,
+          !!job.force_new,
+        );
         bound = await store.bind(job.id, i + 1, assetId);
       }
       await store.complete(job.id, {});
@@ -958,25 +999,16 @@ async function runJob(job: Job) {
             c.title,
           ),
         );
-        const match =
-          job.force_new || lab
-            ? undefined
-            : bestAsset(
-                panelTokens(heading, paragraph, v.tags),
-                await store.assets(job.kind),
-                new Set(taken.map((b) => b.asset_id)),
-              );
-        const assetId =
-          match?.asset.id ??
-          (await generateStock(
-            store,
-            job.kind,
-            heading,
-            paragraph,
-            work,
-            i + 1,
-            lab,
-          ));
+        const assetId = await generateStock(
+          store,
+          job.kind,
+          heading,
+          paragraph,
+          work,
+          i + 1,
+          lab,
+          !!job.force_new,
+        );
         bound = await store.bind(job.id, i + 1, assetId);
       }
       // Bila revisi berubah, complete() membatalkan job; aset tetap di kolam.
@@ -1054,6 +1086,10 @@ const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
 let newsRunning = false;
 while (!stop) {
+  if (existsSync(path.join(ROOT, "data/media-reset.guard"))) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    continue;
+  }
   await store.recover();
   await pollPosts();
   const minute = Math.floor(Date.now() / 60000);

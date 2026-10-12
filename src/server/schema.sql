@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS assets (
   id INT AUTO_INCREMENT PRIMARY KEY,
   kind VARCHAR(32) NOT NULL,
   file VARCHAR(500) NOT NULL UNIQUE,
-  description VARCHAR(500) NOT NULL,
+  description MEDIUMTEXT NOT NULL,
   prompt TEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY assets_kind (kind)
@@ -281,4 +281,20 @@ CREATE TABLE IF NOT EXISTS lab_images (
   name VARCHAR(190) NOT NULL,
   role VARCHAR(16) NOT NULL DEFAULT 'reference',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS media_stock (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ category VARCHAR(16) NOT NULL,
+ preset_id INT NULL,
+ identity_name VARCHAR(200) NOT NULL,
+ name VARCHAR(200) NOT NULL,
+ source_text MEDIUMTEXT NOT NULL,
+ metadata MEDIUMTEXT NULL,
+ prompt MEDIUMTEXT NULL,
+ file VARCHAR(500) NOT NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE KEY media_stock_identity(category,identity_name,name),
+ KEY media_stock_preset(preset_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

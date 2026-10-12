@@ -1,3 +1,4 @@
+import { sharedMedia, sharedVideo } from "../server/media-stock";
 import { mediaUnits, imageVariables } from "../server/content-contract";
 import { finishProcessTiming } from "../server/process-timing";
 import { timingStage } from "../server/process-timing-domain";
@@ -153,6 +154,7 @@ export async function runNewsMediaJob(
         text: content.paragraphs.join("\n\n"),
         footer: `Berita · ${n.title}`,
         kind: settings.wholeTextImageKind || "IMAGE_HORIZONTAL",
+        force: !!j.force_new,
         lab,
       };
       const image =
@@ -164,15 +166,27 @@ export async function runNewsMediaJob(
                 lab,
                 style: "Buat infografis editorial yang mudah dibaca.",
               })
-            : await generateCodexImage(
-                prompt,
-                work,
-                file,
-                "bebas",
-                ...(lab ? ([lab.images] as [string[]]) : []),
-              );
+            : await (async () => {
+                const output = await sharedMedia({
+                  category: "image",
+                  identity: [lab?.name || "infografis", "bebas"],
+                  presetId: lab?.id,
+                  text: content.paragraphs.join("\n\n"),
+                  prompt,
+                  force: !!j.force_new,
+                  generate: (temporary) =>
+                    generateCodexImage(
+                      prompt,
+                      work,
+                      temporary,
+                      "bebas",
+                      ...(lab ? ([lab.images] as [string[]]) : []),
+                    ),
+                });
+                return { ...(await sharp(output).metadata()), file: output };
+              })();
       await store.complete(j, {
-        file: relative(file),
+        file: relative(image.file),
         width: image.width,
         height: image.height,
         prompt: "prompt" in image ? image.prompt : prompt,
@@ -202,27 +216,16 @@ export async function runNewsMediaJob(
           item.paragraph ? `${item.heading} — ${item.paragraph}` : item.heading,
           imageVariables(n.article, unit, i),
         );
-        const match =
-          j.force_new || lab
-            ? undefined
-            : bestAsset(
-                perSentence
-                  ? tokenize([item.heading, ...v.tags].join(" "))
-                  : panelTokens(item.heading, item.paragraph, v.tags),
-                await assets.assets(kind),
-                new Set(taken.map((b) => b.asset_id)),
-              );
-        const id =
-          match?.asset.id ??
-          (await generateStock(
-            assets,
-            kind,
-            item.heading,
-            item.paragraph,
-            work,
-            i + 1,
-            lab,
-          ));
+        const id = await generateStock(
+          assets,
+          kind,
+          item.heading,
+          item.paragraph,
+          work,
+          i + 1,
+          lab,
+          !!j.force_new,
+        );
         if (!(await store.bind(j, i + 1, id)))
           throw Error("Job gambar sudah tidak aktif");
       }
@@ -241,12 +244,19 @@ export async function runNewsMediaJob(
           `kalimat_${String(i + 1).padStart(2, "0")}.mp3`,
         );
         const text = sanitizeForTts(s.text);
-        await edgeTts(text, file, config);
+        const source = await sharedMedia({
+          category: "audio",
+          identity: [config.provider, config.voice],
+          text,
+          prompt: JSON.stringify({ rate: config.rate }),
+          force: !!j.force_new,
+          generate: (temporary) => edgeTts(text, temporary, config),
+        });
         sentences.push({
           sentence: i + 1,
           paragraph: s.paragraph,
           narration_text: text,
-          file: relative(file),
+          file: relative(source),
         });
       }
       await store.complete(j, {
@@ -263,6 +273,7 @@ export async function runNewsMediaJob(
         timing = "images";
         const manifest = await generateDirectCarousel({
           dir: work,
+          force: !!j.force_new,
           work,
           title: content.title,
           paragraphs: mediaUnits(
@@ -374,6 +385,7 @@ export async function runNewsMediaJob(
         (horizontal
           ? settings.sentenceVideoHMode
           : settings.sentenceVideoMode) === "direct";
+      const videoLab = await labFor(source, n.article);
       if (direct) {
         const slides = mediaUnits(
           n.article,
@@ -392,21 +404,33 @@ export async function runNewsMediaJob(
           work,
           horizontal ? "video-h.mp4" : "video-v.mp4",
         );
-        const result = await buildImageAudioVideo(
-          slides,
-          file,
-          work,
-          horizontal ? LANDSCAPE : VERTICAL,
-        );
+        const result = await sharedVideo({
+          preset: videoLab?.name || source,
+          presetId: videoLab?.id,
+          horizontal,
+          text: n.article,
+          recipe: {
+            mode: "image_audio",
+            format: horizontal ? LANDSCAPE : VERTICAL,
+          },
+          sources: slides.flatMap((s) => [s.image, s.audio]),
+          force: !!j.force_new,
+          generate: (temporary) =>
+            buildImageAudioVideo(
+              slides,
+              temporary,
+              work,
+              horizontal ? LANDSCAPE : VERTICAL,
+            ),
+        });
         await store.complete(j, {
           ...result,
-          file: relative(file),
           source,
           renderedAt,
         });
         return;
       }
-      const panels = [];
+      const panels: Parameters<typeof buildReels>[0] = [];
       for (const [i, s] of mediaUnits(
         n.article,
         settings.imageUnit || "sentence",
@@ -442,25 +466,40 @@ export async function runNewsMediaJob(
         });
       }
       const file = path.join(work, horizontal ? "video-h.mp4" : "video-v.mp4");
-      const result = await buildReels(
-        panels,
-        file,
-        work,
-        horizontal ? LANDSCAPE : VERTICAL,
-        path.join(
-          outputRoot(),
-          "cache/news-timeline",
-          String(n.id),
-          String(j.revision),
-          createHash("sha256")
-            .update(JSON.stringify(audio))
-            .digest("hex")
-            .slice(0, 16),
-        ),
-      );
+      const result = await sharedVideo({
+        preset: videoLab?.name || source,
+        presetId: videoLab?.id,
+        horizontal,
+        text: n.article,
+        recipe: {
+          mode: "template",
+          format: horizontal ? LANDSCAPE : VERTICAL,
+          heading: v.title,
+          label: `Berita Teknologi · #${n.id}`,
+        },
+        sources: [
+          ...p.stock
+            .filter((b) => b.kind === sentenceJob(source))
+            .map((b) => path.join(ROOT, b.file)),
+          ...panels.map((b) => b.audio),
+        ],
+        force: !!j.force_new,
+        generate: (temporary) =>
+          buildReels(
+            panels,
+            temporary,
+            work,
+            horizontal ? LANDSCAPE : VERTICAL,
+            path.join(
+              outputRoot(),
+              "cache/news-timeline",
+              String(n.id),
+              String(j.revision),
+            ),
+          ),
+      });
       await store.complete(j, {
         ...result,
-        file: relative(file),
         source,
         renderedAt,
       });

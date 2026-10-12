@@ -955,14 +955,7 @@ export class Store {
           await run(
             db,
             "INSERT INTO jobs(chapter_id,kind,state,revision,force_new) VALUES(?,?,'queued',?,?)",
-            [
-              id,
-              kind,
-              c.revision,
-              regenerate || (replace && ["POST_IG", "REELS_IG"].includes(kind))
-                ? 1
-                : 0,
-            ],
+            [id, kind, c.revision, replace ? 1 : 0],
           )
         ).insertId;
         if (
