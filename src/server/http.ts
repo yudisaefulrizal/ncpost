@@ -693,7 +693,7 @@ app.get("/api/stock-presets", async (_, res) => {
     "SELECT id,name FROM lab_prompts WHERE kind='image' ORDER BY id",
   );
   const [stocks]: any = await store.db.query(
-    "SELECT s.id,s.preset_id,s.identity_name,s.source_text,s.file,s.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND r.input=CAST(s.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regeneration_id FROM media_stock s WHERE s.category='image' ORDER BY s.id DESC",
+    "SELECT s.id,s.preset_id,s.identity_name,s.source_text,s.file,s.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND BINARY r.input=BINARY CAST(s.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regeneration_id FROM media_stock s WHERE s.category='image' ORDER BY s.id DESC",
   );
   const groups = presets.map((p: any) => ({
     key: `preset-${p.id}`,
@@ -780,7 +780,7 @@ app.get("/api/stock/:id/manage", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
   const [rows]: any = await store.db.query(
-    "SELECT m.id,m.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND r.input=CAST(m.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regenerationId FROM assets a JOIN media_stock m ON m.file=a.file AND m.category='image' WHERE a.id=?",
+    "SELECT m.id,m.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND BINARY r.input=BINARY CAST(m.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regenerationId FROM assets a JOIN media_stock m ON BINARY m.file=BINARY a.file AND m.category='image' WHERE a.id=?",
     [id],
   );
   const stock = rows[0];
