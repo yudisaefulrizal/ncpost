@@ -3,6 +3,7 @@ import {
   filterAudioStock,
   audioStockFile,
   createAudioZip,
+  audioDownloadName,
 } from "./audio-stock";
 import os from "node:os";
 import { mkdirSync } from "node:fs";
@@ -140,6 +141,7 @@ app.get("/api/audio-stock", async (_, res) => {
   res.json(
     (await listAudioStock(store.db)).map(({ file, ...row }) => ({
       ...row,
+      canDownload: audioDownloadName(row.text) !== null,
       url: `/api/audio-stock/${row.id}/audio`,
     })),
   );
@@ -148,13 +150,19 @@ app.get("/api/audio-stock/:id/audio", async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
   const [rows]: any = await store.db.query(
-    "SELECT file FROM media_stock WHERE id=? AND category='audio'",
+    "SELECT file,source_text FROM media_stock WHERE id=? AND category='audio'",
     [id],
   );
   if (!rows[0]) return void res.sendStatus(404);
   const file = audioStockFile(rows[0].file);
-  if (req.query.download === "1") res.download(file, path.basename(file));
-  else {
+  if (req.query.download === "1") {
+    const name = audioDownloadName(rows[0].source_text, path.extname(file));
+    if (!name)
+      throw Error(
+        "Audio dengan teks lebih dari 230 karakter tidak dapat diunduh",
+      );
+    res.download(file, name);
+  } else {
     res.set("Cache-Control", "private, no-store");
     res.sendFile(file);
   }

@@ -1,3 +1,4 @@
+import { mkdtemp, mkdir, copyFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import type mysql from "mysql2/promise";
@@ -59,38 +60,60 @@ export function audioStockFile(file: string) {
     path.join(ROOT, file),
   );
 }
+export function audioDownloadName(text: string, extension = ".mp3") {
+  if (Array.from(text).length > 230) return null;
+  const name = stockPart(text);
+  return name.length <= 230 ? name + extension : null;
+}
 export async function createAudioZip(rows: AudioStock[], destination: string) {
-  if (!rows.length) throw Error("Tidak ada audio untuk diunduh");
-  const root = path.join(outputRoot(), "stock-audio");
-  const files = [
-    ...new Set(
-      rows.map((row) => path.relative(root, audioStockFile(row.file))),
-    ),
-  ];
-  if (files.some((file) => /[\r\n]/.test(file)))
-    throw Error("Nama file audio tidak valid");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("zip", ["-q", destination, "-@"], {
-      cwd: root,
-      shell: false,
-      stdio: ["pipe", "ignore", "pipe"],
+  const eligible = rows.filter((row) => audioDownloadName(row.text));
+  if (!eligible.length)
+    throw Error(
+      "Tidak ada audio dengan teks maksimal 230 karakter untuk diunduh",
+    );
+  const stage = await mkdtemp(
+    path.join(path.dirname(destination), "audio-files-"),
+  );
+  try {
+    const files: string[] = [];
+    const used = new Set<string>();
+    for (const row of eligible) {
+      const source = audioStockFile(row.file);
+      const name = audioDownloadName(row.text, path.extname(source));
+      if (!name) continue;
+      const folder = `${stockPart(row.provider)}__${stockPart(row.voice)}`;
+      let relative = path.join(folder, name);
+      let duplicate = 2;
+      while (used.has(relative))
+        relative = path.join(folder, `salinan-${duplicate++}`, name);
+      used.add(relative);
+      await mkdir(path.dirname(path.join(stage, relative)), {
+        recursive: true,
+      });
+      await copyFile(source, path.join(stage, relative));
+      files.push(relative);
+    }
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("zip", ["-q", destination, "-@"], {
+        cwd: stage,
+        shell: false,
+        stdio: ["pipe", "ignore", "ignore"],
+      });
+      const timer = setTimeout(() => child.kill("SIGKILL"), 120000);
+      child.on("error", () => {
+        clearTimeout(timer);
+        reject(
+          Error("Pembuatan ZIP gagal; program zip belum tersedia di server"),
+        );
+      });
+      child.on("close", (code) => {
+        clearTimeout(timer);
+        code === 0 ? resolve() : reject(Error("Pembuatan ZIP audio gagal"));
+      });
+      child.stdin.on("error", () => {});
+      child.stdin.end(files.join("\n") + "\n");
     });
-    let error = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), 120000);
-    child.stderr.on("data", (data) => {
-      if (error.length < 4000) error += data.toString();
-    });
-    child.on("error", () => {
-      clearTimeout(timer);
-      reject(
-        Error("Pembuatan ZIP gagal; program zip belum tersedia di server"),
-      );
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      code === 0 ? resolve() : reject(Error("Pembuatan ZIP audio gagal"));
-    });
-    child.stdin.on("error", () => {});
-    child.stdin.end(files.join("\n") + "\n");
-  });
+  } finally {
+    await rm(stage, { recursive: true, force: true });
+  }
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
 type Audio = {
+  canDownload: boolean;
   id: number;
   text: string;
   provider: string;
@@ -40,8 +41,10 @@ export function AudioStockPage() {
           .toLowerCase()
           .includes(q.trim().toLowerCase())),
   );
-  const chosen = filtered.filter((row) => selected.includes(row.id));
-  const allSelected = filtered.length > 0 && chosen.length === filtered.length;
+  const downloadable = filtered.filter((row) => row.canDownload);
+  const chosen = downloadable.filter((row) => selected.includes(row.id));
+  const allSelected =
+    downloadable.length > 0 && chosen.length === downloadable.length;
   const voices = [
     ...new Map(
       items
@@ -150,10 +153,10 @@ export function AudioStockPage() {
         </button>
         <button
           className="btn btn-sec"
-          disabled={busy || !filtered.length}
+          disabled={busy || !downloadable.length}
           onClick={() => void download(false)}
         >
-          Download semua hasil filter ({filtered.length})
+          Download semua hasil filter ({downloadable.length})
         </button>
         <button
           className="btn btn-sec"
@@ -164,6 +167,10 @@ export function AudioStockPage() {
         </button>
         {busy && <span role="status">Menyiapkan ZIP…</span>}
       </div>
+      <small className="muted">
+        Nama download memakai teks narasi. Audio dengan teks lebih dari 230
+        karakter tidak ikut diunduh.
+      </small>
       {error && (
         <p className="warn" role="alert">
           {error}
@@ -178,14 +185,14 @@ export function AudioStockPage() {
                   type="checkbox"
                   aria-label="Pilih seluruh hasil filter"
                   checked={allSelected}
-                  disabled={!filtered.length}
+                  disabled={!downloadable.length}
                   onChange={(e) =>
                     setSelected((old) =>
                       e.target.checked
                         ? [
                             ...new Set([
                               ...old,
-                              ...filtered.map((row) => row.id),
+                              ...downloadable.map((row) => row.id),
                             ]),
                           ]
                         : old.filter(
@@ -208,6 +215,7 @@ export function AudioStockPage() {
                   <input
                     type="checkbox"
                     aria-label={`Pilih audio: ${row.text}`}
+                    disabled={!row.canDownload}
                     checked={selected.includes(row.id)}
                     onChange={(e) =>
                       setSelected((old) =>
@@ -227,12 +235,18 @@ export function AudioStockPage() {
                   <audio controls preload="none" src={row.url} />
                 </td>
                 <td>
-                  <a
-                    className="btn btn-sec btn-sm"
-                    href={`${row.url}?download=1`}
-                  >
-                    Download
-                  </a>
+                  {row.canDownload ? (
+                    <a
+                      className="btn btn-sec btn-sm"
+                      href={`${row.url}?download=1`}
+                    >
+                      Download
+                    </a>
+                  ) : (
+                    <small className="muted">
+                      Teks lebih dari 230 karakter — dilewati
+                    </small>
+                  )}
                 </td>
               </tr>
             ))}
