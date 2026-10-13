@@ -39,6 +39,14 @@ export async function deleteImageStock(db: mysql.Pool, id: number) {
         );
         if (!rows[0]) throw Error("Stok gambar tidak ditemukan");
         const current = rows[0];
+        const [regenerations]: any = await connection.query(
+          "SELECT id FROM lab_runs WHERE reference_key='stock-regenerate' AND input=? AND state IN ('queued','running') LIMIT 1",
+          [String(id)],
+        );
+        if (regenerations[0])
+          throw Error(
+            "Tunggu pembuatan ulang stok selesai sebelum menghapus gambar",
+          );
         const [active]: any = await connection.query(
           "SELECT (SELECT COUNT(*) FROM jobs WHERE state='running')+(SELECT COUNT(*) FROM news_media_jobs WHERE state='running') AS total",
         );

@@ -3642,6 +3642,119 @@ function NewsProduction({
   );
 }
 
+function ProductionStockImage({
+  assetId,
+  description,
+  onDelete,
+}: {
+  assetId: number;
+  description: string;
+  onDelete: () => void;
+}) {
+  const [stock, setStock] = useState<any>(null);
+  const [job, setJob] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    let active = true;
+    api(`/stock/${assetId}/manage`)
+      .then((data) => {
+        if (active) {
+          setStock(data);
+          setJob(data?.regenerationId || null);
+        }
+      })
+      .catch((e) => {
+        if (active) setError((e as Error).message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [assetId]);
+  useEffect(() => {
+    if (!job) return;
+    let active = true;
+    const timer = setInterval(async () => {
+      try {
+        const run = await api(`/lab/runs/${job}`);
+        if (
+          !active ||
+          !["completed", "failed", "cancelled"].includes(run.state)
+        )
+          return;
+        setJob(null);
+        if (run.state === "completed") setVersion((v) => v + 1);
+        else setError(run.error || "Generate dibatalkan");
+      } catch (e) {
+        if (active) setError((e as Error).message);
+      }
+    }, 3000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [job]);
+  const act = async (remove: boolean) => {
+    if (
+      !confirm(
+        remove
+          ? "Hapus stok gambar ini? Stok ini juga dihapus dari konten lain yang menggunakannya."
+          : "Buat ulang gambar ini? Gambar lama diganti setelah hasil baru berhasil.",
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      if (remove) {
+        await api(`/media-stock/${stock.id}`, "DELETE");
+        onDelete();
+      } else {
+        const run = await api(`/media-stock/${stock.id}/regenerate`, "POST");
+        setJob(run.id);
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const url = `/api/stock/${assetId}/image?v=${version}`;
+  return (
+    <>
+      {stock && (
+        <button
+          className="stock-delete"
+          title="Hapus stok gambar"
+          aria-label={`Hapus stok gambar: ${description}`}
+          disabled={busy || !!job}
+          onClick={() => act(true)}
+        >
+          ×
+        </button>
+      )}
+      <a href={url} target="_blank" rel="noreferrer">
+        <img loading="lazy" src={url} alt={description} />
+      </a>
+      {stock?.canRegenerate && (
+        <button
+          className="btn btn-sm"
+          disabled={busy || !!job}
+          onClick={() => act(false)}
+        >
+          {job ? "Membuat ulang…" : "Buat ulang"}
+        </button>
+      )}
+      {error && (
+        <p className="warn" role="alert">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
 function NewsStockView({
   article,
   stage,
@@ -3666,7 +3779,15 @@ function NewsStockView({
     article.article,
     article.settings?.imageUnit || (perSentence ? "sentence" : "paragraph"),
   ).length;
-  const items = p.stock.filter((x) => x.kind === kind);
+  const [removed, setRemoved] = useState<number[]>([]);
+  useEffect(() => {
+    setRemoved((old) =>
+      old.filter((id) => p.stock.some((item) => item.asset_id === id)),
+    );
+  }, [p.stock]);
+  const items = p.stock.filter(
+    (x) => x.kind === kind && !removed.includes(x.asset_id),
+  );
   const active = p.jobs.some(
     (j) => j.kind === kind && ["queued", "running"].includes(j.state),
   );
@@ -3686,7 +3807,12 @@ function NewsStockView({
             onClick={() => setSelected(k)}
           >
             {laneName(k.replace(/^S_/, ""))} ·{" "}
-            {p.stock.filter((x) => x.kind === k).length}/{expected}
+            {
+              p.stock.filter(
+                (x) => x.kind === k && !removed.includes(x.asset_id),
+              ).length
+            }
+            /{expected}
           </button>
         ))}
       </div>
@@ -3718,17 +3844,11 @@ function NewsStockView({
         >
           {items.map((x) => (
             <figure key={x.panel}>
-              <a
-                href={`/api/stock/${x.asset_id}/image`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <img
-                  loading="lazy"
-                  src={`/api/stock/${x.asset_id}/image`}
-                  alt={x.description}
-                />
-              </a>
+              <ProductionStockImage
+                assetId={x.asset_id}
+                description={x.description}
+                onDelete={() => setRemoved((old) => [...old, x.asset_id])}
+              />
               <figcaption>
                 <span className="mono muted">
                   {perSentence ? "Kalimat" : "Panel"} {x.panel}
@@ -4189,17 +4309,16 @@ function StockModal({
         <div className={"stock-grid" + (isHorizontalKind(kind) ? " wide" : "")}>
           {items.map((x) => (
             <figure key={x.panel}>
-              <a
-                href={`/api/stock/${x.asset_id}/image`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <img
-                  src={`/api/stock/${x.asset_id}/image`}
-                  alt={x.description}
-                  loading="lazy"
-                />
-              </a>
+              <ProductionStockImage
+                assetId={x.asset_id}
+                description={x.description}
+                onDelete={() =>
+                  setStock(
+                    (old) =>
+                      old?.filter((item) => item.asset_id !== x.asset_id) || [],
+                  )
+                }
+              />
               <figcaption>
                 <span className="mono muted">
                   {sentences ? "Kalimat" : "Panel"} {x.panel}
@@ -4582,6 +4701,52 @@ function StockGallery() {
   const [groups, setGroups] = useState<
     { key: string; name: string; items: any[] }[] | null
   >(null);
+  const [regenerating, setRegenerating] = useState<Record<number, number>>({});
+  const [version, setVersion] = useState(0);
+  const regenerate = async (id: number) => {
+    if (
+      !confirm(
+        "Buat ulang gambar ini? Gambar lama diganti setelah hasil baru berhasil.",
+      )
+    )
+      return;
+    setError("");
+    try {
+      const job = await api(`/media-stock/${id}/regenerate`, "POST");
+      setRegenerating((old) => ({ ...old, [id]: job.id }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  useEffect(() => {
+    if (!Object.keys(regenerating).length) return;
+    let active = true;
+    const timer = setInterval(async () => {
+      for (const [id, job] of Object.entries(regenerating)) {
+        try {
+          const run = await api(`/lab/runs/${job}`);
+          if (
+            !active ||
+            !["completed", "failed", "cancelled"].includes(run.state)
+          )
+            continue;
+          setRegenerating((old) => {
+            const next = { ...old };
+            delete next[Number(id)];
+            return next;
+          });
+          if (run.state === "completed") setVersion((v) => v + 1);
+          else setError(run.error || "Generate dibatalkan");
+        } catch (e) {
+          if (active) setError((e as Error).message);
+        }
+      }
+    }, 3000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [regenerating]);
   const [deleting, setDeleting] = useState<number | null>(null);
   const remove = async (id: number) => {
     setDeleting(id);
@@ -4607,7 +4772,18 @@ function StockGallery() {
     let active = true;
     api("/stock-presets")
       .then((data) => {
-        if (active) setGroups(data);
+        if (active) {
+          setGroups(data);
+          setRegenerating(
+            Object.fromEntries(
+              data.flatMap((group: any) =>
+                group.items
+                  .filter((item: any) => item.regenerationId)
+                  .map((item: any) => [item.id, item.regenerationId]),
+              ),
+            ),
+          );
+        }
       })
       .catch((e) => {
         if (active) setError((e as Error).message);
@@ -4654,16 +4830,28 @@ function StockGallery() {
                 className="stock-delete"
                 title="Hapus stok gambar"
                 aria-label={`Hapus stok gambar: ${a.description}`}
-                disabled={deleting !== null}
+                disabled={deleting !== null || !!regenerating[a.id]}
                 onClick={() => remove(a.id)}
               >
                 ×
               </button>
               <a href={a.url} target="_blank" rel="noreferrer">
-                <img src={a.url} alt={a.description} loading="lazy" />
+                <img
+                  src={`${a.url}?v=${version}`}
+                  alt={a.description}
+                  loading="lazy"
+                />
               </a>
               <figcaption>
                 <b>{a.description}</b>
+                {a.canRegenerate && (
+                  <button
+                    disabled={deleting !== null || !!regenerating[a.id]}
+                    onClick={() => regenerate(a.id)}
+                  >
+                    {regenerating[a.id] ? "Membuat ulang…" : "Buat ulang"}
+                  </button>
+                )}
                 <small className="muted">
                   {a.orientation === "horizontal"
                     ? "Horizontal"

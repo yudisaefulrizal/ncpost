@@ -88,6 +88,9 @@ export function labRouter(getStore: () => LabStore) {
     const run = await getStore().get(id(req.params.id));
     if (!run || run.kind !== "image" || run.state !== "completed")
       return void res.sendStatus(404);
+    if (run.reference_key === "stock-regenerate") {
+      return void res.redirect(`/api/media-stock/${Number(run.input)}/image`);
+    }
     const root = path.join(outputRoot(), "lab");
     res
       .type("jpg")

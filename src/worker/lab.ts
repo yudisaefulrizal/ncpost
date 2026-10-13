@@ -1,3 +1,4 @@
+import { regenerateStock } from "../server/stock-regenerate";
 import { labConfig } from "../server/lab-config";
 import { runConfiguredModel } from "./configured-article";
 import { validateUnifiedArticle } from "../server/content-contract";
@@ -26,6 +27,18 @@ export async function runLabJob(
   }, 60000);
   try {
     mkdirSync(work, { recursive: true, mode: 0o700 });
+    if (job.reference_key === "stock-regenerate") {
+      await store.complete(
+        job.id,
+        await regenerateStock(
+          store.db,
+          Number(job.input),
+          work,
+          providers.generateCodexImage,
+        ),
+      );
+      return;
+    }
     const config = labConfig(job.config);
     const basePrompt =
       job.resolved_prompt || labFinalPrompt(job.prompt, job.input);

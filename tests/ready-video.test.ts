@@ -40,7 +40,7 @@ it("accepts ready-video labels and derives vertical and horizontal render modes 
     sentenceVideoHMode: "template",
   });
 });
-it("explicit text settings override labels independently for each video target", () => {
+it("finished image designs suppress text even when saved settings request it", () => {
   expect(
     imageSettingsFromLabels(
       {
@@ -56,7 +56,7 @@ it("explicit text settings override labels independently for each video target",
       ],
     ),
   ).toMatchObject({
-    sentenceVideoMode: "template",
+    sentenceVideoMode: "direct",
     sentenceVideoHMode: "direct",
   });
 });
@@ -102,4 +102,28 @@ it("ready-video sources can serve sentence video but cannot be used as illustrat
       "book",
     ),
   ).rejects.toThrow("hanya");
+});
+
+it("ready-post video sources suppress overlays in both orientations", () => {
+  expect(
+    imageSettingsFromLabels(
+      {
+        ...DEFAULT_BOOK_SETTINGS,
+        sentenceVideoKind: "IMAGE_LAB_2_V",
+        sentenceVideoHKind: "IMAGE_LAB_2_H",
+        sentenceVideoMode: "template",
+        sentenceVideoHMode: "template",
+      },
+      [
+        {
+          id: 2,
+          image_type: "ready_post",
+          config: JSON.stringify({ usage: "video" }),
+        },
+      ],
+    ),
+  ).toMatchObject({
+    sentenceVideoMode: "direct",
+    sentenceVideoHMode: "direct",
+  });
 });

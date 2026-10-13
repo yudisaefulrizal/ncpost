@@ -1,3 +1,4 @@
+import { enqueueStockRegeneration } from "./stock-regenerate";
 import { deleteImageStock } from "./stock-delete";
 import { configureMediaStock, resolveMedia } from "./media-stock";
 import { listUpcomingCrons } from "./cron-upcoming";
@@ -692,7 +693,7 @@ app.get("/api/stock-presets", async (_, res) => {
     "SELECT id,name FROM lab_prompts WHERE kind='image' ORDER BY id",
   );
   const [stocks]: any = await store.db.query(
-    "SELECT id,preset_id,identity_name,source_text,file FROM media_stock WHERE category='image' ORDER BY id DESC",
+    "SELECT s.id,s.preset_id,s.identity_name,s.source_text,s.file,s.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND r.input=CAST(s.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regeneration_id FROM media_stock s WHERE s.category='image' ORDER BY s.id DESC",
   );
   const groups = presets.map((p: any) => ({
     key: `preset-${p.id}`,
@@ -717,10 +718,18 @@ app.get("/api/stock-presets", async (_, res) => {
         id: s.id,
         description: s.source_text,
         orientation: s.identity_name.split("__")[1] || "bebas",
+        canRegenerate:
+          !!s.prompt && !s.prompt.includes("teks ditambahkan melalui template"),
+        regenerationId: s.regeneration_id,
         url: `/api/media-stock/${s.id}/image`,
       })),
     })),
   );
+});
+app.post("/api/media-stock/:id/regenerate", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  res.status(202).json({ id: await enqueueStockRegeneration(store.db, id) });
 });
 app.delete("/api/media-stock/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -729,6 +738,7 @@ app.delete("/api/media-stock/:id", async (req, res) => {
   res.json({ ok: true });
 });
 app.get("/api/media-stock/:id/image", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
   const id = Number(req.params.id);
   if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
   const [rows]: any = await store.db.query(
@@ -766,7 +776,28 @@ app.get("/api/stock", async (req, res) => {
     ),
   );
 });
+app.get("/api/stock/:id/manage", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  const [rows]: any = await store.db.query(
+    "SELECT m.id,m.prompt,(SELECT r.id FROM lab_runs r WHERE r.reference_key='stock-regenerate' AND r.input=CAST(m.id AS CHAR) AND r.state IN ('queued','running') ORDER BY r.id DESC LIMIT 1) AS regenerationId FROM assets a JOIN media_stock m ON m.file=a.file AND m.category='image' WHERE a.id=?",
+    [id],
+  );
+  const stock = rows[0];
+  res.json(
+    stock
+      ? {
+          id: stock.id,
+          canRegenerate:
+            !!stock.prompt &&
+            !stock.prompt.includes("teks ditambahkan melalui template"),
+          regenerationId: stock.regenerationId,
+        }
+      : null,
+  );
+});
 app.get("/api/stock/:id/image", async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
   const a = /^\d+$/.test(String(req.params.id))
     ? await store.assetById(Number(req.params.id))
     : undefined;

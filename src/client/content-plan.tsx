@@ -110,15 +110,16 @@ export function ContentPlanFields({
     const kind = horizontal
       ? settings.sentenceVideoHKind
       : settings.sentenceVideoKind;
-    const enabled = mode
-      ? mode === "template"
-      : imageType(kind) !== "ready_video";
+    const ready =
+      imageType(kind) === "ready_post" || imageType(kind) === "ready_video";
+    const enabled = !ready && mode !== "direct";
     return (
       <label className="check-row">
         <input
           type="checkbox"
           aria-label={`Pakai teks video ${horizontal ? "horizontal" : "vertikal"}`}
           checked={enabled}
+          disabled={ready}
           onChange={(e) =>
             set(
               horizontal

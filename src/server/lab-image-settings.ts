@@ -20,6 +20,17 @@ export function imageSettingsFromLabels(
   };
   const selected = (kind: string | null | undefined) =>
     labConfig(rows.find((row) => row.id === labImageKind(kind)?.id)?.config);
+  const videoMode = (
+    kind: string | null | undefined,
+    configured: "template" | "direct" | undefined,
+  ) => {
+    const type = rows.find(
+      (row) => row.id === labImageKind(kind)?.id,
+    )?.image_type;
+    return type === "ready_post" || type === "ready_video"
+      ? "direct"
+      : (configured ?? "template");
+  };
   return {
     ...settings,
     ...(settings.imageUnit === undefined &&
@@ -46,20 +57,14 @@ export function imageSettingsFromLabels(
     singleImageMode: labImageKind(settings.wholeTextImageKind)
       ? "direct"
       : mode(settings.wholeTextImageKind, "direct"),
-    sentenceVideoMode:
-      settings.sentenceVideoMode ??
-      (rows.find(
-        (row) => row.id === labImageKind(settings.sentenceVideoKind)?.id,
-      )?.image_type === "ready_video"
-        ? "direct"
-        : "template"),
-    sentenceVideoHMode:
-      settings.sentenceVideoHMode ??
-      (rows.find(
-        (row) => row.id === labImageKind(settings.sentenceVideoHKind)?.id,
-      )?.image_type === "ready_video"
-        ? "direct"
-        : "template"),
+    sentenceVideoMode: videoMode(
+      settings.sentenceVideoKind,
+      settings.sentenceVideoMode,
+    ),
+    sentenceVideoHMode: videoMode(
+      settings.sentenceVideoHKind,
+      settings.sentenceVideoHMode,
+    ),
   };
 }
 export async function resolveImageSettings(
