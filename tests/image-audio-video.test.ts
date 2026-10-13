@@ -21,11 +21,11 @@ it("renders ordered images and matching audio without subtitles, template, visua
     ]);
     const slides = [];
     for (const [index, color] of ["red", "blue"].entries()) {
-      const image = path.join(dir, `${index}.png`);
+      const image = path.join(dir, `${index}.jpg`);
       await sharp({
         create: { width: 90, height: 160, channels: 3, background: color },
       })
-        .png()
+        .jpeg()
         .toFile(image);
       slides.push({ image, audio });
     }
@@ -59,6 +59,11 @@ it("renders ordered images and matching audio without subtitles, template, visua
       "video",
       "audio",
     ]);
+    expect(probe.streams[0]).toMatchObject({
+      codec_name: "h264",
+      pix_fmt: "yuv420p",
+      color_range: "tv",
+    });
     for (const [time, channel] of [
       ["0.08", 0],
       ["0.35", 2],

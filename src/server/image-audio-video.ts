@@ -6,7 +6,14 @@ import {
   renameSync,
   rmSync,
 } from "node:fs";
-import { duration, run, verify, FPS, VERTICAL } from "./video";
+import {
+  duration,
+  run,
+  verify,
+  FPS,
+  VERTICAL,
+  VIDEO_COLOR_FILTER,
+} from "./video";
 
 // Final-designed images are used unchanged: no text, template, visualizer or CTA.
 export async function buildImageAudioVideo(
@@ -49,7 +56,7 @@ export async function buildImageAudioVideo(
         "-map",
         "1:a:0",
         "-vf",
-        `scale=${format.width}:${format.height}:force_original_aspect_ratio=decrease,pad=${format.width}:${format.height}:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1`,
+        `scale=${format.width}:${format.height}:force_original_aspect_ratio=decrease,pad=${format.width}:${format.height}:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,${VIDEO_COLOR_FILTER}`,
         "-af",
         `apad,atrim=duration=${length},asetpts=PTS-STARTPTS`,
         "-t",
@@ -64,6 +71,8 @@ export async function buildImageAudioVideo(
         "20",
         "-pix_fmt",
         "yuv420p",
+        "-color_range",
+        "tv",
         "-c:a",
         "pcm_s16le",
         "-ar",

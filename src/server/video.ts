@@ -33,6 +33,8 @@ import { CTA_ROOT } from "./templates";
 // Jeda setelah narasi tiap kalimat: slide bertahan 0,6 dtk sebelum pindah.
 export const SENTENCE_GAP = 0.6;
 export const FPS = 24;
+export const VIDEO_COLOR_FILTER =
+  "scale=iw:ih:in_range=auto:out_range=tv,format=yuv420p,setparams=range=limited";
 // Dissolve antarslide: 10 frame (≈ 0,42 dtk); bilangan bulat agar potongan
 // transisi dan badan klip bertemu tepat di batas frame.
 export const FADE_FRAMES = 10;
@@ -550,6 +552,8 @@ const ENCODE = [
   "32",
   "-pix_fmt",
   "yuv420p",
+  "-color_range",
+  "tv",
   "-r",
   String(FPS),
   "-video_track_timescale",
@@ -580,7 +584,7 @@ function overlayChain(
   const s = format.width / format.designWidth;
   return (
     `[${overlayIndex}:v]scale=${Math.round(VIS_W * s)}:${Math.round(VIS_H * s)}:flags=lanczos[ov];` +
-    `[${label}][ov]overlay=x=W-w-${Math.round(24 * s)}:y=${Math.round(19 * s)}:eof_action=repeat[v]`
+    `[${label}][ov]overlay=x=W-w-${Math.round(24 * s)}:y=${Math.round(19 * s)}:eof_action=repeat,${VIDEO_COLOR_FILTER}[v]`
   );
 }
 async function encodePiece(

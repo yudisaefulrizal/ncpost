@@ -259,7 +259,11 @@ export async function sharedVideo(options: {
     presetId: options.presetId,
     text: options.text,
     force: options.force,
-    prompt: JSON.stringify({ recipe: options.recipe, versions }),
+    prompt: JSON.stringify({
+      recipe: options.recipe,
+      versions,
+      videoColor: "yuv420p-limited-v1",
+    }),
     generate: async (temporary) => {
       metadata = await options.generate(temporary);
     },
