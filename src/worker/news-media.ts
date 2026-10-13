@@ -447,10 +447,7 @@ export async function runNewsMediaJob(
             path.join(ROOT, binding.file),
             layout,
             i === 0
-              ? {
-                  heading: stripMarkdownEmphasis(v.title),
-                  label: `Berita Teknologi · #${n.id}`,
-                }
+              ? { heading: stripMarkdownEmphasis(v.title), label: "" }
               : undefined,
             spec,
           ),
@@ -459,8 +456,7 @@ export async function runNewsMediaJob(
           image,
           audio: path.join(ROOT, audio.sentences[i].file),
           layout,
-          // Title is visual only; existing audio starts with the sentence,
-          // so karaoke must not wait for a spoken title.
+          // Existing audio starts with the sentence.
           heading: "",
           paragraph: s.text,
         });
@@ -475,7 +471,7 @@ export async function runNewsMediaJob(
           mode: "template",
           format: horizontal ? LANDSCAPE : VERTICAL,
           heading: v.title,
-          label: `Berita Teknologi · #${n.id}`,
+          label: "",
         },
         sources: [
           ...p.stock

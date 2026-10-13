@@ -477,7 +477,6 @@ async function runJob(job: Job) {
         c.content_engine,
         c.article_config,
       ).heading;
-      const part = partNumber(await store.list(), c);
       const audio = JSON.parse(c.sentence_audio);
       if (audio.sentences.length !== sentences.length)
         throw Error("Audio kalimat tidak sesuai artikel; buat ulang audionya");
@@ -542,12 +541,8 @@ async function runJob(job: Job) {
           await renderSubtitleFrame(
             path.join(ROOT, binding.file),
             layout,
-            // Slide pertama (template E2): heading hook ikut dibacakan.
             i === 0
-              ? {
-                  heading: stripMarkdownEmphasis(hookHeading),
-                  label: `${c.book} · Bagian ${part}`,
-                }
+              ? { heading: stripMarkdownEmphasis(hookHeading), label: "" }
               : undefined,
             spec,
           ),
@@ -570,7 +565,7 @@ async function runJob(job: Job) {
           mode: "template",
           format: horizontal ? LANDSCAPE : VERTICAL,
           heading: hookHeading,
-          label: `${c.book} · Bagian ${part}`,
+          label: "",
         },
         sources: [
           ...stock.map((s) => path.join(ROOT, s.file)),
