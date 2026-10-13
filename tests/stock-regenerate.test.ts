@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest";
 import {
   enqueueStockRegeneration,
   regenerateStock,
+  regenerationVariables,
 } from "../src/server/stock-regenerate";
 vi.mock("../src/server/media-stock", () => ({
   sharedMedia: vi.fn(async (options) => options.generate("temporary.jpg")),
@@ -83,4 +84,63 @@ it("forces replacement of only the selected stock using its exact prompt", async
     "bebas",
     [],
   );
+});
+
+it("uses the latest preset and carousel continuation with the original source text", async () => {
+  const generate = vi.fn().mockResolvedValue({});
+  const article = "# Topic\n\nFirst paragraph.\n\nA sentence";
+  const preset = {
+    id: 2,
+    kind: "image",
+    name: "New preset",
+    reference_key: null,
+    prompt: "New first {{teks}}",
+    config: JSON.stringify({
+      usage: "carousel",
+      promptNext: "New continuation {{paragraf}} of {{total_unit}}",
+    }),
+  };
+  const db = {
+    query: vi
+      .fn()
+      .mockResolvedValueOnce([[{ ...stock, preset_id: 2 }]])
+      .mockResolvedValueOnce([[preset]])
+      .mockResolvedValueOnce([[{ article, context: "Book", topic: "Topic" }]])
+      .mockResolvedValueOnce([[]]),
+  } as any;
+  await regenerateStock(db, 4, "/tmp/work", generate);
+  expect(generate).toHaveBeenCalledWith(
+    "New continuation A sentence of 2",
+    "/tmp/work",
+    "/tmp/work/regenerated.jpg",
+    "bebas",
+    [],
+  );
+  expect(sharedMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      prompt: "New continuation A sentence of 2",
+      text: stock.source_text,
+    }),
+  );
+});
+it("does not silently use the old prompt if its preset was deleted", async () => {
+  const generate = vi.fn();
+  const db = {
+    query: vi
+      .fn()
+      .mockResolvedValueOnce([[{ ...stock, preset_id: 2 }]])
+      .mockResolvedValueOnce([[]]),
+  } as any;
+  await expect(regenerateStock(db, 4, "/tmp/work", generate)).rejects.toThrow(
+    "Preset",
+  );
+  expect(generate).not.toHaveBeenCalled();
+});
+it("uses stock text independently when it has no matching production binding", () => {
+  expect(regenerationVariables("Original sentence.", [])).toMatchObject({
+    teks: "Original sentence.",
+    artikel: "Original sentence.",
+    paragraf: "Original sentence.",
+    kalimat: "Original sentence.",
+  });
 });
