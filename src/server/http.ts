@@ -1,3 +1,11 @@
+import { mkdirSync } from "node:fs";
+import {
+  listVoices,
+  saveVoice,
+  resolveVoice,
+  generateVoiceAudio,
+} from "./voices";
+import { randomUUID } from "node:crypto";
 import { listImageTimings } from "./image-timing";
 import { enqueueStockRegeneration } from "./stock-regenerate";
 import { deleteImageStock } from "./stock-delete";
@@ -120,6 +128,43 @@ app.use("/api", (req, res, next) => {
   if (!user) return void res.status(401).json({ error: "Silakan masuk" });
   res.locals.user = user;
   next();
+});
+app.get("/api/voices", async (_, res) => res.json(await listVoices(store.db)));
+app.post("/api/voices", async (req, res) =>
+  res.status(201).json({ id: await saveVoice(store.db, req.body) }),
+);
+app.put("/api/voices/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw Error("ID suara tidak valid");
+  res.json({ id: await saveVoice(store.db, req.body, id) });
+});
+app.post("/api/voices/:id/test", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) throw Error("ID suara tidak valid");
+  const voice = await resolveVoice(store.db, id, "elevenlabs");
+  const dir = path.join(outputRoot(), "voice-tests");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const filename = `${id}.mp3`;
+  const temporary = path.join(dir, `${randomUUID()}.mp3`);
+  try {
+    await generateVoiceAudio(
+      voice,
+      "Halo, ini contoh suara untuk konten Anda. Semoga hari Anda menyenangkan.",
+      temporary,
+    );
+    const { rename } = await import("node:fs/promises");
+    await rename(temporary, path.join(dir, filename));
+    res.json({ url: `/api/voices/${id}/audio?v=${Date.now()}` });
+  } finally {
+    const { rm } = await import("node:fs/promises");
+    await rm(temporary, { force: true });
+  }
+});
+app.get("/api/voices/:id/audio", (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  res.set("Cache-Control", "private, no-store");
+  res.sendFile(path.join(outputRoot(), "voice-tests", `${id}.mp3`));
 });
 app.get("/api/content-types", async (_, res) =>
   res.json(await new ContentTypeStore(store.db).list()),

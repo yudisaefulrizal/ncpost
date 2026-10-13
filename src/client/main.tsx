@@ -1,3 +1,4 @@
+import { Voices } from "./voices";
 import { RegenerateButton } from "./regenerate-button";
 import { CronTable } from "./cron-settings";
 import { UpcomingCronsPage } from "./cron-upcoming";
@@ -112,6 +113,7 @@ const navGroups: [string, [string, IconName][]][] = [
   [
     "Sistem",
     [
+      ["Daftar Suara", "gear"],
       ["Kredensial", "key"],
       ["Pengaturan", "gear"],
     ],
@@ -647,16 +649,17 @@ function App() {
           done: true,
           redo: () =>
             confirm(
-              `Buat ulang audio per kalimat "${c.title}"? Kredit ElevenLabs terpakai lagi.`,
+              `Buat ulang audio per kalimat "${c.title}"? Suara dari pengaturan terbaru digunakan.`,
             ) && runStage(c, ["TTS_KALIMAT"], "Buat ulang audio kalimat", true),
           view: () => setListeningSentence(c),
           viewTitle: "Dengarkan audio kalimat",
         };
-      if (!ttsLive) return { title: "TTS belum aktif (LIVE_TTS=false)" };
+      if (!ttsLive && !settingsFor(c.book).audioVoiceId)
+        return { title: "TTS belum aktif (LIVE_TTS=false)" };
       if (c.article_status !== "siap")
         return { title: "Butuh artikel lolos editor" };
       return {
-        title: "Buat audio per kalimat (ElevenLabs)",
+        title: "Buat audio per kalimat",
         run: () => runStage(c, ["TTS_KALIMAT"], "Audio kalimat"),
       };
     }
@@ -1688,6 +1691,8 @@ function App() {
         kind={page === "Lab Prompt Artikel" ? "article" : "image"}
       />
     );
+  } else if (page === "Daftar Suara") {
+    content = <Voices />;
   } else if (page === "Kredensial") {
     sub = "Key khusus aplikasi untuk penyedia eksternal.";
     content = (
@@ -2949,7 +2954,7 @@ function NewsProduction({
         ? "Butuh artikel selesai"
         : !kinds.length
           ? "Pilih jenis gambar di Pengaturan Konten"
-          : stage === "TTS_KALIMAT" && !ttsReady
+          : stage === "TTS_KALIMAT" && !ttsReady && !settings.audioVoiceId
             ? ttsReason
             : kinds
                 .map((k) => newsPrerequisite(k, p, settings, n.article))

@@ -1,3 +1,8 @@
+import {
+  resolveVoice,
+  generateVoiceAudio,
+  voiceRecipe,
+} from "../server/voices";
 import { sharedMedia, sharedVideo } from "../server/media-stock";
 import { mediaUnits, imageVariables } from "../server/content-contract";
 import { finishProcessTiming } from "../server/process-timing";
@@ -233,7 +238,11 @@ export async function runNewsMediaJob(
       return;
     }
     if (j.kind === "TTS_KALIMAT") {
-      const config = newsTtsConfig();
+      const voice = await resolveVoice(
+        store.db,
+        settings.audioVoiceId,
+        "edge-tts",
+      );
       const sentences = [];
       for (const [i, s] of mediaUnits(
         n.article,
@@ -246,11 +255,11 @@ export async function runNewsMediaJob(
         const text = sanitizeForTts(s.text);
         const source = await sharedMedia({
           category: "audio",
-          identity: [config.provider, config.voice],
+          identity: [voice.provider, voice.voice_id],
           text,
-          prompt: JSON.stringify({ rate: config.rate }),
+          prompt: JSON.stringify(voiceRecipe(voice)),
           force: !!j.force_new,
-          generate: (temporary) => edgeTts(text, temporary, config),
+          generate: (temporary) => generateVoiceAudio(voice, text, temporary),
         });
         sentences.push({
           sentence: i + 1,
@@ -260,9 +269,9 @@ export async function runNewsMediaJob(
         });
       }
       await store.complete(j, {
-        provider: config.provider,
-        voice: config.voice,
-        rate: config.rate,
+        provider: voice.provider,
+        voice: voice.voice_id,
+        ...voiceRecipe(voice),
         sentences,
         renderedAt,
       });

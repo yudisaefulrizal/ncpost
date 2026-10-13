@@ -333,3 +333,10 @@ Pembaruan ini menambahkan `cancel_version` pada tabel pekerjaan. Jalankan `npm r
 Worker berjalan maksimal 2 job sekaligus (bawaan 2); `WORKER_CONCURRENCY=1` dapat menurunkannya. Nilai di atas 2 dibatasi menjadi 2 per proses worker. Semua generate gambar memakai satu kunci bersama sehingga tidak berjalan bersamaan, termasuk preset berbeda dan beberapa proses worker pada database yang sama.
 
 Jika generate satu gambar gagal, worker mencoba ulang gambar tersebut maksimal 2 kali (total 3 percobaan), dengan jeda 10 detik. Gambar yang sudah berhasil tidak dibuat ulang. Pembatalan lewat Stop menghentikan percobaan ulang. Restart worker setelah pembaruan; tidak diperlukan migrasi tambahan untuk perubahan ini.
+
+
+## Daftar Suara
+
+Menu Daftar Suara menyimpan nama, penyedia (ElevenLabs atau Edge TTS), Voice ID, dan satu default per penyedia. Tombol Tes membuat satu contoh audio pendek; ElevenLabs menggunakan kredit. Pengaturan Konten dapat memilih suara tertentu atau memakai default. Tanpa default tersimpan, konten biasa memakai Voice ID ElevenLabs dari Kredensial dan berita memakai suara dari konfigurasi Edge TTS. Pilihan suara dibaca langsung dari database saat job mulai. Stok audio dibedakan oleh penyedia dan Voice ID; audio yang sudah tersedia tetap perlu dibuat ulang untuk mengganti suara.
+
+Jalankan `npm run migrate` untuk membuat tabel `voices`, lalu restart web dan worker.

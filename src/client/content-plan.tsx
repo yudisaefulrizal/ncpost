@@ -1,3 +1,4 @@
+import { VoiceSelect } from "./voices";
 import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
 import React, { useEffect, useState } from "react";
 import {
@@ -140,6 +141,12 @@ export function ContentPlanFields({
   };
   return (
     <div className="stack">
+      {outputs.some((output) => output.startsWith("VIDEO_")) && (
+        <VoiceSelect
+          value={settings.audioVoiceId}
+          onChange={(audioVoiceId) => set({ audioVoiceId })}
+        />
+      )}
       <fieldset className="output-targets">
         <legend>Target output</legend>
         <div className="output-target-options">

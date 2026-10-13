@@ -309,3 +309,12 @@ CREATE TABLE IF NOT EXISTS image_generation_timings (
   duration_ms BIGINT NOT NULL,
   finished_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS voices (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(190) NOT NULL,
+  provider VARCHAR(32) NOT NULL,
+  voice_id VARCHAR(190) NOT NULL,
+  is_default TINYINT NOT NULL DEFAULT 0,
+  KEY voice_default(provider,is_default)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

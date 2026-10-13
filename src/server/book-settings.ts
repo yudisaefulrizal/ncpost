@@ -98,6 +98,7 @@ export function normalizeYouTubeSettings(value: any): YouTubeSettings {
   };
 }
 export interface BookSettings {
+  audioVoiceId?: number | null;
   youtube?: YouTubeSettings;
   articleConfig?: ArticleConfig;
   imageUnit?: ImageUnit;
@@ -257,7 +258,16 @@ export function normalizeBookSettings(input: any): BookSettings {
     )
       throw Error("Cara pembuatan gambar tidak dikenal");
   }
+  if (
+    input?.audioVoiceId !== undefined &&
+    input.audioVoiceId !== null &&
+    (!Number.isSafeInteger(input.audioVoiceId) || input.audioVoiceId < 1)
+  )
+    throw Error("Pilihan suara tidak valid");
   return {
+    ...(input?.audioVoiceId !== undefined
+      ? { audioVoiceId: input.audioVoiceId }
+      : {}),
     ...(input?.sentenceVideoMode !== undefined
       ? { sentenceVideoMode: input.sentenceVideoMode }
       : {}),

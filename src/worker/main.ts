@@ -1,3 +1,8 @@
+import {
+  resolveVoice,
+  generateVoiceAudio,
+  voiceRecipe,
+} from "../server/voices";
 import { workerConcurrency } from "../server/domain";
 import { cancellableGeneration } from "../server/generation-cancel";
 import { existsSync } from "node:fs";
@@ -402,11 +407,11 @@ async function runJob(job: Job) {
       // seperti narasi panel).
       if (c.article_status !== "siap")
         throw Error("Audio kalimat butuh artikel lolos editor");
-      const config = {
-        live: process.env.LIVE_TTS === "true",
-        key: process.env.ELEVENLABS_API_KEY ?? "",
-        voice: process.env.ELEVENLABS_VOICE_ID ?? "",
-      };
+      const voice = await resolveVoice(
+        store.db,
+        mediaSettings.audioVoiceId,
+        "elevenlabs",
+      );
       const dir = audioDir(c);
       const sentences = [];
       // Kalimat 1 (paragraf hook) didahului heading hook, seperti panel 1.
@@ -423,12 +428,11 @@ async function runJob(job: Job) {
         const text = ttsNarration(heading, s.text, i === 0);
         const source = await sharedMedia({
           category: "audio",
-          identity: ["elevenlabs", config.voice],
+          identity: [voice.provider, voice.voice_id],
           text,
-          prompt: JSON.stringify({ model: "eleven_v3" }),
+          prompt: JSON.stringify(voiceRecipe(voice)),
           force: !!job.force_new,
-          generate: async (temporary) =>
-            writeFileSync(temporary, await tts(text, config)),
+          generate: (temporary) => generateVoiceAudio(voice, text, temporary),
         });
         const file = path.relative(ROOT, source);
         sentences.push({
@@ -440,9 +444,9 @@ async function runJob(job: Job) {
       }
       await store.complete(job.id, {
         sentenceAudio: JSON.stringify({
-          provider: "elevenlabs",
-          model_id: "eleven_v3",
-          voice: config.voice,
+          provider: voice.provider,
+          ...voiceRecipe(voice),
+          voice: voice.voice_id,
           sentences,
           renderedAt: new Date().toISOString(),
         }),

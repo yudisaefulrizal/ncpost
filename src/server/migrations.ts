@@ -13,6 +13,22 @@ export async function migrateDatabase(connection: Connection) {
   await connection.query(
     "ALTER TABLE assets MODIFY COLUMN description MEDIUMTEXT NOT NULL",
   );
+  const initialVoices = [
+    ["ElevenLabs awal", "elevenlabs", process.env.ELEVENLABS_VOICE_ID],
+    [
+      "Edge TTS awal",
+      "edge-tts",
+      process.env.NEWS_EDGE_TTS_VOICE || "id-ID-ArdiNeural",
+    ],
+  ];
+  for (const [name, provider, voiceId] of initialVoices) {
+    if (voiceId)
+      await connection.query(
+        "INSERT INTO voices(name,provider,voice_id,is_default) SELECT ?,?,?,1 WHERE NOT EXISTS(SELECT 1 FROM voices WHERE provider=?)",
+        [name, provider, voiceId, provider],
+      );
+  }
+
   const [newsOutputIndexes] = (await connection.query(
     "SHOW INDEX FROM news_media_outputs WHERE Key_name='PRIMARY'",
   )) as any;

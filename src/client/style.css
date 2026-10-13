@@ -2826,3 +2826,14 @@ dialog.app-dialog::backdrop {
     width: 100%;
   }
 }
+
+.voice-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.3fr;
+  gap: 16px;
+}
+@media (max-width: 760px) {
+  .voice-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
