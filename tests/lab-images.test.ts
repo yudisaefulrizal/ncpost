@@ -199,12 +199,30 @@ it("snapshots multiple attachments and sends them together with the unchanged pr
   const { id: reference, file: referenceFile } = await upload();
   const { id: logo, file: logoFile } = await upload();
   const referenceImages = [reference, logo];
-  const query = vi.fn(async (sql: string, _params?: any[]) => sql.startsWith("SELECT") ? [[]] : [{insertId:jobId}]);
+  const query = vi.fn(async (sql: string, _params?: any[]) =>
+    sql.startsWith("SELECT") ? [[]] : [{ insertId: jobId }],
+  );
   const db = new LabStore({ query } as any);
   await db.save({ ...draft, referenceImages });
-  expect(JSON.parse((query.mock.calls.find(call => call[0].includes("INSERT INTO lab_prompts")) as any)[1].at(-3))).toEqual(referenceImages);
+  expect(
+    JSON.parse(
+      (
+        query.mock.calls.find((call) =>
+          call[0].includes("INSERT INTO lab_prompts"),
+        ) as any
+      )[1].at(-3),
+    ),
+  ).toEqual(referenceImages);
   await db.enqueue({ ...draft, referenceImages });
-  expect(JSON.parse((query.mock.calls.find(call => call[0].includes("INSERT INTO lab_runs")) as any)[1].at(-3))).toEqual(referenceImages);
+  expect(
+    JSON.parse(
+      (
+        query.mock.calls.find((call) =>
+          call[0].includes("INSERT INTO lab_runs"),
+        ) as any
+      )[1].at(-3),
+    ),
+  ).toEqual(referenceImages);
   const generate = vi.fn().mockResolvedValue({ width: 400, height: 400 });
   const store = { heartbeat: vi.fn(), complete: vi.fn(), fail: vi.fn() } as any;
   await runLabJob(
@@ -243,4 +261,13 @@ it("supports empty attachments and clearing old reference/logo choices", async (
   expect(() =>
     labInput({ ...draft, kind: "article", referenceImages: [logo] }),
   ).toThrow("hanya untuk Lab Gambar");
+});
+
+vi.mock("../src/server/image-retry", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../src/server/image-retry")>();
+  return {
+    retryImageGeneration: (generate: () => Promise<unknown>) =>
+      original.retryImageGeneration(generate, async () => {}),
+  };
 });

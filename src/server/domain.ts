@@ -247,3 +247,10 @@ export function roundRobin<T extends { book: string }>(items: T[]): T[] {
     .sort((a, b) => a.pos - b.pos || a.rank - b.rank)
     .map((x) => x.x);
 }
+
+export function workerConcurrency(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 1
+    ? Math.min(2, Math.floor(number))
+    : 2;
+}

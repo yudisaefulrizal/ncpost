@@ -1,3 +1,4 @@
+import { workerConcurrency } from "../server/domain";
 import { cancellableGeneration } from "../server/generation-cancel";
 import { existsSync } from "node:fs";
 import {
@@ -1093,9 +1094,9 @@ async function runJob(job: Job) {
     );
   }
 }
-// Hingga WORKER_CONCURRENCY job (bawaan 3) berjalan bersamaan; urutan dan
+// Hingga WORKER_CONCURRENCY job (bawaan dan maksimal 2) berjalan bersamaan; urutan dan
 // ketergantungan per bagian dijaga oleh store.claim (canStart).
-const CONCURRENCY = Math.max(1, Number(process.env.WORKER_CONCURRENCY) || 3);
+const CONCURRENCY = workerConcurrency(process.env.WORKER_CONCURRENCY);
 const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
 let newsRunning = false;

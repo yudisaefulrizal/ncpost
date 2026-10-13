@@ -326,3 +326,10 @@ Reset menolak job yang masih berjalan, mencadangkan data database dan direktori 
 Tombol **Stop** tersedia pada aktivitas worker di Produksi, produksi berita, dan pengujian Lab. List Antrian juga dapat menghentikan job generate yang sedang berjalan. Worker memeriksa pembatalan setiap satu detik, menghentikan proses CLI/render dan permintaan TTS, lalu membersihkan file stok sementara. Stok yang sudah berhasil dibuat tetap tersimpan. Job ditandai **Dibatalkan** dan dapat dicoba ulang; stok lama tetap dipertahankan jika regenerate dibatalkan. Job publikasi yang sedang dikirim tidak memiliki tombol Stop.
 
 Pembaruan ini menambahkan `cancel_version` pada tabel pekerjaan. Jalankan `npm run migrate`, kemudian restart aplikasi web dan worker agar fitur Stop aktif. Penanda pembatalan mencegah proses lama melanjutkan pekerjaan ketika job segera dicoba ulang.
+
+
+## Batas worker dan percobaan ulang gambar
+
+Worker berjalan maksimal 2 job sekaligus (bawaan 2); `WORKER_CONCURRENCY=1` dapat menurunkannya. Nilai di atas 2 dibatasi menjadi 2 per proses worker. Semua generate gambar memakai satu kunci bersama sehingga tidak berjalan bersamaan, termasuk preset berbeda dan beberapa proses worker pada database yang sama.
+
+Jika generate satu gambar gagal, worker mencoba ulang gambar tersebut maksimal 2 kali (total 3 percobaan), dengan jeda 10 detik. Gambar yang sudah berhasil tidak dibuat ulang. Pembatalan lewat Stop menghentikan percobaan ulang. Restart worker setelah pembaruan; tidak diperlukan migrasi tambahan untuk perubahan ini.

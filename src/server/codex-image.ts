@@ -1,3 +1,5 @@
+import { retryImageGeneration } from "./image-retry";
+import { withPresetLock } from "./media-stock";
 import { recordImageTiming } from "./image-timing";
 import path from "node:path";
 import { readdir, lstat, realpath, mkdir, writeFile } from "node:fs/promises";
@@ -152,7 +154,7 @@ export async function collectCodexImage(
   return { width, height, thread, output: opts.output };
 }
 
-export async function generateCodexImage(
+async function generateCodexImageUnlocked(
   prompt: string,
   cwd: string,
   output: string,
@@ -198,4 +200,14 @@ export async function generateCodexImage(
     },
   );
   return result;
+}
+
+// One shared lock for every image request, including different presets and workers.
+// Waiting for the lock is excluded from the per-image duration.
+export async function generateCodexImage(
+  ...args: Parameters<typeof generateCodexImageUnlocked>
+): Promise<Awaited<ReturnType<typeof generateCodexImageUnlocked>>> {
+  return withPresetLock("generation", "all-images", () =>
+    retryImageGeneration(() => generateCodexImageUnlocked(...args)),
+  );
 }

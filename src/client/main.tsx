@@ -446,6 +446,15 @@ function App() {
     const hasStock = Object.values(c.stock_counts ?? {}).some(
       (n) => Number(n) > 0,
     );
+    if (
+      ["gambar", "kalimat", "panel"].includes(stage) &&
+      hasStock &&
+      r.run &&
+      !r.done
+    ) {
+      r.runLabel = "Lanjutkan";
+      r.title = "Lanjutkan gambar yang belum selesai";
+    }
     if (stage === "gambar" && hasStock)
       return {
         ...r,
@@ -2781,6 +2790,7 @@ function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 }
 type PlayProps = {
   title: string;
+  runLabel?: string;
   run?: () => void;
   busy?: boolean;
   done?: boolean;
@@ -2949,6 +2959,10 @@ function NewsProduction({
         ? p.stock.some((b) => kinds.includes(b.kind))
         : !!output;
     return {
+      runLabel:
+        ["IMAGES_PANEL", "IMAGES_VIDEO"].includes(stage) && hasView && !done
+          ? "Lanjutkan"
+          : undefined,
       title: active
         ? "Sedang diproses"
         : sent && !done
@@ -3828,7 +3842,11 @@ function NewsStockView({
             onClick={() => onCreate(kind)}
           >
             <Icon name="play" size={14} />
-            {active ? "Sedang diproses…" : "Buat stok lajur ini"}
+            {active
+              ? "Sedang diproses…"
+              : items.length
+                ? "Lanjutkan"
+                : "Buat stok lajur ini"}
           </button>
           <small className="muted">
             Hanya lajur ini yang dibuat; lajur lain tetap tersimpan.
@@ -4150,13 +4168,14 @@ function StageCell({ play }: { play: PlayProps }) {
   else
     main = (
       <button
-        className="play"
+        className={play.runLabel ? "btn btn-sm" : "play"}
         title={play.title}
         aria-label={play.title}
         disabled={!play.run}
         onClick={play.run}
       >
         <Icon name="play" size={14} />
+        {play.runLabel}
       </button>
     );
   return (
@@ -4293,7 +4312,7 @@ function StockModal({
             }
           >
             <Icon name="play" size={14} />
-            Buat stok lajur ini
+            {items.length ? "Lanjutkan" : "Buat stok lajur ini"}
           </button>
           <small className="muted">
             Hanya lajur ini yang dibuat; lajur lain tidak berubah.
