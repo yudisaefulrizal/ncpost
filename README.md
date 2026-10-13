@@ -340,3 +340,8 @@ Jika generate satu gambar gagal, worker mencoba ulang gambar tersebut maksimal 2
 Menu Daftar Suara menyimpan nama, penyedia (ElevenLabs atau Edge TTS), Voice ID, dan satu default per penyedia. Tombol Tes membuat satu contoh audio pendek; ElevenLabs menggunakan kredit. Pengaturan Konten dapat memilih suara tertentu atau memakai default. Tanpa default tersimpan, konten biasa memakai Voice ID ElevenLabs dari Kredensial dan berita memakai suara dari konfigurasi Edge TTS. Pilihan suara dibaca langsung dari database saat job mulai. Stok audio dibedakan oleh penyedia dan Voice ID; audio yang sudah tersedia tetap perlu dibuat ulang untuk mengganti suara.
 
 Jalankan `npm run migrate` untuk membuat tabel `voices`, lalu restart web dan worker.
+
+
+## Stok Audio
+
+Menu Stok Audio menampilkan audio bersama dengan filter teks, penyedia, dan suara. Download tersedia per audio, untuk audio terpilih, atau seluruh hasil filter sebagai ZIP. Nama file dan folder penyedia/suara dipertahankan di ZIP. Server perlu program `zip` (Ubuntu/Debian: `sudo apt install zip`). Arsip sementara dihapus setelah unduhan selesai. Tidak diperlukan migrasi tambahan untuk halaman ini.

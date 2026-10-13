@@ -1,3 +1,10 @@
+import {
+  listAudioStock,
+  filterAudioStock,
+  audioStockFile,
+  createAudioZip,
+} from "./audio-stock";
+import os from "node:os";
 import { mkdirSync } from "node:fs";
 import {
   listVoices,
@@ -128,6 +135,58 @@ app.use("/api", (req, res, next) => {
   if (!user) return void res.status(401).json({ error: "Silakan masuk" });
   res.locals.user = user;
   next();
+});
+app.get("/api/audio-stock", async (_, res) => {
+  res.json(
+    (await listAudioStock(store.db)).map(({ file, ...row }) => ({
+      ...row,
+      url: `/api/audio-stock/${row.id}/audio`,
+    })),
+  );
+});
+app.get("/api/audio-stock/:id/audio", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return void res.sendStatus(404);
+  const [rows]: any = await store.db.query(
+    "SELECT file FROM media_stock WHERE id=? AND category='audio'",
+    [id],
+  );
+  if (!rows[0]) return void res.sendStatus(404);
+  const file = audioStockFile(rows[0].file);
+  if (req.query.download === "1") res.download(file, path.basename(file));
+  else {
+    res.set("Cache-Control", "private, no-store");
+    res.sendFile(file);
+  }
+});
+app.post("/api/audio-stock/download", async (req, res) => {
+  let rows = filterAudioStock(await listAudioStock(store.db), req.body || {});
+  if (req.body?.ids !== undefined) {
+    if (
+      !Array.isArray(req.body.ids) ||
+      !req.body.ids.length ||
+      req.body.ids.some(
+        (id: unknown) => !Number.isSafeInteger(id) || Number(id) < 1,
+      )
+    )
+      throw Error("Pilih audio yang akan diunduh");
+    const ids = new Set(req.body.ids);
+    rows = rows.filter((row) => ids.has(row.id));
+  }
+  if (!rows.length) throw Error("Tidak ada audio untuk diunduh");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "ncpost-audio-"));
+  try {
+    const archive = path.join(temporary, "stok-audio.zip");
+    await createAudioZip(rows, archive);
+    await new Promise<void>((resolve, reject) =>
+      res.download(archive, "stok-audio.zip", (error) =>
+        error ? reject(error) : resolve(),
+      ),
+    );
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 });
 app.get("/api/voices", async (_, res) => res.json(await listVoices(store.db)));
 app.post("/api/voices", async (req, res) =>

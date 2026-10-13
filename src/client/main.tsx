@@ -1,3 +1,4 @@
+import { AudioStockPage } from "./audio-stock";
 import { Voices } from "./voices";
 import { RegenerateButton } from "./regenerate-button";
 import { CronTable } from "./cron-settings";
@@ -98,6 +99,7 @@ const navGroups: [string, [string, IconName][]][] = [
     "Aset",
     [
       ["Stok Gambar", "image"],
+      ["Stok Audio", "gear"],
       ["Stok Konten Gambar", "image"],
       ["Stok Konten Panel", "grid"],
       ["Stok Konten Video", "video"],
@@ -1691,6 +1693,8 @@ function App() {
         kind={page === "Lab Prompt Artikel" ? "article" : "image"}
       />
     );
+  } else if (page === "Stok Audio") {
+    content = <AudioStockPage />;
   } else if (page === "Daftar Suara") {
     content = <Voices />;
   } else if (page === "Kredensial") {

@@ -2837,3 +2837,10 @@ dialog.app-dialog::backdrop {
     grid-template-columns: 1fr;
   }
 }
+
+.audio-stock-text {
+  min-width: 240px;
+  max-width: 500px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
