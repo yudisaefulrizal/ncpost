@@ -94,6 +94,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
   const [referenceKey, setReferenceKey] = useState("");
   const [tab, setTab] = useState<"test" | "status">("test");
   const [editing, setEditing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [name, setName] = useState(`Eksperimen ${label.toLowerCase()}`);
@@ -262,6 +263,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     });
   }
   function useReference(ref: Reference) {
+    setDuplicating(false);
     setConfig(null);
     setImageType(ref.id.startsWith("QUOTE_") ? "ready_post" : "illustration");
     setDraftId(null);
@@ -273,6 +275,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
     setMessage("");
   }
   function newDraft() {
+    setDuplicating(false);
     setConfig(
       kind === "image"
         ? { usage: "single", unit: "article" }
@@ -479,6 +482,7 @@ export function PromptLab({ kind }: { kind: Kind }) {
                           <button
                             className="btn btn-sec btn-sm"
                             onClick={() => {
+                              setDuplicating(false);
                               if (row.draft) {
                                 setConfig(labConfig(row.draft.config));
                                 setDraftId(row.draft.id);
@@ -505,6 +509,51 @@ export function PromptLab({ kind }: { kind: Kind }) {
                           >
                             {row.draft ? "Edit" : "Tuning"}
                           </button>
+                          <button
+                            className="btn btn-sec btn-sm"
+                            disabled={busy}
+                            onClick={() => {
+                              const ref = references.find(
+                                (r) => r.id === row.reference,
+                              );
+                              if (row.draft) {
+                                setConfig(
+                                  structuredClone(labConfig(row.draft.config)),
+                                );
+                                setImageType(row.imageType);
+                                setAttachments([
+                                  ...imageAttachments(row.draft),
+                                ]);
+                                setReferenceKey(row.reference);
+                                setPrompt(row.prompt);
+                                setOrientation(ref?.orientation || "bebas");
+                              } else if (ref) {
+                                useReference(ref);
+                              }
+                              let number = 1;
+                              let copyName = "";
+                              do {
+                                const suffix =
+                                  number === 1
+                                    ? " (salinan)"
+                                    : ` (salinan ${number})`;
+                                copyName =
+                                  row.name.slice(0, 190 - suffix.length) +
+                                  suffix;
+                                number++;
+                              } while (
+                                drafts.some((draft) => draft.name === copyName)
+                              );
+                              setDraftId(null);
+                              setName(copyName);
+                              setDuplicating(true);
+                              setError("");
+                              setMessage("");
+                              setEditing(true);
+                            }}
+                          >
+                            Duplikat
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -517,7 +566,13 @@ export function PromptLab({ kind }: { kind: Kind }) {
       )}
       {editing && (
         <Modal
-          title={draftId ? "Edit jenis" : "Tambah jenis"}
+          title={
+            duplicating
+              ? "Duplikat jenis"
+              : draftId
+                ? "Edit jenis"
+                : "Tambah jenis"
+          }
           onClose={() => {
             if (!busy) setEditing(false);
           }}
