@@ -51,17 +51,56 @@ it("creates a ZIP with original filenames and rejects files outside the audio po
   try {
     await mkdir(folder, { recursive: true });
     const file = path.join(folder, "voice__hello.mp3");
-    await writeFile(file, "audio-test");
+    await promisify(execFile)("ffmpeg", [
+      "-y",
+      "-v",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      "sine=frequency=440:duration=0.2",
+      "-ac",
+      "2",
+      "-ar",
+      "48000",
+      file,
+    ]);
     const zip = path.join(temporary, "audio.zip");
     await createAudioZip(
       [
         { ...rows[0], file: path.relative(ROOT, file) },
+        {
+          ...rows[0],
+          id: 3,
+          provider: "edge-tts",
+          file: path.relative(ROOT, file),
+        },
         { ...rows[1], text: "x".repeat(231), file: "missing.mp3" },
       ],
       zip,
     );
     const { stdout } = await promisify(execFile)("unzip", ["-Z1", zip]);
-    expect(stdout.trim()).toBe("elevenlabs__one/hello-world.mp3");
+    expect(stdout.trim()).toBe("hello-world.wav");
+    await promisify(execFile)("unzip", [
+      "-q",
+      zip,
+      "-d",
+      path.join(temporary, "extracted"),
+    ]);
+    const { stdout: metadata } = await promisify(execFile)("ffprobe", [
+      "-v",
+      "error",
+      "-show_streams",
+      "-of",
+      "json",
+      path.join(temporary, "extracted", "hello-world.wav"),
+    ]);
+    expect(JSON.parse(metadata).streams[0]).toMatchObject({
+      codec_name: "pcm_s16le",
+      channels: 1,
+      sample_rate: "44100",
+      bits_per_sample: 16,
+    });
     const outside = path.join(temporary, "outside.mp3");
     await writeFile(outside, "outside");
     await expect(
@@ -75,7 +114,7 @@ it("creates a ZIP with original filenames and rejects files outside the audio po
 });
 
 it("uses narration-only filenames and skips text longer than 230 characters", () => {
-  expect(audioDownloadName("Halo, ini suara!")).toBe("halo-ini-suara.mp3");
-  expect(audioDownloadName("a".repeat(230))).toBe("a".repeat(230) + ".mp3");
+  expect(audioDownloadName("Halo, ini suara!")).toBe("halo-ini-suara.wav");
+  expect(audioDownloadName("a".repeat(230))).toBe("a".repeat(230) + ".wav");
   expect(audioDownloadName("a".repeat(231))).toBeNull();
 });

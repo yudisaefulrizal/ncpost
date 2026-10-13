@@ -4,6 +4,7 @@ import {
   audioStockFile,
   createAudioZip,
   audioDownloadName,
+  convertAudioDownload,
 } from "./audio-stock";
 import os from "node:os";
 import { mkdirSync } from "node:fs";
@@ -156,12 +157,22 @@ app.get("/api/audio-stock/:id/audio", async (req, res) => {
   if (!rows[0]) return void res.sendStatus(404);
   const file = audioStockFile(rows[0].file);
   if (req.query.download === "1") {
-    const name = audioDownloadName(rows[0].source_text, path.extname(file));
+    const name = audioDownloadName(rows[0].source_text);
     if (!name)
       throw Error(
         "Audio dengan teks lebih dari 230 karakter tidak dapat diunduh",
       );
-    res.download(file, name);
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const temporary = await mkdtemp(path.join(os.tmpdir(), "ncpost-wav-"));
+    try {
+      const wav = path.join(temporary, name);
+      await convertAudioDownload(file, wav);
+      await new Promise<void>((resolve, reject) =>
+        res.download(wav, name, (error) => (error ? reject(error) : resolve())),
+      );
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
   } else {
     res.set("Cache-Control", "private, no-store");
     res.sendFile(file);

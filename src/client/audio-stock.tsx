@@ -168,8 +168,9 @@ export function AudioStockPage() {
         {busy && <span role="status">Menyiapkan ZIP…</span>}
       </div>
       <small className="muted">
-        Nama download memakai teks narasi. Audio dengan teks lebih dari 230
-        karakter tidak ikut diunduh.
+        Download dalam format WAV, PCM 16-bit, mono, 44,1 kHz. Nama file memakai
+        teks narasi. Audio dengan teks lebih dari 230 karakter tidak ikut
+        diunduh.
       </small>
       {error && (
         <p className="warn" role="alert">

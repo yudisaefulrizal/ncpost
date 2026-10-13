@@ -1,6 +1,7 @@
-import { mkdtemp, mkdir, copyFile, rm } from "node:fs/promises";
+import { promisify } from "node:util";
+import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import type mysql from "mysql2/promise";
 import { ROOT } from "./config";
 import { outputRoot } from "./output-paths";
@@ -60,10 +61,44 @@ export function audioStockFile(file: string) {
     path.join(ROOT, file),
   );
 }
-export function audioDownloadName(text: string, extension = ".mp3") {
+export function audioDownloadName(text: string, extension = ".wav") {
   if (Array.from(text).length > 230) return null;
   const name = stockPart(text);
   return name.length <= 230 ? name + extension : null;
+}
+export async function convertAudioDownload(
+  source: string,
+  destination: string,
+) {
+  try {
+    await promisify(execFile)(
+      "ffmpeg",
+      [
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        source,
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-c:a",
+        "pcm_s16le",
+        "-ac",
+        "1",
+        "-ar",
+        "44100",
+        "-f",
+        "wav",
+        destination,
+      ],
+      { timeout: 120000, maxBuffer: 1024 * 1024 },
+    );
+  } catch {
+    throw Error(
+      "Konversi audio ke WAV gagal; periksa audio dan ffmpeg di server",
+    );
+  }
 }
 export async function createAudioZip(rows: AudioStock[], destination: string) {
   const eligible = rows.filter((row) => audioDownloadName(row.text));
@@ -79,18 +114,13 @@ export async function createAudioZip(rows: AudioStock[], destination: string) {
     const used = new Set<string>();
     for (const row of eligible) {
       const source = audioStockFile(row.file);
-      const name = audioDownloadName(row.text, path.extname(source));
+      const name = audioDownloadName(row.text);
       if (!name) continue;
-      const folder = `${stockPart(row.provider)}__${stockPart(row.voice)}`;
-      let relative = path.join(folder, name);
-      let duplicate = 2;
-      while (used.has(relative))
-        relative = path.join(folder, `salinan-${duplicate++}`, name);
+      const relative = name;
+      // Identical narration filenames share one entry; do not add identifiers.
+      if (used.has(relative)) continue;
       used.add(relative);
-      await mkdir(path.dirname(path.join(stage, relative)), {
-        recursive: true,
-      });
-      await copyFile(source, path.join(stage, relative));
+      await convertAudioDownload(source, path.join(stage, relative));
       files.push(relative);
     }
     await new Promise<void>((resolve, reject) => {
