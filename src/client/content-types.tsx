@@ -19,6 +19,7 @@ export function ContentTypes({
 }) {
   const [editing, setEditing] = useState<ContentType | "new" | null>(null);
   const [name, setName] = useState("");
+  const [duplicating, setDuplicating] = useState(false);
   const [engine, setEngine] = useState<ContentType["engine"]>("book");
   const [outputs, setOutputs] = useState<string[]>(["VIDEO_KALIMAT"]);
   const [settings, setSettings] = useState<BookSettings>(() => ({
@@ -44,6 +45,7 @@ export function ContentTypes({
     }
   };
   const edit = (type: ContentType | "new") => {
+    setDuplicating(false);
     setEditing(type);
     setName(type === "new" ? "" : type.name);
     setEngine(type === "new" ? "book" : type.engine);
@@ -64,6 +66,20 @@ export function ContentTypes({
         : planSettings(next, type.settings),
     );
     setError("");
+  };
+  const duplicate = (type: ContentType) => {
+    edit(type);
+    setEditing("new");
+    setDuplicating(true);
+    let number = 1;
+    let copyName = "";
+    do {
+      const suffix = number === 1 ? " (salinan)" : ` (salinan ${number})`;
+      copyName = type.name.slice(0, 190 - suffix.length) + suffix;
+      number++;
+    } while (items.some((item) => item.name === copyName));
+    setName(copyName);
+    if (type.settings) setSettings(structuredClone(type.settings));
   };
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -131,6 +147,12 @@ export function ContentTypes({
                     </button>
                     <button
                       className="btn btn-sec btn-sm"
+                      onClick={() => duplicate(type)}
+                    >
+                      Duplikat
+                    </button>
+                    <button
+                      className="btn btn-sec btn-sm"
                       onClick={() => {
                         setDeleting(type);
                         setDeleteError("");
@@ -188,7 +210,11 @@ export function ContentTypes({
       {editing && (
         <Modal
           title={
-            editing === "new" ? "Tambah jenis konten" : "Edit jenis konten"
+            duplicating
+              ? "Duplikat jenis konten"
+              : editing === "new"
+                ? "Tambah jenis konten"
+                : "Edit jenis konten"
           }
           onClose={() => {
             if (!busy) setEditing(null);
