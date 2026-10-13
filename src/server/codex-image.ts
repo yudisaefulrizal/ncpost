@@ -1,3 +1,4 @@
+import { recordImageTiming } from "./image-timing";
 import path from "node:path";
 import { readdir, lstat, realpath, mkdir, writeFile } from "node:fs/promises";
 import sharp from "sharp";
@@ -182,10 +183,19 @@ export async function generateCodexImage(
     180000,
   );
   if (!process.env.HOME) throw Error("HOME CLI tidak tersedia");
-  return collectCodexImage(events, {
+  const result = await collectCodexImage(events, {
     home: process.env.HOME,
     output,
     startedAt,
     orientation,
   });
+  await recordImageTiming(Date.now() - startedAt, orientation).catch(
+    (error) => {
+      console.error(
+        "Pencatatan durasi gambar gagal:",
+        (error as Error).message,
+      );
+    },
+  );
+  return result;
 }

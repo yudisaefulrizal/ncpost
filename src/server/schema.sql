@@ -302,3 +302,10 @@ CREATE TABLE IF NOT EXISTS media_stock (
  UNIQUE KEY media_stock_identity(category,identity_name,name),
  KEY media_stock_preset(preset_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS image_generation_timings (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  orientation VARCHAR(16) NOT NULL,
+  duration_ms BIGINT NOT NULL,
+  finished_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,3 +1,4 @@
+import { listImageTimings } from "./image-timing";
 import { enqueueStockRegeneration } from "./stock-regenerate";
 import { deleteImageStock } from "./stock-delete";
 import { configureMediaStock, resolveMedia } from "./media-stock";
@@ -482,6 +483,9 @@ app.post("/api/chapters/:id/jobs", async (req, res) => {
 app.get("/api/crons", async (_, res) =>
   res.json(await listUpcomingCrons(store, true)),
 );
+app.get("/api/image-timings", async (_, res) => {
+  res.json(await listImageTimings(store.db));
+});
 app.get("/api/process-timings", async (_, res) => {
   const history = await listProcessTimings(store.db);
   res.json({ history, eta: timingEta(history) });

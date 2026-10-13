@@ -1,3 +1,4 @@
+import { RegenerateButton } from "./regenerate-button";
 import { CronTable } from "./cron-settings";
 import { UpcomingCronsPage } from "./cron-upcoming";
 import { QueuePage } from "./queue";
@@ -3738,13 +3739,11 @@ function ProductionStockImage({
         <img loading="lazy" src={url} alt={description} />
       </a>
       {stock?.canRegenerate && (
-        <button
-          className="btn btn-sm"
-          disabled={busy || !!job}
+        <RegenerateButton
+          jobId={job}
+          disabled={busy}
           onClick={() => act(false)}
-        >
-          {job ? "Membuat ulang…" : "Buat ulang"}
-        </button>
+        />
       )}
       {error && (
         <p className="warn" role="alert">
@@ -4845,12 +4844,11 @@ function StockGallery() {
               <figcaption>
                 <b>{a.description}</b>
                 {a.canRegenerate && (
-                  <button
-                    disabled={deleting !== null || !!regenerating[a.id]}
+                  <RegenerateButton
+                    jobId={regenerating[a.id]}
+                    disabled={deleting !== null}
                     onClick={() => regenerate(a.id)}
-                  >
-                    {regenerating[a.id] ? "Membuat ulang…" : "Buat ulang"}
-                  </button>
+                  />
                 )}
                 <small className="muted">
                   {a.orientation === "horizontal"

@@ -2779,3 +2779,50 @@ dialog.app-dialog::backdrop {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+
+.regenerate-control {
+  display: grid;
+  gap: 5px;
+}
+.regenerate-button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 36px;
+  width: 100%;
+}
+.regenerate-button.is-loading:disabled {
+  opacity: 1;
+  color: var(--ink);
+}
+.regenerate-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #cceadd;
+  transition: width 1s linear;
+  z-index: -1;
+}
+.regenerate-label {
+  position: relative;
+}
+.regenerate-fill.indeterminate {
+  width: 35%;
+  animation: regenerate-charge 1.8s ease-in-out infinite;
+}
+@keyframes regenerate-charge {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .regenerate-fill {
+    transition: none;
+  }
+  .regenerate-fill.indeterminate {
+    animation: none;
+    width: 100%;
+  }
+}

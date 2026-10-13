@@ -1,3 +1,4 @@
+import { configureImageTiming } from "./image-timing";
 import { checkGeneration, generationSignal } from "./generation-cancel";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -10,6 +11,7 @@ import { outputRoot } from "./output-paths";
 let catalog: mysql.Pool | undefined;
 export function configureMediaStock(db: mysql.Pool | undefined) {
   catalog = db;
+  configureImageTiming(db);
 }
 export function stockPart(text: string) {
   return (
