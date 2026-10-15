@@ -121,3 +121,20 @@ describe("checklist ketersediaan", () => {
     expect(a.short).toBe(0);
   });
 });
+
+describe("ringkasan Manajer", () => {
+  it("stok yang basi tidak ditampilkan", async () => {
+    const { emptyState, managerView, STOCK_FRESH } = await import(
+      "../src/server/manager"
+    );
+    const state = emptyState();
+    state.stock["1:instagram"] = { ready: 4, at: at(10) };
+    const type = { id: 1, settings: { socialTargets: ["instagram"] } as any };
+    const targets = { 1: { instagram: 2, tiktok: 0, youtube: 0 } };
+    expect(
+      managerView(state, type, targets, at(10, 1)).instagram,
+    ).toMatchObject({ ready: 4 });
+    const stale = managerView(state, type, targets, at(10) + STOCK_FRESH + 1);
+    expect(stale.instagram).toMatchObject({ ready: null, check: null });
+  });
+});

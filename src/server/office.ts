@@ -4,7 +4,12 @@
 import type mysql from "mysql2/promise";
 import { socialTargets } from "./book-settings";
 import { ContentTypeStore } from "./content-types";
-import { loadManager, managerView, type ManagerState } from "./manager";
+import {
+  loadManager,
+  managerView,
+  STOCK_FRESH,
+  type ManagerState,
+} from "./manager";
 import {
   activeTargets,
   managerTargets,
@@ -227,6 +232,9 @@ export async function officeSummary(
     history,
     manager: {
       lastActionAt: manager.lastActionAt,
+      lastTickAt: manager.lastTickAt,
+      // Manajer masih memeriksa tiap menit; bila tidak, stok di layar basi.
+      checking: now - manager.lastTickAt <= STOCK_FRESH,
       orders: manager.orders
         .filter((o) => o.status === "berjalan" || o.updated >= today)
         .map((o) => ({ ...o, typeName: typeName.get(o.typeId) ?? null })),

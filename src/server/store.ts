@@ -1000,14 +1000,19 @@ export class Store {
       currentContentType() ? [currentContentType()!.id] : [],
     );
   }
-  claim(now = Date.now()) {
+  claim(now = Date.now(), kinds?: string[]) {
     return this.tx(async (db) => {
       // Job antre tertua yang tidak bentrok dengan job aktif bagian yang sama.
       const active = await rows<Job>(
         db,
         `SELECT ${JOB_COLUMNS} FROM jobs WHERE state IN ('queued','running') ORDER BY id FOR UPDATE`,
       );
-      const j = active.find((x) => x.state === "queued" && canStart(x, active));
+      const j = active.find(
+        (x) =>
+          x.state === "queued" &&
+          (!kinds || kinds.includes(x.kind)) &&
+          canStart(x, active),
+      );
       if (j) {
         await run(
           db,

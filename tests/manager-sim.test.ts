@@ -78,12 +78,19 @@ function fakeStore(
             .map((id: number) => ({ id, ...jobs.get(id) })),
         ];
       if (sql.includes("FROM zernio_publications")) return [[]];
+      if (sql.startsWith("UPDATE jobs SET state='cancelled'")) {
+        const job = jobs.get(params[1]);
+        if (job?.state !== "queued") return [{ affectedRows: 0 }];
+        job.state = "cancelled";
+        return [{ affectedRows: 1 }];
+      }
       return [[]];
     },
   };
   const store: any = {
     db,
     list: async () => chapters,
+    bookSettings: async () => settings,
     enqueue: async (id: number, kind: string) => {
       const jobId = nextId++;
       enqueued.push({ id, kind });
@@ -172,6 +179,110 @@ describe("Manajer bekerja", () => {
     expect(state.posts[0].note).toBe("NC-WA menolak");
     expect(enqueued.map((e) => e.id)).toEqual([1, 2]);
     expect(state.log.some((l) => l.text.includes("gagal"))).toBe(true);
+  });
+
+  it("gagal sebelum terkirim: topik yang sama tidak dipilih lagi hari itu", async () => {
+    // Instagram: job gagal sebelum mengirim, post_status tetap "belum".
+    const ig = [chapter(1), chapter(2)];
+    const a = fakeStore(ig, { instagram: 2, tiktok: 0, youtube: 0 });
+    const igFile = stateFile();
+    const ok = async () => ({ status: "published" });
+    await managerTick(a.store, ok, NIGHT, igFile, a.store.targetFile);
+    a.jobs.set(100, { state: "failed", error: "NC-WA belum terhubung" });
+    ig[0].production_jobs = [];
+    await managerTick(
+      a.store,
+      ok,
+      NIGHT + 16 * MIN,
+      igFile,
+      a.store.targetFile,
+    );
+    expect(a.enqueued.map((e) => e.id)).toEqual([1, 2]);
+
+    // TikTok: publikasi ditolak sebelum terkirim.
+    const b = fakeStore([chapter(1), chapter(2)], {
+      instagram: 0,
+      tiktok: 2,
+      youtube: 0,
+    });
+    const published: string[] = [];
+    const publish = async (source: string) => {
+      published.push(source);
+      if (source === "book:1") throw Error("Pilih akun YouTube/TikTok");
+      return { status: "published" };
+    };
+    const ttFile = stateFile();
+    await managerTick(b.store, publish, NIGHT, ttFile, b.store.targetFile);
+    await managerTick(
+      b.store,
+      publish,
+      NIGHT + 16 * MIN,
+      ttFile,
+      b.store.targetFile,
+    );
+    expect(published).toEqual(["book:1", "book:2"]);
+    expect(read(ttFile).posts.map((p) => [p.chapterId, p.status])).toEqual([
+      [1, "gagal"],
+      [2, "terbit"],
+    ]);
+  });
+
+  it("job posting yang tidak kunjung berjalan dibatalkan dan diganti", async () => {
+    const chapters = [chapter(1), chapter(2)];
+    const { store, jobs, enqueued } = fakeStore(chapters, {
+      instagram: 1,
+      tiktok: 0,
+      youtube: 0,
+    });
+    const publish = async () => ({ status: "published" });
+    const file = stateFile();
+    await managerTick(store, publish, NIGHT, file, store.targetFile);
+    await managerTick(store, publish, NIGHT + 20 * MIN, file, store.targetFile);
+    expect(jobs.get(100)?.state).toBe("queued");
+    expect(enqueued).toHaveLength(1);
+    chapters[0].production_jobs = [];
+    await managerTick(store, publish, NIGHT + 31 * MIN, file, store.targetFile);
+    expect(jobs.get(100)?.state).toBe("cancelled");
+    expect(enqueued.map((e) => e.id)).toEqual([1, 2]);
+    expect(read(file).posts[0]).toMatchObject({ status: "gagal" });
+  });
+
+  it("stok TikTok dihitung dengan pengaturan per buku yang dipakai saat mengirim", async () => {
+    const { store } = fakeStore([chapter(1), chapter(2)], {
+      instagram: 0,
+      tiktok: 1,
+      youtube: 0,
+    });
+    store.bookSettings = async () => ({ ...settings, tiktokAccountId: null });
+    const published: string[] = [];
+    const file = stateFile();
+    await managerTick(
+      store,
+      async (source: string) => (published.push(source), { status: "ok" }),
+      NIGHT,
+      file,
+      store.targetFile,
+    );
+    expect(published).toEqual([]);
+    expect(read(file).stock["1:tiktok"].ready).toBe(0);
+  });
+
+  it("kesalahan satu jenis konten tidak menghentikan putaran", async () => {
+    const { store } = fakeStore([chapter(1)]);
+    store.list = async () => {
+      throw Error("DB putus");
+    };
+    const file = stateFile();
+    await managerTick(
+      store,
+      async () => ({ status: "published" }),
+      NIGHT,
+      file,
+      store.targetFile,
+    );
+    const state = read(file);
+    expect(state.lastTickAt).toBe(NIGHT);
+    expect(state.log[0].text).toContain("DB putus");
   });
 
   it("stok kurang: menyuruh tim memproduksi topik berikutnya", async () => {

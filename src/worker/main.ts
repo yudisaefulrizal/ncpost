@@ -1102,6 +1102,10 @@ async function runJob(job: Job) {
 // ketergantungan per bagian dijaga oleh store.claim (canStart).
 const CONCURRENCY = workerConcurrency(process.env.WORKER_CONCURRENCY);
 const running = new Set<Promise<void>>();
+// Posting Instagram punya lajur sendiri di luar WORKER_CONCURRENCY: job singkat
+// ini tidak boleh antre di belakang produksi panjang (mis. render video).
+const POST_JOBS = ["POST_IG", "REELS_IG"];
+let posting: Promise<void> | null = null;
 let lastCronMinute = -1;
 let lastManagerMinute = -1;
 let lastStatsHour = -1;
@@ -1204,6 +1208,13 @@ while (!stop) {
       break;
     }
   }
+  if (!posting) {
+    const job = await store.claim(Date.now(), POST_JOBS);
+    if (job)
+      posting = generation("jobs", job, () => runJob(job)).finally(() => {
+        posting = null;
+      });
+  }
   while (running.size < CONCURRENCY) {
     const job = await store.claim();
     if (!job) break;
@@ -1226,7 +1237,11 @@ while (!stop) {
         console.error("Lab gagal:", (e as Error).message);
     }
   }
-  await Promise.race([new Promise((r) => setTimeout(r, 1000)), ...running]);
+  await Promise.race([
+    new Promise((r) => setTimeout(r, 1000)),
+    ...running,
+    ...(posting ? [posting] : []),
+  ]);
 }
-await Promise.all(running);
+await Promise.all([...running, posting]);
 await store.close();

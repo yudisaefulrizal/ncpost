@@ -56,6 +56,14 @@ function Checklist({ office }: { office: OfficeSummary }) {
           Manajer sendiri yang menentukan berapa stok yang perlu disiapkan
         </span>
       </div>
+      {!office.manager.checking && (
+        <p className="warn">
+          {office.manager.lastTickAt
+            ? `Manajer tidak memeriksa sejak ${clock(office.manager.lastTickAt)}`
+            : "Manajer belum pernah memeriksa"}
+          ; jumlah konten siap tidak ditampilkan sampai worker berjalan lagi.
+        </p>
+      )}
       <div className="table">
         <table className="target-table">
           <thead>
@@ -119,6 +127,8 @@ export type OfficeSummary = {
   history: ({ date: string } & Counts)[];
   manager: {
     lastActionAt: number;
+    lastTickAt: number;
+    checking: boolean;
     orders: {
       at: number;
       updated: number;

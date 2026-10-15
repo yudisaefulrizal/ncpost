@@ -38,6 +38,10 @@ const MINUTE = 60000;
 export const POST_WINDOW = { start: 6 * 60, end: 22 * 60 };
 export const MIN_GAP = 15 * MINUTE; // jarak minimum antarposting satu sosmed/jenis
 export const MAX_FAILS = 5; // per sosmed/jenis per hari, lalu berhenti
+// Job posting yang belum juga berjalan selama ini dibatalkan lalu diganti konten lain.
+export const POST_QUEUE_LIMIT = 30 * MINUTE;
+// Hitungan stok lebih tua dari ini dianggap basi (Manajer memeriksa tiap menit).
+export const STOCK_FRESH = 5 * MINUTE;
 const MAX_ORDERS = 2; // topik yang diproduksi bersamaan per jenis konten
 
 export type PostStatus = "proses" | "terbit" | "gagal";
@@ -74,6 +78,8 @@ export type ManagerState = {
   orders: ManagerOrder[];
   log: ManagerLog[];
   lastActionAt: number;
+  // Akhir putaran Manajer terakhir; dipakai untuk menandai stok yang basi.
+  lastTickAt: number;
   // Stok konten siap per "jenis:sosmed" pada evaluasi terakhir.
   stock: Record<string, { ready: number; at: number }>;
   noted: Record<string, number>;
@@ -83,6 +89,7 @@ export const emptyState = (): ManagerState => ({
   orders: [],
   log: [],
   lastActionAt: 0,
+  lastTickAt: 0,
   stock: {},
   noted: {},
 });
@@ -331,8 +338,12 @@ export async function managerTick(
     try {
       const state = loadManager(file);
       const targets = await managerTargets(store.db, targetFile);
-      await work(store, publish, state, targets, now);
-      saveManager(state, file);
+      // Yang sudah dikerjakan tetap tercatat walau putaran terhenti di tengah.
+      try {
+        await work(store, publish, state, targets, now);
+      } finally {
+        saveManager(state, file);
+      }
     } finally {
       await connection.query("SELECT RELEASE_LOCK('ncpost-manager')");
     }
@@ -396,25 +407,47 @@ async function work(
           "ok",
           p.typeId,
         );
+      } else if (j.state === "queued" && now - p.at >= POST_QUEUE_LIMIT) {
+        // Belum terkirim, jadi aman dibatalkan; slot ini diisi konten lain.
+        const note = `Job posting tidak berjalan dalam ${POST_QUEUE_LIMIT / MINUTE} menit`;
+        const [r]: any = await store.db.query(
+          "UPDATE jobs SET state='cancelled',error=? WHERE id=? AND state='queued'",
+          [note, p.jobId],
+        );
+        if (r?.affectedRows) {
+          p.status = "gagal";
+          p.note = note;
+          log(
+            `${PLATFORM_LABEL[p.platform]} ${p.kind} ${p.title} dibatalkan: ${note}. Dicoba dengan konten lain.`,
+            "warn",
+            p.typeId,
+          );
+        }
       }
     }
   }
 
-  const types = await new ContentTypeStore(store.db).list();
-  for (const type of types) {
-    if (type.engine === "news" || !type.settings) continue;
-    const settings = type.settings;
+  // Satu jenis konten; kesalahan di satu jenis tidak menghentikan jenis lain.
+  const workType = async (type: ContentType, settings: BookSettings) => {
     const targets = activeTargets(targetMap, type);
     const hasOrders = state.orders.some(
       (o) => o.typeId === type.id && o.status === "berjalan",
     );
-    if (!PLATFORMS.some((p) => targets[p] > 0) && !hasOrders) continue;
+    if (!PLATFORMS.some((p) => targets[p] > 0) && !hasOrders) return;
     const chapters = (await withContentType(type, () => store.list())).sort(
       (a, b) =>
         Number(a.part_number ?? a.id) - Number(b.part_number ?? b.id) ||
         a.id - b.id,
     );
     const plan = socialPlan(type.outputs, settings, type.engine);
+    // TikTok/YouTube dikirim dengan pengaturan per buku (seperti publishZernio),
+    // jadi stoknya dihitung dengan pengaturan yang sama.
+    const perBook = new Map<string, Promise<BookSettings>>();
+    const sendSettings = (c: Chapter) => {
+      if (!perBook.has(c.book))
+        perBook.set(c.book, store.bookSettings(c.book, store.db, type.id));
+      return perBook.get(c.book)!;
+    };
     let shortage = 0;
     const shortFor: string[] = [];
 
@@ -437,6 +470,10 @@ async function work(
       const done = mine.filter((p) => p.status === "terbit").length;
       const inflight = mine.filter((p) => p.status === "proses").length;
       const failed = mine.filter((p) => p.status === "gagal").length;
+      // Konten yang gagal diposting hari ini tidak dipilih lagi hari ini.
+      const failedToday = new Set(
+        mine.filter((p) => p.status === "gagal").map((p) => p.chapterId),
+      );
 
       // Stok konten siap untuk sosmed ini.
       const published =
@@ -460,9 +497,14 @@ async function work(
                 .filter((c) => igReady(c, format))
                 .map((c) => ({ c, format })),
             )
-          : chapters
-              .map((c) => ({ c, input: zernioInput(c, platform, settings) }))
-              .filter(({ input }) => input && !published.has(input.mediaKey));
+          : (
+              await Promise.all(
+                chapters.map(async (c) => ({
+                  c,
+                  input: zernioInput(c, platform, await sendSettings(c)),
+                })),
+              )
+            ).filter(({ input }) => input && !published.has(input.mediaKey));
       const readyCount =
         platform === "instagram"
           ? new Set(candidates.map((x: any) => x.c.id)).size
@@ -491,7 +533,15 @@ async function work(
       const last = Math.max(0, ...mine.map((p) => p.at));
       if (done + inflight >= due || now - last < MIN_GAP) continue;
 
-      // Waktunya posting: ambil konten siap tertua.
+      // Waktunya posting: ambil konten siap tertua yang belum gagal hari ini.
+      const empty = () =>
+        note(
+          `empty:${type.id}:${platform}`,
+          `${type.name} · ${PLATFORM_LABEL[platform]}: ${candidates.length ? "konten siap yang ada sudah gagal diposting hari ini, menunggu konten baru" : "tidak ada konten siap untuk diposting"}.`,
+          "warn",
+          type.id,
+          3600000,
+        );
       try {
         if (platform === "instagram") {
           const counts = (f: string) =>
@@ -502,17 +552,13 @@ async function work(
             .sort((a, b) => counts(a) - counts(b))
             .map(
               (format) =>
-                candidates.find((x: any) => x.format === format) as any,
+                candidates.find(
+                  (x: any) => x.format === format && !failedToday.has(x.c.id),
+                ) as any,
             )
             .find(Boolean);
           if (!pick) {
-            note(
-              `empty:${type.id}:${platform}`,
-              `${type.name} · Instagram: tidak ada konten siap untuk diposting.`,
-              "warn",
-              type.id,
-              3600000,
-            );
+            empty();
             continue;
           }
           const kind = pick.format === "reels" ? "REELS_IG" : "POST_IG";
@@ -533,15 +579,11 @@ async function work(
             type.id,
           );
         } else {
-          const pick = candidates[0] as any;
+          const pick = candidates.find(
+            ({ c }: any) => !failedToday.has(c.id),
+          ) as any;
           if (!pick) {
-            note(
-              `empty:${type.id}:${platform}`,
-              `${type.name} · ${PLATFORM_LABEL[platform]}: tidak ada konten siap untuk diposting.`,
-              "warn",
-              type.id,
-              3600000,
-            );
+            empty();
             continue;
           }
           const post: ManagerPost = {
@@ -708,7 +750,24 @@ async function work(
         );
       }
     }
+  };
+
+  for (const type of await new ContentTypeStore(store.db).list()) {
+    if (type.engine === "news" || !type.settings) continue;
+    try {
+      await workType(type, type.settings);
+    } catch (e) {
+      const message = (e as Error).message;
+      note(
+        `error:${type.id}:${message}`,
+        `${type.name}: pemeriksaan Manajer gagal (${message}). Jenis konten lain tetap berjalan.`,
+        "warn",
+        type.id,
+        3600000,
+      );
+    }
   }
+  state.lastTickAt = now;
 }
 
 /** Ringkasan Manajer untuk satu jenis konten (dipakai /api/office). */
@@ -739,6 +798,9 @@ export function managerView(
     const mine = state.posts.filter(
       (p) => p.typeId === type.id && p.platform === platform && p.at >= today,
     );
+    // Stok yang basi (Manajer tidak memeriksa lagi) tidak ditampilkan.
+    const saved = state.stock[`${type.id}:${platform}`];
+    const stock = saved && now - saved.at <= STOCK_FRESH ? saved : null;
     const slots = scheduleView(
       slotTimes(targets[platform], today, `${today}:${type.id}:${platform}`),
       mine,
@@ -755,11 +817,11 @@ export function managerView(
           ? null
           : (slots.find((s) => s.status === "terjadwal")?.at ??
             (slots.some((s) => s.status === "terlewat") ? now : null)),
-      ready: state.stock[`${type.id}:${platform}`]?.ready ?? null,
+      ready: stock?.ready ?? null,
       check:
-        targets[platform] && state.stock[`${type.id}:${platform}`]
+        targets[platform] && stock
           ? availability(
-              state.stock[`${type.id}:${platform}`].ready,
+              stock.ready,
               targets[platform],
               done,
               mine.filter((p) => p.status === "proses").length,
