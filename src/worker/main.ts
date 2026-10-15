@@ -1110,138 +1110,153 @@ let lastCronMinute = -1;
 let lastManagerMinute = -1;
 let lastStatsHour = -1;
 let newsRunning = false;
+// Error tak terduga (job, atau DB seperti deadlock) cukup dicatat; worker
+// tetap hidup dan mencoba lagi di putaran berikutnya.
+const logJobError = (e: unknown) =>
+  console.error("Job gagal:", (e as Error)?.message ?? e);
 while (!stop) {
-  if (existsSync(path.join(ROOT, "data/media-reset.guard"))) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    continue;
-  }
-  await store.recover();
-  await pollPosts();
-  const minute = Math.floor(Date.now() / 60000);
-  if (minute !== lastCronMinute) {
-    try {
-      await store.scheduleCrons(Date.now(), (source, platform) =>
-        publishZernio(store, {
-          quickTikTok: platform !== "youtube",
-          quickYouTube: platform === "youtube",
-          source,
-        }),
-      );
-      await new NewsCronStore(store.db, undefined, (source, platform) =>
-        publishZernio(store, {
-          quickTikTok: platform !== "youtube",
-          quickYouTube: platform === "youtube",
-          source,
-        }),
-      ).schedule();
-      lastCronMinute = minute;
-    } catch (e) {
-      console.error("Cron gagal:", (e as Error).message);
-      // Retry next minute; queue processing remains available.
-      lastCronMinute = minute;
+  try {
+    if (existsSync(path.join(ROOT, "data/media-reset.guard"))) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      continue;
     }
-  }
-  // Statistik akun: data hari ini diperbarui tiap jam (nilai terakhir hari itu yang tersimpan).
-  const hour = Math.floor(Date.now() / 3600000);
-  if (hour !== lastStatsHour) {
-    lastStatsHour = hour;
-    try {
-      const r = await snapshotInstagram(store.db, {
-        accounts,
-        summary: (id) => instagramSummary(id),
-      });
-      if (r.errors.length)
-        console.error("Statistik akun:", r.errors.join("; "));
-    } catch (e) {
-      console.error("Statistik akun gagal:", (e as Error).message);
+    await store.recover();
+    await pollPosts();
+    const minute = Math.floor(Date.now() / 60000);
+    if (minute !== lastCronMinute) {
+      try {
+        await store.scheduleCrons(Date.now(), (source, platform) =>
+          publishZernio(store, {
+            quickTikTok: platform !== "youtube",
+            quickYouTube: platform === "youtube",
+            source,
+          }),
+        );
+        await new NewsCronStore(store.db, undefined, (source, platform) =>
+          publishZernio(store, {
+            quickTikTok: platform !== "youtube",
+            quickYouTube: platform === "youtube",
+            source,
+          }),
+        ).schedule();
+        lastCronMinute = minute;
+      } catch (e) {
+        console.error("Cron gagal:", (e as Error).message);
+        // Retry next minute; queue processing remains available.
+        lastCronMinute = minute;
+      }
     }
-  }
-  if (minute !== lastManagerMinute) {
-    lastManagerMinute = minute;
-    // Manajer: target posting harian per jenis konten (terpisah dari jadwal manual).
-    try {
-      await managerTick(store, (source, platform) =>
-        publishZernio(store, {
-          quickTikTok: platform !== "youtube",
-          quickYouTube: platform === "youtube",
-          source,
-        }),
-      );
-    } catch (e) {
-      console.error("Manajer gagal:", (e as Error).message);
+    // Statistik akun: data hari ini diperbarui tiap jam (nilai terakhir hari itu yang tersimpan).
+    const hour = Math.floor(Date.now() / 3600000);
+    if (hour !== lastStatsHour) {
+      lastStatsHour = hour;
+      try {
+        const r = await snapshotInstagram(store.db, {
+          accounts,
+          summary: (id) => instagramSummary(id),
+        });
+        if (r.errors.length)
+          console.error("Statistik akun:", r.errors.join("; "));
+      } catch (e) {
+        console.error("Statistik akun gagal:", (e as Error).message);
+      }
     }
-  }
-  // At most one news research job per worker; book jobs share the remaining slots.
-  if (running.size < CONCURRENCY && !newsRunning) {
-    try {
-      const news = await newsStore.claim();
-      if (news) {
-        newsRunning = true;
-        const task: Promise<void> = generation("news_articles", news, () =>
-          runNewsJob(newsStore, news),
-        )
-          .catch((e) =>
-            console.error("Artikel berita gagal:", (e as Error).message),
+    if (minute !== lastManagerMinute) {
+      lastManagerMinute = minute;
+      // Manajer: target posting harian per jenis konten (terpisah dari jadwal manual).
+      try {
+        await managerTick(store, (source, platform) =>
+          publishZernio(store, {
+            quickTikTok: platform !== "youtube",
+            quickYouTube: platform === "youtube",
+            source,
+          }),
+        );
+      } catch (e) {
+        console.error("Manajer gagal:", (e as Error).message);
+      }
+    }
+    // At most one news research job per worker; book jobs share the remaining slots.
+    if (running.size < CONCURRENCY && !newsRunning) {
+      try {
+        const news = await newsStore.claim();
+        if (news) {
+          newsRunning = true;
+          const task: Promise<void> = generation("news_articles", news, () =>
+            runNewsJob(newsStore, news),
           )
+            .catch((e) =>
+              console.error("Artikel berita gagal:", (e as Error).message),
+            )
+            .finally(() => {
+              running.delete(task);
+              newsRunning = false;
+            });
+          running.add(task);
+        }
+      } catch (e) {
+        if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+          console.error("Antrean berita gagal:", (e as Error).message);
+      }
+    }
+    while (running.size < CONCURRENCY) {
+      try {
+        const job = await newsMediaStore.claim();
+        if (!job) break;
+        const task: Promise<void> = generation("news_media_jobs", job, () =>
+          runNewsMediaJob(newsMediaStore, store, job),
+        )
+          .catch(logJobError)
+          .finally(() => running.delete(task));
+        running.add(task);
+      } catch (e) {
+        if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+          console.error("Produksi berita gagal:", (e as Error).message);
+        break;
+      }
+    }
+    if (!posting) {
+      const job = await store.claim(Date.now(), POST_JOBS);
+      if (job)
+        posting = generation("jobs", job, () => runJob(job))
+          .catch(logJobError)
           .finally(() => {
-            running.delete(task);
-            newsRunning = false;
+            posting = null;
           });
-        running.add(task);
-      }
-    } catch (e) {
-      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
-        console.error("Antrean berita gagal:", (e as Error).message);
     }
-  }
-  while (running.size < CONCURRENCY) {
-    try {
-      const job = await newsMediaStore.claim();
+    while (running.size < CONCURRENCY) {
+      const job = await store.claim();
       if (!job) break;
-      const task: Promise<void> = generation("news_media_jobs", job, () =>
-        runNewsMediaJob(newsMediaStore, store, job),
-      ).finally(() => running.delete(task));
+      const task: Promise<void> = generation("jobs", job, () => runJob(job))
+        .catch(logJobError)
+        .finally(() => running.delete(task));
       running.add(task);
-    } catch (e) {
-      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
-        console.error("Produksi berita gagal:", (e as Error).message);
-      break;
     }
-  }
-  if (!posting) {
-    const job = await store.claim(Date.now(), POST_JOBS);
-    if (job)
-      posting = generation("jobs", job, () => runJob(job)).finally(() => {
-        posting = null;
-      });
-  }
-  while (running.size < CONCURRENCY) {
-    const job = await store.claim();
-    if (!job) break;
-    const task: Promise<void> = generation("jobs", job, () =>
-      runJob(job),
-    ).finally(() => running.delete(task));
-    running.add(task);
-  }
-  if (running.size < CONCURRENCY) {
-    try {
-      const job = await labStore.claim();
-      if (job) {
-        const task = generation("lab_runs", job, () =>
-          runLabJob(labStore, job),
-        ).finally(() => running.delete(task));
-        running.add(task);
+    if (running.size < CONCURRENCY) {
+      try {
+        const job = await labStore.claim();
+        if (job) {
+          const task: Promise<void> = generation("lab_runs", job, () =>
+            runLabJob(labStore, job),
+          )
+            .catch(logJobError)
+            .finally(() => running.delete(task));
+          running.add(task);
+        }
+      } catch (e) {
+        if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+          console.error("Lab gagal:", (e as Error).message);
       }
-    } catch (e) {
-      if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
-        console.error("Lab gagal:", (e as Error).message);
     }
+    await Promise.race([
+      new Promise((r) => setTimeout(r, 1000)),
+      ...running,
+      ...(posting ? [posting] : []),
+    ]);
+  } catch (e) {
+    console.error("Putaran worker gagal:", (e as Error)?.message ?? e);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  await Promise.race([
-    new Promise((r) => setTimeout(r, 1000)),
-    ...running,
-    ...(posting ? [posting] : []),
-  ]);
 }
 await Promise.all([...running, posting]);
 await store.close();
