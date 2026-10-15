@@ -3,6 +3,7 @@
 // sesuai Rencana konten sosmed, mengevaluasi hasilnya, dan memerintahkan tim
 // memproduksi topik berikutnya bila stok konten siap kurang. Terpisah dari menu
 // Jadwal (manual): posting dari jadwal manual tidak dihitung ke target Manajer.
+// Empat kali sehari ia juga mencoba ulang job produksi yang gagal.
 // Catatan Manajer disimpan di data/manager.json (tanpa perubahan skema DB).
 import {
   existsSync,
@@ -43,6 +44,12 @@ export const POST_QUEUE_LIMIT = 30 * MINUTE;
 // Hitungan stok lebih tua dari ini dianggap basi (Manajer memeriksa tiap menit).
 export const STOCK_FRESH = 5 * MINUTE;
 const MAX_ORDERS = 2; // topik yang diproduksi bersamaan per jenis konten
+// Job produksi gagal dicoba ulang tiap 6 jam WIB (00, 06, 12, 18); yang sudah
+// gagal lebih dari MAX_JOB_FAILS kali berturut-turut dihapus.
+export const RETRY_EVERY = 6 * 3600000;
+export const MAX_JOB_FAILS = 4;
+// Job posting tidak diulang otomatis agar tidak terjadi posting ganda.
+const POST_KINDS = ["POST_IG", "REELS_IG"];
 
 export type PostStatus = "proses" | "terbit" | "gagal";
 export type ManagerPost = {
@@ -80,6 +87,8 @@ export type ManagerState = {
   lastActionAt: number;
   // Akhir putaran Manajer terakhir; dipakai untuk menandai stok yang basi.
   lastTickAt: number;
+  // Blok 6 jam (WIB) terakhir saat job gagal sudah ditangani.
+  retryBlock: number;
   // Stok konten siap per "jenis:sosmed" pada evaluasi terakhir.
   stock: Record<string, { ready: number; at: number }>;
   noted: Record<string, number>;
@@ -90,6 +99,7 @@ export const emptyState = (): ManagerState => ({
   log: [],
   lastActionAt: 0,
   lastTickAt: 0,
+  retryBlock: 0,
   stock: {},
   noted: {},
 });
@@ -314,6 +324,62 @@ export const taskFor = (kind: string) =>
 // Nomor bagian berlaku per buku, jadi nama bukunya ikut disebut.
 const partLabel = (c: Chapter) =>
   `${c.book ? c.book.slice(0, 40) + " · " : ""}bagian ${c.part_number ?? c.id}${c.title ? ` (${c.title.slice(0, 50)})` : ""}`;
+
+// ---------- job gagal ----------
+/**
+ * Coba ulang job produksi yang gagal (job terbaru per bagian dan jenis). Job
+ * yang sudah gagal lebih dari MAX_JOB_FAILS kali berturut-turut, atau tidak
+ * bisa diulang lagi, dihapus agar karyawan tidak terus tampak gagal; kontennya
+ * tetap ada dan akan diproduksi lagi kelak.
+ */
+async function retryFailed(store: Store, types: ContentType[]) {
+  const [failed]: any = await store.db.query(
+    `SELECT j.id,j.chapter_id,j.kind,j.revision,j.force_new,c.revision AS current_revision,
+      c.content_type_id,c.book,c.part_number,c.title
+     FROM jobs j JOIN (SELECT MAX(id) id FROM jobs GROUP BY chapter_id,kind) last ON last.id=j.id
+     JOIN chapters c ON c.id=j.chapter_id
+     WHERE j.state='failed' AND j.kind NOT IN (?) ORDER BY j.id`,
+    [POST_KINDS],
+  );
+  const retried: string[] = [];
+  const removed: string[] = [];
+  for (const job of failed) {
+    const type = types.find((t) => t.id === job.content_type_id);
+    if (!type) continue;
+    const label = `${taskFor(job.kind)} · ${partLabel({ ...job, id: job.chapter_id })}`;
+    const [history]: any = await store.db.query(
+      "SELECT id,state FROM jobs WHERE chapter_id=? AND kind=? ORDER BY id DESC",
+      [job.chapter_id, job.kind],
+    );
+    const streak: number[] = [];
+    for (const h of history) {
+      if (h.state !== "failed") break;
+      streak.push(h.id);
+    }
+    let remove = streak.length > MAX_JOB_FAILS;
+    if (!remove && job.revision !== job.current_revision) remove = true;
+    if (!remove) {
+      try {
+        await withContentType(type, () =>
+          store.enqueue(job.chapter_id, job.kind, !!job.force_new),
+        );
+        retried.push(label);
+        continue;
+      } catch (e) {
+        // Gangguan DB atau job aktif: dicoba lagi pada putaran berikutnya.
+        if ((e as { code?: string }).code) continue;
+        if ((e as Error).message === "Job aktif sudah ada") continue;
+        remove = true;
+      }
+    }
+    await store.db.query(
+      "DELETE FROM jobs WHERE id IN (?) AND state='failed'",
+      [streak],
+    );
+    removed.push(label);
+  }
+  return { retried, removed };
+}
 
 // ---------- satu putaran kerja ----------
 type Publish = (
@@ -752,7 +818,8 @@ async function work(
     }
   };
 
-  for (const type of await new ContentTypeStore(store.db).list()) {
+  const types = await new ContentTypeStore(store.db).list();
+  for (const type of types) {
     if (type.engine === "news" || !type.settings) continue;
     try {
       await workType(type, type.settings);
@@ -765,6 +832,31 @@ async function work(
         type.id,
         3600000,
       );
+    }
+  }
+
+  // 4. Tiap 6 jam: coba ulang job produksi yang gagal, hapus yang menumpuk.
+  const block = Math.floor((now + WIB) / RETRY_EVERY);
+  if (block !== state.retryBlock) {
+    state.retryBlock = block;
+    try {
+      const { retried, removed } = await retryFailed(store, types);
+      const list = (items: string[]) =>
+        items.slice(0, 5).join("; ") +
+        (items.length > 5 ? `; dan ${items.length - 5} lainnya` : "");
+      if (retried.length)
+        log(
+          `Mencoba ulang ${retried.length} job gagal: ${list(retried)}.`,
+          "info",
+        );
+      if (removed.length)
+        log(
+          `Menghapus ${removed.length} job gagal (gagal lebih dari ${MAX_JOB_FAILS} kali atau tidak bisa diulang); topiknya akan diproduksi lagi nanti: ${list(removed)}.`,
+          "warn",
+        );
+      if (retried.length || removed.length) state.lastActionAt = now;
+    } catch (e) {
+      log(`Gagal mencoba ulang job gagal: ${(e as Error).message}`, "warn");
     }
   }
   state.lastTickAt = now;

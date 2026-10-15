@@ -53,6 +53,8 @@ function fakeStore(
   const jobs = new Map<number, { state: string; error?: string }>();
   const enqueued: { id: number; kind: string }[] = [];
   let nextId = 100;
+  // Respons tambahan untuk query tertentu (mis. job gagal).
+  const hooks: ((sql: string, params: any[]) => any)[] = [];
   const type = {
     id: 1,
     name: "Buku Motivasi",
@@ -70,6 +72,10 @@ function fakeStore(
       };
     },
     async query(sql: string, params: any[] = []) {
+      for (const hook of hooks) {
+        const result = hook(sql, params);
+        if (result) return result;
+      }
       if (sql.startsWith("SELECT * FROM content_types")) return [[type]];
       if (sql.includes("FROM jobs WHERE id IN"))
         return [
@@ -105,7 +111,7 @@ function fakeStore(
   const targetFile = path.join(dir, "targets.json");
   saveTargets({ 1: targets }, targetFile);
   store.targetFile = targetFile;
-  return { store, jobs, enqueued, targetFile };
+  return { store, jobs, enqueued, targetFile, hooks };
 }
 const stateFile = () =>
   path.join(mkdtempSync(path.join(tmpdir(), "manajer-")), "manager.json");
@@ -410,5 +416,110 @@ describe("Manajer bekerja", () => {
     );
     expect(enqueued).toEqual([]);
     expect(called).toBe(false);
+  });
+});
+
+describe("Manajer menangani job gagal", () => {
+  const none = { instagram: 0, tiktok: 0, youtube: 0 };
+  // Job gagal terbaru per bagian dan jenis, beserta riwayat percobaannya.
+  function withFailures(
+    failed: {
+      chapter: number;
+      kind: string;
+      fails: number;
+      revision?: number;
+    }[],
+  ) {
+    const fake = fakeStore([chapter(1), chapter(2), chapter(3)], none);
+    const deleted: number[][] = [];
+    fake.hooks.push((sql, params) => {
+      if (sql.includes("j.state='failed'"))
+        return [
+          failed.map((f, i) => ({
+            id: 900 + i,
+            chapter_id: f.chapter,
+            kind: f.kind,
+            revision: f.revision ?? 0,
+            current_revision: 0,
+            force_new: 0,
+            content_type_id: 1,
+            book: "Buku",
+            part_number: f.chapter,
+            title: `Topik ${f.chapter}`,
+          })),
+        ];
+      if (sql.startsWith("SELECT id,state FROM jobs WHERE chapter_id=?")) {
+        const f = failed.find(
+          (x) => x.chapter === params[0] && x.kind === params[1],
+        )!;
+        return [
+          [
+            ...Array.from({ length: f.fails }, (_, i) => ({
+              id: 800 - i,
+              state: "failed",
+            })),
+            { id: 1, state: "completed" },
+          ],
+        ];
+      }
+      if (sql.startsWith("DELETE FROM jobs")) {
+        deleted.push(params[0]);
+        return [{ affectedRows: params[0].length }];
+      }
+    });
+    return { ...fake, deleted };
+  }
+  const tick = (store: any, file: string, at: number) =>
+    managerTick(
+      store,
+      async () => ({ status: "published" }),
+      at,
+      file,
+      store.targetFile,
+    );
+
+  it("mencoba ulang job gagal sekali per 6 jam", async () => {
+    const { store, enqueued, deleted } = withFailures([
+      { chapter: 1, kind: "IMAGE_HORIZONTAL", fails: 1 },
+      { chapter: 2, kind: "TTS_KALIMAT", fails: 4 },
+    ]);
+    const file = stateFile();
+    await tick(store, file, NIGHT);
+    expect(enqueued).toEqual([
+      { id: 1, kind: "IMAGE_HORIZONTAL" },
+      { id: 2, kind: "TTS_KALIMAT" },
+    ]);
+    expect(deleted).toEqual([]);
+    await tick(store, file, NIGHT + 30 * MIN);
+    expect(enqueued).toHaveLength(2);
+    // 23.00 WIB → 00.30 WIB: blok 6 jam berikutnya.
+    await tick(store, file, NIGHT + 90 * MIN);
+    expect(enqueued).toHaveLength(4);
+    expect(read(file).log.some((l) => l.text.includes("Mencoba ulang 2"))).toBe(
+      true,
+    );
+  });
+
+  it("gagal lebih dari 4 kali atau tidak bisa diulang: job dihapus", async () => {
+    const { store, enqueued, deleted } = withFailures([
+      { chapter: 1, kind: "IMAGE_HORIZONTAL", fails: 5 },
+      { chapter: 2, kind: "PANEL", fails: 1, revision: -1 },
+      { chapter: 3, kind: "VIDEO_KALIMAT", fails: 2 },
+      { chapter: 3, kind: "TTS_KALIMAT", fails: 1 },
+    ]);
+    store.enqueue = async (id: number, kind: string) => {
+      if (kind === "VIDEO_KALIMAT")
+        throw Error("Video kalimat butuh audio per kalimat");
+      if (kind === "TTS_KALIMAT") throw Error("Job aktif sudah ada");
+      enqueued.push({ id, kind });
+      return 1;
+    };
+    const file = stateFile();
+    await tick(store, file, NIGHT);
+    expect(enqueued).toEqual([]);
+    expect(deleted).toEqual([[800, 799, 798, 797, 796], [800], [800, 799]]);
+    expect(
+      read(file).log.some((l) => l.text.startsWith("Menghapus 3 job gagal")),
+    ).toBe(true);
   });
 });
