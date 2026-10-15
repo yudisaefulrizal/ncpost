@@ -1,5 +1,11 @@
-import React from "react";
-import type { ArticleConfig } from "../server/content-contract";
+import React, { useEffect, useState } from "react";
+import {
+  DEFAULT_WEB_RESEARCH,
+  RESEARCH_RECENCY,
+  normalizeDomain,
+  type ArticleConfig,
+  type WebResearch,
+} from "../server/content-contract";
 export const defaultArticleConfig = (engine: string): ArticleConfig => ({
   source: engine === "news" ? "web" : "knowledge",
   topicMode: engine === "book" ? "manual" : "ai",
@@ -91,6 +97,172 @@ export function ArticleConfigFields({
           />
         </label>
       )}
+      {value.source === "web" && (
+        <ResearchFields
+          value={value.research}
+          aiTopic={value.topicMode === "ai"}
+          onChange={(research) => set({ research })}
+        />
+      )}
     </div>
+  );
+}
+
+/** Daftar situs: diketik bebas (satu per baris atau dipisah koma). */
+function DomainList({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string[];
+  onChange: (list: string[]) => void;
+}) {
+  const [text, setText] = useState(value.join("\n"));
+  useEffect(() => {
+    const parsed = text.split(/[\s,]+/).filter(Boolean);
+    if (parsed.join("|") !== value.join("|")) setText(value.join("\n"));
+  }, [value.join("|")]);
+  const items = text.split(/[\s,]+/).filter(Boolean);
+  const invalid = items.filter((x) => !normalizeDomain(x));
+  return (
+    <label className="field">
+      {label}
+      <textarea
+        rows={3}
+        placeholder="contoh: kompas.com"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          onChange(e.target.value.split(/[\s,]+/).filter(Boolean));
+        }}
+      />
+      {invalid.length > 0 && (
+        <small className="warn">Bukan nama situs: {invalid.join(", ")}</small>
+      )}
+    </label>
+  );
+}
+
+/** Ketentuan riset web; tanpa dicentang, riset berjalan bebas seperti sebelumnya. */
+function ResearchFields({
+  value,
+  aiTopic,
+  onChange,
+}: {
+  value?: WebResearch;
+  aiTopic: boolean;
+  onChange: (value: WebResearch | undefined) => void;
+}) {
+  const r = value ?? DEFAULT_WEB_RESEARCH;
+  const set = (patch: Partial<WebResearch>) => onChange({ ...r, ...patch });
+  return (
+    <fieldset className="article-research">
+      <legend>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={!!value}
+            onChange={(e) =>
+              onChange(
+                e.target.checked ? { ...DEFAULT_WEB_RESEARCH } : undefined,
+              )
+            }
+          />
+          Atur ketentuan riset web
+        </label>
+      </legend>
+      {!value ? (
+        <p className="muted">
+          Riset web berjalan bebas. Centang untuk mengatur rentang waktu,
+          wilayah, situs sumber, dan kewajiban mencantumkan sumber.
+        </p>
+      ) : (
+        <div className="article-research-grid">
+          <label className="field">
+            Rentang waktu sumber
+            <select
+              value={r.recency}
+              onChange={(e) =>
+                set({ recency: e.target.value as WebResearch["recency"] })
+              }
+            >
+              {Object.entries(RESEARCH_RECENCY).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {key === "any" ? "Bebas" : label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            Wilayah sumber
+            <input
+              placeholder="contoh: Indonesia"
+              value={r.region}
+              maxLength={100}
+              onChange={(e) => set({ region: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            Bahasa sumber
+            <input
+              placeholder="contoh: Indonesia"
+              value={r.language}
+              maxLength={60}
+              onChange={(e) => set({ language: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            Minimal sumber per fakta
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={r.minSources}
+              onChange={(e) =>
+                set({
+                  minSources: Math.max(
+                    1,
+                    Math.min(10, Math.round(Number(e.target.value) || 1)),
+                  ),
+                })
+              }
+            />
+          </label>
+          <DomainList
+            label="Sumber prioritas"
+            value={r.preferred}
+            onChange={(preferred) => set({ preferred })}
+          />
+          <DomainList
+            label="Sumber dikecualikan"
+            value={r.excluded}
+            onChange={(excluded) => set({ excluded })}
+          />
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={r.citeSources}
+              onChange={(e) => set({ citeSources: e.target.checked })}
+            />
+            Wajib cantumkan sumber (URL) di artikel
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={r.avoidRepeat}
+              onChange={(e) => set({ avoidRepeat: e.target.checked })}
+            />
+            Hindari topik yang sudah pernah dibuat
+            {!aiTopic && (
+              <small className="muted">
+                {" "}
+                · berlaku bila asal topik Ditentukan AI
+              </small>
+            )}
+          </label>
+        </div>
+      )}
+    </fieldset>
   );
 }

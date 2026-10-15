@@ -3492,3 +3492,27 @@ tr.is-today td {
   font-weight: 600;
   font-size: 13px;
 }
+/* Konfigurasi artikel › Riset web */
+.article-research {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: var(--s3) var(--s4);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+}
+.article-research legend {
+  padding: 0 var(--s1);
+  font-weight: 700;
+}
+.article-research p {
+  margin: 0;
+}
+.article-research-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s3) var(--s4);
+  align-items: start;
+}

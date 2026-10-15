@@ -4,6 +4,7 @@ import { cliArgs, parseEvents, runCli } from "../server/providers";
 import {
   configuredArticlePrompt,
   normalizeArticleConfig,
+  researchErrors,
   validateUnifiedArticle,
   type ArticleConfig,
 } from "../server/content-contract";
@@ -54,6 +55,31 @@ export async function runConfiguredModel(
     throw Error("Riset web aktif tetapi tidak ada bukti pencarian web");
   return parseEvents(raw);
 }
+/** Judul yang sudah pernah dibuat untuk jenis konten ini (terbaru dulu). */
+export async function previousTopics(
+  db: Pick<mysql.Pool, "query">,
+  engine: string,
+  typeId: number,
+  limit = 30,
+) {
+  try {
+    const [rows]: any = await db.query(
+      engine === "news"
+        ? "SELECT title FROM news_articles WHERE content_type_id=? AND title IS NOT NULL AND title<>'' ORDER BY id DESC LIMIT ?"
+        : "SELECT title FROM chapters WHERE content_type_id=? AND article<>'' ORDER BY id DESC LIMIT ?",
+      [typeId, limit],
+    );
+    return rows
+      .map((r: any) =>
+        String(r.title ?? "")
+          .trim()
+          .slice(0, 120),
+      )
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 export async function generateConfiguredArticle(
   db: Pick<mysql.Pool, "query">,
   settings: BookSettings,
@@ -62,6 +88,7 @@ export async function generateConfiguredArticle(
   context = "",
   topic = "",
   generate = runConfiguredModel,
+  typeId?: number,
 ) {
   const config = normalizeArticleConfig(settings.articleConfig);
   if (config.source === "manual" && !config.material)
@@ -87,12 +114,21 @@ export async function generateConfiguredArticle(
   if (!candidates.length)
     throw Error("Prompt Lab Artikel yang sesuai belum diaktifkan");
   const row = candidates[Math.floor(Math.random() * candidates.length)];
+  // Riset web: hindari topik yang sudah pernah dibuat bila topik ditentukan AI.
+  const previous =
+    config.source === "web" &&
+    config.research?.avoidRepeat &&
+    config.topicMode === "ai" &&
+    typeId
+      ? await previousTopics(db, engine, typeId)
+      : [];
   const prompt = configuredArticlePrompt(
     row.prompt,
     config,
     engine === "quote",
     effectiveContext,
     effectiveTopic,
+    previous,
   );
   const article = await generate(prompt, config.source, work);
   const parsed = validateUnifiedArticle(
@@ -101,5 +137,10 @@ export async function generateConfiguredArticle(
     engine === "quote",
   );
   if (!parsed.ok) throw Error(parsed.errors.join("; "));
+  const research =
+    config.source === "web"
+      ? researchErrors(config.research, parsed.source)
+      : [];
+  if (research.length) throw Error(research.join("; "));
   return { article, parsed, prompt };
 }

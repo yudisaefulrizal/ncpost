@@ -328,6 +328,8 @@ async function runJob(job: Job) {
         work,
         c.book,
         c.title,
+        undefined,
+        c.content_type_id ?? 1,
       );
       writeFileSync(path.join(work, "prompt.md"), generated.prompt, {
         mode: 0o600,

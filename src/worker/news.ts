@@ -90,6 +90,10 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
         settings,
         "news",
         dir,
+        "",
+        "",
+        undefined,
+        j.content_type_id ?? 2,
       );
       const sourceUrl =
         /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";

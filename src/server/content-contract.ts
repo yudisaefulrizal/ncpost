@@ -6,7 +6,89 @@ export type ArticleConfig = {
   topic: string;
   material: string;
   paragraphCount: number | null;
+  // Kendali riset saat sumber = web (berita atau konten yang butuh data terbaru).
+  research?: WebResearch;
 };
+export const RESEARCH_RECENCY = {
+  "24h": "24 jam terakhir",
+  "7d": "7 hari terakhir",
+  "30d": "30 hari terakhir",
+  any: "bebas",
+} as const;
+export type WebResearch = {
+  recency: keyof typeof RESEARCH_RECENCY;
+  region: string;
+  language: string;
+  preferred: string[];
+  excluded: string[];
+  minSources: number;
+  citeSources: boolean;
+  avoidRepeat: boolean;
+};
+export const DEFAULT_WEB_RESEARCH: WebResearch = {
+  recency: "any",
+  region: "",
+  language: "Indonesia",
+  preferred: [],
+  excluded: [],
+  minSources: 1,
+  citeSources: true,
+  avoidRepeat: true,
+};
+/** "https://www.Kompas.com/berita" → "kompas.com"; null bila bukan domain. */
+export function normalizeDomain(value: string) {
+  const host = value
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/^www\./, "")
+    .split(/[/?#:]/)[0];
+  return /^([a-z0-9-]+\.)+[a-z]{2,}$/.test(host) ? host : null;
+}
+export function normalizeWebResearch(value: any): WebResearch {
+  const v = { ...DEFAULT_WEB_RESEARCH, ...(value ?? {}) };
+  if (!(v.recency in RESEARCH_RECENCY))
+    throw Error("Rentang waktu riset tidak dikenal");
+  const text = (x: unknown, max: number) => {
+    if (typeof x !== "string" || x.length > max)
+      throw Error("Isian riset web tidak valid");
+    return x.trim();
+  };
+  const domains = (list: unknown, label: string) => {
+    if (!Array.isArray(list) || list.length > 30)
+      throw Error(`${label} maksimal 30 situs`);
+    const out: string[] = [];
+    for (const item of list) {
+      const d = typeof item === "string" ? normalizeDomain(item) : null;
+      if (!d)
+        throw Error(
+          `${label}: "${String(item).slice(0, 60)}" bukan nama situs`,
+        );
+      if (!out.includes(d)) out.push(d);
+    }
+    return out;
+  };
+  if (!Number.isInteger(v.minSources) || v.minSources < 1 || v.minSources > 10)
+    throw Error("Jumlah minimal sumber harus 1–10");
+  for (const key of ["citeSources", "avoidRepeat"] as const)
+    if (typeof v[key] !== "boolean") throw Error("Isian riset web tidak valid");
+  const preferred = domains(v.preferred, "Sumber prioritas");
+  const excluded = domains(v.excluded, "Sumber dikecualikan");
+  if (preferred.some((d) => excluded.includes(d)))
+    throw Error(
+      "Situs yang sama tidak boleh diprioritaskan sekaligus dikecualikan",
+    );
+  return {
+    recency: v.recency,
+    region: text(v.region, 100),
+    language: text(v.language, 60),
+    preferred,
+    excluded,
+    minSources: v.minSources,
+    citeSources: v.citeSources,
+    avoidRepeat: v.avoidRepeat,
+  };
+}
 export type ImageUnit = "article" | "paragraph" | "sentence";
 export function normalizeArticleConfig(value: any): ArticleConfig {
   if (
@@ -34,6 +116,9 @@ export function normalizeArticleConfig(value: any): ArticleConfig {
     topic: string("topic"),
     material: string("material"),
     paragraphCount: count,
+    ...(value.research !== undefined && value.research !== null
+      ? { research: normalizeWebResearch(value.research) }
+      : {}),
   };
 }
 export const ARTICLE_VARIABLES = {
@@ -43,6 +128,13 @@ export const ARTICLE_VARIABLES = {
   bahan: "Bahan manual",
   buku: "Alias konteks",
   bab: "Alias topik",
+  rentang_waktu: "Riset web: rentang waktu sumber",
+  wilayah: "Riset web: wilayah sumber",
+  bahasa_sumber: "Riset web: bahasa sumber",
+  sumber_prioritas: "Riset web: situs yang didahulukan",
+  sumber_dikecualikan: "Riset web: situs yang tidak boleh dipakai",
+  minimal_sumber: "Riset web: jumlah minimal sumber per fakta",
+  topik_sebelumnya: "Topik yang sudah pernah dibuat (agar tidak berulang)",
 };
 export const IMAGE_VARIABLES = {
   konteks: "Konteks utama",
@@ -212,7 +304,9 @@ export function articleVariables(
   config: ArticleConfig,
   context = config.context,
   topic = config.topic,
+  previousTopics: string[] = [],
 ) {
+  const research = config.research ?? DEFAULT_WEB_RESEARCH;
   return {
     konteks: context,
     topik: topic,
@@ -221,7 +315,61 @@ export function articleVariables(
     bahan: config.material,
     buku: context,
     bab: topic,
+    rentang_waktu: RESEARCH_RECENCY[research.recency],
+    wilayah: research.region,
+    bahasa_sumber: research.language,
+    sumber_prioritas: research.preferred.join(", "),
+    sumber_dikecualikan: research.excluded.join(", "),
+    minimal_sumber: String(research.minSources),
+    topik_sebelumnya: previousTopics.join("; "),
   };
+}
+
+/** Ketentuan riset yang ditambahkan ke prompt saat sumber = web. */
+export function researchRules(
+  research: WebResearch = DEFAULT_WEB_RESEARCH,
+  previousTopics: string[] = [],
+) {
+  const rules = [
+    research.recency !== "any" &&
+      `Gunakan hanya informasi dan sumber yang terbit dalam ${RESEARCH_RECENCY[research.recency]}.`,
+    (research.region || research.language) &&
+      `Utamakan sumber${research.region ? ` dari ${research.region}` : ""}${research.language ? ` berbahasa ${research.language}` : ""}.`,
+    research.preferred.length > 0 &&
+      `Dahulukan situs berikut bila relevan: ${research.preferred.join(", ")}.`,
+    research.excluded.length > 0 &&
+      `Jangan memakai situs berikut sebagai sumber: ${research.excluded.join(", ")}.`,
+    research.minSources > 1 &&
+      `Setiap fakta penting harus didukung minimal ${research.minSources} sumber berbeda.`,
+    research.citeSources &&
+      "Wajib mencantumkan sumber utama pada baris Sumber: (nama media dan URL lengkap).",
+    research.avoidRepeat &&
+      previousTopics.length > 0 &&
+      `Jangan menulis ulang topik yang sudah pernah dibuat: ${previousTopics.join("; ")}.`,
+  ].filter(Boolean);
+  return rules.length ? `Ketentuan riset web:\n- ${rules.join("\n- ")}` : "";
+}
+
+/** Periksa hasil artikel terhadap ketentuan riset yang bisa dicek otomatis. */
+export function researchErrors(
+  research: WebResearch | undefined,
+  source: string,
+) {
+  if (!research) return [];
+  const errors: string[] = [];
+  if (research.citeSources && !/https?:\/\//.test(source))
+    errors.push("Sumber wajib dicantumkan dengan URL pada baris Sumber:");
+  const used = [...source.matchAll(/https?:\/\/[^\s)>\]]+/g)]
+    .map((m) => normalizeDomain(m[0]))
+    .filter((d): d is string => !!d);
+  const banned = used.filter((d) =>
+    research.excluded.some((x) => d === x || d.endsWith("." + x)),
+  );
+  if (banned.length)
+    errors.push(
+      `Sumber dari situs yang dikecualikan: ${[...new Set(banned)].join(", ")}`,
+    );
+  return errors;
 }
 
 export function configuredArticlePrompt(
@@ -230,6 +378,7 @@ export function configuredArticlePrompt(
   quote = false,
   context = config.context,
   topic = config.topic,
+  previousTopics: string[] = [],
 ) {
   const effectiveTopic = config.topicMode === "manual" ? topic : "";
   if (config.source === "manual" && !config.material)
@@ -238,14 +387,19 @@ export function configuredArticlePrompt(
     throw Error("Topik manual wajib diisi");
   const content = fillVariables(
     template,
-    articleVariables(config, context, effectiveTopic),
+    articleVariables(config, context, effectiveTopic, previousTopics),
   );
   const contract = quote
     ? "Hasil hanya satu paragraf isi tanpa judul atau metadata."
     : `Hasil: # Judul, satu ## Heading bila relevan, paragraf isi dipisahkan baris kosong, Sumber: keterangan sumber bila tersedia, lalu Tag: tag dipisahkan koma bila tersedia.${config.paragraphCount !== null ? ` Jumlah isi tepat ${config.paragraphCount} paragraf.` : " Jumlah paragraf mengikuti prompt."}`;
+  // Ketentuan riset hanya berlaku bila diaktifkan di Konfigurasi artikel.
+  const rules =
+    config.source === "web" && config.research
+      ? researchRules(config.research, previousTopics)
+      : "";
   const source =
     config.source === "web"
-      ? "Gunakan tool pencarian web dan periksa sumbernya."
+      ? `Gunakan tool pencarian web dan periksa sumbernya.${rules ? `\n${rules}` : ""}`
       : config.source === "manual"
         ? `Gunakan bahan manual berikut:\n${config.material}`
         : "Gunakan pengetahuan model; jangan melakukan pencarian web.";
