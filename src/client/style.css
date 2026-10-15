@@ -3203,15 +3203,6 @@ dialog.app-dialog::backdrop {
   gap: var(--s2);
   flex-wrap: wrap;
 }
-.target-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--s3);
-}
-.target-form .field {
-  width: 140px;
-}
 th.num,
 td.num {
   text-align: right;
@@ -3219,14 +3210,6 @@ td.num {
 tr.is-today td {
   background: var(--brand-soft);
   font-weight: 700;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 .social-matrix td {
   height: auto;
@@ -3332,27 +3315,6 @@ tr.is-today td {
 .ok-text {
   color: var(--ok-fg);
 }
-.post-targets {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: var(--s3) var(--s4);
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-}
-.post-targets legend {
-  font-weight: 700;
-  padding: 0 var(--s1);
-}
-.post-targets p {
-  margin: 0;
-}
-.post-target-cell {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s1);
-}
 /* Ruang Manajer: jadwal, perintah ke tim, catatan */
 .manager-plan {
   display: flex;
@@ -3432,12 +3394,6 @@ tr.is-today td {
   flex-direction: column;
   gap: 2px;
   max-width: 120px;
-}
-.check-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  flex-wrap: wrap;
 }
 /* Statistik Akun */
 .stats-bar {
