@@ -1,4 +1,5 @@
-import type { YouTubeSettings } from "../server/book-settings";
+import type { BookSettings, YouTubeSettings } from "../server/book-settings";
+import { SocialPlanFields } from "./social-plan";
 import { TikTokSettingsFields } from "./tiktok-settings";
 import type { TikTokSettings } from "../server/tiktok-settings";
 import { socialTargets, type SocialTarget } from "../server/book-settings";
@@ -30,10 +31,15 @@ export function ZernioPanel({
   onChange,
   publication,
   onPublished,
+  outputs,
+  engine,
 }: {
+  // Bila diisi (Pengaturan Konten), target & akun tampil sebagai Rencana konten sosmed.
+  outputs?: string[];
+  engine?: string;
   instagram?: InstagramConnection;
   credentials?: boolean;
-  settings?: {
+  settings?: Partial<BookSettings> & {
     youtube?: YouTubeSettings;
     tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
@@ -45,6 +51,8 @@ export function ZernioPanel({
     youtube?: YouTubeSettings;
     tiktok?: TikTokSettings;
     socialTargets?: SocialTarget[];
+    instagramFormats?: BookSettings["instagramFormats"];
+    youtubeMedia?: BookSettings["youtubeMedia"];
     instagramAccountId?: string | null;
     youtubeAccountId?: string | null;
     tiktokAccountId?: string | null;
@@ -379,94 +387,108 @@ export function ZernioPanel({
       )}
       {settings && (
         <section className="stack">
-          <fieldset className="output-targets">
-            <legend>Target sosmed</legend>
-            <div className="output-target-options">
-              {(
-                [
-                  ["instagram", "Instagram"],
-                  ["youtube", "YouTube"],
-                  ["tiktok", "TikTok"],
-                ] as const
-              ).map(([platform, label]) => (
-                <label className="check-row" key={platform}>
-                  <input
-                    type="checkbox"
-                    checked={socialTargets(settings).includes(platform)}
-                    onChange={(e) =>
-                      onChange?.({
-                        socialTargets: e.target.checked
-                          ? [...socialTargets(settings), platform]
-                          : socialTargets(settings).filter(
-                              (target) => target !== platform,
-                            ),
-                      })
-                    }
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="settings-grid">
-            {(
-              [
-                {
-                  label: "Instagram",
-                  key: "instagramAccountId",
-                  state: instagram?.state || "loading",
-                  accounts: instagram?.accounts || [],
-                },
-                {
-                  label: "TikTok",
-                  key: "tiktokAccountId",
-                  state: connection.state,
-                  accounts: connection.accounts.filter(
-                    (a) => a.platform === "tiktok",
-                  ),
-                },
-                {
-                  label: "YouTube",
-                  key: "youtubeAccountId",
-                  state: connection.state,
-                  accounts: connection.accounts.filter(
-                    (a) => a.platform === "youtube",
-                  ),
-                },
-              ] as const
-            )
-              .filter(({ key }) =>
-                socialTargets(settings).includes(
-                  key.replace("AccountId", "") as SocialTarget,
-                ),
-              )
-              .map(({ label, key, state, accounts }) => (
-                <label className="field" key={key}>
-                  Akun tujuan {label}
-                  <select
-                    aria-label={`Akun tujuan ${label}`}
-                    value={settings[key] || ""}
-                    onChange={(e) =>
-                      onChange?.({ [key]: e.target.value || null })
-                    }
-                    disabled={state === "loading"}
-                  >
-                    <option value="">Pilih akun tujuan</option>
-                    {accounts.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        @{a.username}
-                      </option>
-                    ))}
-                    {settings[key] &&
-                      !accounts.some((a) => a.id === settings[key]) && (
-                        <option value={settings[key]!}>
-                          Akun tersimpan tidak tersedia
-                        </option>
-                      )}
-                  </select>
-                </label>
-              ))}
-          </div>
+          {outputs ? (
+            <SocialPlanFields
+              settings={settings as BookSettings}
+              outputs={outputs}
+              engine={engine}
+              instagram={instagram}
+              zernioAccounts={connection.accounts}
+              zernioState={connection.state}
+              onChange={(patch) => onChange?.(patch as any)}
+            />
+          ) : (
+            <>
+              <fieldset className="output-targets">
+                <legend>Target sosmed</legend>
+                <div className="output-target-options">
+                  {(
+                    [
+                      ["instagram", "Instagram"],
+                      ["youtube", "YouTube"],
+                      ["tiktok", "TikTok"],
+                    ] as const
+                  ).map(([platform, label]) => (
+                    <label className="check-row" key={platform}>
+                      <input
+                        type="checkbox"
+                        checked={socialTargets(settings).includes(platform)}
+                        onChange={(e) =>
+                          onChange?.({
+                            socialTargets: e.target.checked
+                              ? [...socialTargets(settings), platform]
+                              : socialTargets(settings).filter(
+                                  (target) => target !== platform,
+                                ),
+                          })
+                        }
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <div className="settings-grid">
+                {(
+                  [
+                    {
+                      label: "Instagram",
+                      key: "instagramAccountId",
+                      state: instagram?.state || "loading",
+                      accounts: instagram?.accounts || [],
+                    },
+                    {
+                      label: "TikTok",
+                      key: "tiktokAccountId",
+                      state: connection.state,
+                      accounts: connection.accounts.filter(
+                        (a) => a.platform === "tiktok",
+                      ),
+                    },
+                    {
+                      label: "YouTube",
+                      key: "youtubeAccountId",
+                      state: connection.state,
+                      accounts: connection.accounts.filter(
+                        (a) => a.platform === "youtube",
+                      ),
+                    },
+                  ] as const
+                )
+                  .filter(({ key }) =>
+                    socialTargets(settings).includes(
+                      key.replace("AccountId", "") as SocialTarget,
+                    ),
+                  )
+                  .map(({ label, key, state, accounts }) => (
+                    <label className="field" key={key}>
+                      Akun tujuan {label}
+                      <select
+                        aria-label={`Akun tujuan ${label}`}
+                        value={settings[key] || ""}
+                        onChange={(e) =>
+                          onChange?.({ [key]: e.target.value || null })
+                        }
+                        disabled={state === "loading"}
+                      >
+                        <option value="">Pilih akun tujuan</option>
+                        {accounts.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            @{a.username}
+                          </option>
+                        ))}
+                        {settings[key] &&
+                          !accounts.some((a) => a.id === settings[key]) && (
+                            <option value={settings[key]!}>
+                              Akun tersimpan tidak tersedia
+                            </option>
+                          )}
+                      </select>
+                    </label>
+                  ))}
+              </div>
+            </>
+          )}
           {socialTargets(settings).includes("youtube") && (
             <div className="settings-grid">
               <label className="field">
@@ -524,6 +546,7 @@ export function ZernioPanel({
               accountId={settings.tiktokAccountId}
               value={settings.tiktok}
               onChange={(tiktok) => onChange?.({ tiktok })}
+              hideMedia={!!outputs}
             />
           )}
         </section>

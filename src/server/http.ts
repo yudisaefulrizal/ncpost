@@ -74,8 +74,17 @@ import {
   panelDir,
   quoteImagePath,
 } from "./output-paths";
-import { runCli, accounts, publish, postStatus } from "./providers";
+import {
+  runCli,
+  accounts,
+  publish,
+  postStatus,
+  instagramSummary,
+} from "./providers";
+import { accountStats, snapshotInstagram } from "./account-stats";
 import { credentialStatus, setCredential } from "./credentials";
+import { officeSummary } from "./office";
+import { saveTargets } from "./manager-targets";
 const cfg = initConfig(),
   app = express(),
   limit = new RateLimiter();
@@ -652,6 +661,27 @@ app.post("/api/queue/clear", async (_req, res) => {
   res.json(await clearQueue(store));
 });
 app.get("/api/jobs", async (_, res) => res.json(await store.jobs()));
+app.get("/api/office", async (_, res) =>
+  res.json(await officeSummary(store.db)),
+);
+// Statistik akun sosmed harian (Instagram lewat NC-WA).
+app.get("/api/account-stats", async (req, res) => {
+  const days = [7, 30, 90].includes(Number(req.query.days))
+    ? Number(req.query.days)
+    : 30;
+  res.json(await accountStats(store.db, { accounts }, days));
+});
+app.post("/api/account-stats/refresh", async (_req, res) => {
+  const result = await snapshotInstagram(store.db, {
+    accounts,
+    summary: (id) => instagramSummary(id),
+  });
+  res.json({ ...result, ...(await accountStats(store.db, { accounts })) });
+});
+// Target Manajer: tersimpan terpisah dari pengaturan konten.
+app.put("/api/manager/targets", (req, res) =>
+  res.json({ targets: saveTargets(req.body?.targets) }),
+);
 app.get("/api/book-crons", async (_, res) => res.json(await store.bookCrons()));
 app.put("/api/book-crons", async (req, res) => {
   if (req.body?.enabled === true && req.body.kind === "POST_YOUTUBE") {

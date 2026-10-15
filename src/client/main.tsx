@@ -29,6 +29,7 @@ import {
 } from "../server/content-type-domain";
 import { PromptLab } from "./lab";
 import { ZernioPanel } from "./zernio";
+import { DEPT_NAME, STAFF } from "./kantor-status";
 import {
   NEWS_MEDIA_STAGES,
   NEWS_CRON_TYPES,
@@ -76,6 +77,50 @@ import {
   type Filter,
   type Tone,
 } from "./status";
+// Menu yang bekerja per jenis konten, dan nama halamannya per mesin konten.
+const NEEDS_TYPE = [
+  "Produksi",
+  "Produksi Quote",
+  "Produksi Berita",
+  "Pengaturan Konten",
+  "Pengaturan Berita",
+  "Jadwal",
+  "Jadwal Berita",
+];
+const BY_ENGINE: Record<string, Record<string, string>> = {
+  news: {
+    Produksi: "Produksi Berita",
+    "Produksi Quote": "Produksi Berita",
+    "Pengaturan Konten": "Pengaturan Berita",
+    Jadwal: "Jadwal Berita",
+  },
+  quote: {
+    Produksi: "Produksi Quote",
+    "Produksi Berita": "Produksi Quote",
+    "Pengaturan Berita": "Pengaturan Konten",
+    "Jadwal Berita": "Jadwal",
+  },
+  book: {
+    "Produksi Quote": "Produksi",
+    "Produksi Berita": "Produksi",
+    "Pengaturan Berita": "Pengaturan Konten",
+    "Jadwal Berita": "Jadwal",
+  },
+};
+const forEngine = (page: string, engine?: string) =>
+  (engine && BY_ENGINE[engine]?.[page]) || page;
+const KantorPage = React.lazy(() =>
+  import("./kantor").then((m) => ({ default: m.KantorPage })),
+);
+const ManagerRoom = React.lazy(() =>
+  import("./office-pages").then((m) => ({ default: m.ManagerRoom })),
+);
+const AccountStatsPage = React.lazy(() =>
+  import("./account-stats").then((m) => ({ default: m.AccountStatsPage })),
+);
+const SosmedCenter = React.lazy(() =>
+  import("./office-pages").then((m) => ({ default: m.SosmedCenter })),
+);
 const importJsonExample =
   JSON.stringify(
     [
@@ -87,6 +132,8 @@ const importJsonExample =
     2,
   ) + "\n";
 const navGroups: [string, [string, IconName][]][] = [
+  ["Beranda", [["Kantor", "grid"]]],
+  ["Laporan", [["Statistik Akun", "eye"]]],
   [
     "Konten",
     [
@@ -167,7 +214,7 @@ function App() {
     [listeningSentence, setListeningSentence] = useState<any>(null),
     [msg, setMsg] = useState(""),
     [rows, setRows] = useState<any[]>([]),
-    [page, setPage] = useState("Kreat Konten"),
+    [page, setPage] = useState("Kantor"),
     [detail, setDetail] = useState<any>(null),
     [text, setText] = useState(""),
     [search, setSearch] = useState(""),
@@ -191,7 +238,12 @@ function App() {
       current ? (types.find((t) => t.id === current.id) ?? null) : null,
     );
   };
-  const openContentType = (type: ContentType) => {
+  // Kantor: menu karyawan dibuka di laci tanpa meninggalkan kantor.
+  const [officeMenu, setOfficeMenu] = useState<{
+    menu: string;
+    staff?: string;
+  } | null>(null);
+  const openContentType = (type: ContentType, target = "Produksi") => {
     setContentTypeScope(type.id);
     activeTypeId.current = type.id;
     setActiveType(type);
@@ -204,13 +256,10 @@ function App() {
     setSearch("");
     setFilterBook("");
     setFilter("semua");
-    setPage(
-      type.engine === "news"
-        ? "Produksi Berita"
-        : type.engine === "quote"
-          ? "Produksi Quote"
-          : "Produksi",
-    );
+    const next = forEngine(target, type.engine);
+    if (page === "Kantor" && officeMenu)
+      setOfficeMenu({ ...officeMenu, menu: next });
+    else setPage(next);
   };
   const activeStages = activeType
     ? contentStages(activeType)
@@ -816,12 +865,9 @@ function App() {
       run: () => setPostingReels(c),
     };
   };
-  const go = (n: string) => {
+  const prepare = (n: string) => {
     if (["Pengaturan Konten", "Pengaturan Berita", "Stok Gambar"].includes(n))
       action(reloadImageCatalog);
-    setPage(n);
-    setDetail(null);
-    setMsg("");
     if (n === "Kredensial")
       action(async () => setCreds(await api("/credentials")));
     if (n === "Pengaturan") loadSettings();
@@ -829,6 +875,40 @@ function App() {
       refreshInstagram();
     if (n === "Produksi") setFilter("semua");
   };
+  // Pindah halaman penuh (sidebar); laci kantor ditutup.
+  const goPage = (n: string) => {
+    prepare(n);
+    setOfficeMenu(null);
+    setPage(n);
+    setDetail(null);
+    setMsg("");
+  };
+  const openOffice = (n: string, staff?: string) => {
+    prepare(n);
+    setOfficeMenu({ menu: n, staff });
+    setDetail(null);
+    setMsg("");
+  };
+  const closeOffice = () => {
+    setOfficeMenu(null);
+    setDetail(null);
+    setMsg("");
+  };
+  useEffect(() => {
+    if (!officeMenu) return;
+    // Esc menutup laci, kecuali sedang ada modal yang terbuka di atasnya.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !document.querySelector(".modal-backdrop"))
+        closeOffice();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [!!officeMenu]);
+  // Navigasi dari dalam halaman: tetap di laci bila sedang di kantor.
+  const go = (n: string) =>
+    page === "Kantor" && officeMenu
+      ? openOffice(n, officeMenu.staff)
+      : goPage(n);
   function navButton(n: string, icon: IconName) {
     const current = page === n && !detail;
     const parentActive =
@@ -850,7 +930,7 @@ function App() {
           (parentActive ? " parent-active" : "")
         }
         aria-current={current ? "page" : undefined}
-        onClick={() => go(n)}
+        onClick={() => goPage(n)}
       >
         <Icon name={icon} />
         {label}
@@ -1502,380 +1582,448 @@ function App() {
     </section>
   );
 
-  let content: React.ReactNode;
-  let heading = page,
-    sub = "";
-  if (detail) {
-    const v = detail.validation ?? {};
-    const report = parse(detail.report);
-    const preview = parse(detail.preview);
-    const passed = report?.checks?.filter(
-      (c: any) => c.status === "lulus",
-    ).length;
-    const visualOk = String(detail.visual_status).startsWith("tersedia");
-    const running = activeJobs.filter((j) => j.chapter_id === detail.id);
-    heading = detail.title;
-    sub = `Revisi ${detail.revision}${report ? ` · editor ${passed}/${report.checks.length}` : ""}`;
-    const steps: { name: string; s: { tone: Tone; label: string } }[] = [
-      {
-        name: "Artikel",
-        s: !detail.article
-          ? status("belum")
-          : v.ok
-            ? { tone: "ok", label: "Valid" }
-            : { tone: "act", label: "Belum valid" },
-      },
-      {
-        name: "Review editor",
-        s:
-          detail.article_status === "siap"
-            ? { tone: "ok", label: `Lolos ${passed ?? ""}/6` }
-            : ACTION_STATES.includes(detail.article_status)
-              ? status(detail.article_status)
-              : status("belum"),
-      },
-      {
-        name: "Stok gambar",
-        s: visualOk
-          ? status("tersedia")
-          : detail.article_status === "siap"
-            ? { tone: "act", label: "Langkah berikutnya" }
+  const renderView = (page: string, allowDetail: boolean) => {
+    let content: React.ReactNode;
+    let heading = page,
+      sub = "";
+    if (NEEDS_TYPE.includes(page) && !activeType && !(detail && allowDetail)) {
+      heading = "Pilih jenis konten";
+      sub = "Menu ini bekerja per jenis konten; pilih salah satu dulu.";
+      content = (
+        <ContentTypes
+          items={contentTypes}
+          onOpen={(t: ContentType) => openContentType(t, page)}
+          onSaved={loadContentTypes}
+        />
+      );
+    } else if (detail && allowDetail) {
+      const v = detail.validation ?? {};
+      const report = parse(detail.report);
+      const preview = parse(detail.preview);
+      const passed = report?.checks?.filter(
+        (c: any) => c.status === "lulus",
+      ).length;
+      const visualOk = String(detail.visual_status).startsWith("tersedia");
+      const running = activeJobs.filter((j) => j.chapter_id === detail.id);
+      heading = detail.title;
+      sub = `Revisi ${detail.revision}${report ? ` · editor ${passed}/${report.checks.length}` : ""}`;
+      const steps: { name: string; s: { tone: Tone; label: string } }[] = [
+        {
+          name: "Artikel",
+          s: !detail.article
+            ? status("belum")
+            : v.ok
+              ? { tone: "ok", label: "Valid" }
+              : { tone: "act", label: "Belum valid" },
+        },
+        {
+          name: "Review editor",
+          s:
+            detail.article_status === "siap"
+              ? { tone: "ok", label: `Lolos ${passed ?? ""}/6` }
+              : ACTION_STATES.includes(detail.article_status)
+                ? status(detail.article_status)
+                : status("belum"),
+        },
+        {
+          name: "Stok gambar",
+          s: visualOk
+            ? status("tersedia")
+            : detail.article_status === "siap"
+              ? { tone: "act", label: "Langkah berikutnya" }
+              : { tone: "none", label: "Menunggu" },
+        },
+        {
+          name: "Video",
+          s: detail.sentence_video
+            ? status("tersedia")
             : { tone: "none", label: "Menunggu" },
-      },
-      {
-        name: "Video",
-        s: detail.sentence_video
-          ? status("tersedia")
-          : { tone: "none", label: "Menunggu" },
-      },
-      { name: "Instagram Reels", s: status(detail.reels_status) },
-    ];
-    // Satu aksi utama sesuai tahap saat ini.
-    const primary: { label: string; hint: string; run?: () => void } =
-      !detail.article
-        ? {
-            label: "Buat artikel",
-            hint: "Codex menulis artikel, editor meninjau, lalu review langsung diterapkan.",
-            run: () => action(() => enqueue("ARTICLE")),
-          }
-        : !v.ok
+        },
+        { name: "Instagram Reels", s: status(detail.reels_status) },
+      ];
+      // Satu aksi utama sesuai tahap saat ini.
+      const primary: { label: string; hint: string; run?: () => void } =
+        !detail.article
           ? {
-              label: "Simpan draf",
-              hint: "Struktur belum memenuhi kontrak; perbaiki lalu simpan.",
-              run: () => action(saveDraft),
+              label: "Buat artikel",
+              hint: "Codex menulis artikel, editor meninjau, lalu review langsung diterapkan.",
+              run: () => action(() => enqueue("ARTICLE")),
             }
-          : ["menunggu editor", "draft", "revisi"].includes(
-                detail.article_status,
-              )
+          : !v.ok
             ? {
-                label: "Jalankan review editor",
-                hint:
-                  detail.article_status === "revisi"
-                    ? "Sunting draf sesuai catatan editor, simpan, lalu review ulang."
-                    : "Struktur lolos; review makna wajib sebelum stok gambar.",
-                run: () => action(() => enqueue("EDITOR")),
+                label: "Simpan draf",
+                hint: "Struktur belum memenuhi kontrak; perbaiki lalu simpan.",
+                run: () => action(saveDraft),
               }
-            : {
-                label: "Buka produksi",
-                hint: "Artikel siap untuk keluaran yang dipilih.",
-                run: () => setDetail(null),
-              };
-    async function saveDraft() {
-      await api("/chapters/" + detail.id, "PUT", { article: text });
-      await open(detail);
-      setMsg("Draf tersimpan");
-      await refresh();
-    }
-    content = (
-      <DetailView
-        {...{
-          detail,
-          part: partNumber(rows, detail),
-          text,
-          setText,
-          v,
-          report,
-          preview,
-          steps: steps.filter((step) =>
-            step.name === "Stok gambar"
-              ? uses("IMAGES_PANEL")
-              : step.name === "Video" || step.name === "Instagram Reels"
-                ? uses("VIDEO_KALIMAT")
-                : true,
-          ),
-          primary,
-          running,
-          ttsLive,
-          visualOk,
-          settings,
-        }}
-        onBack={() => setDetail(null)}
-        bookSettings={settingsFor(detail.book)}
-        onSave={() => action(saveDraft)}
-        onDelete={() => removeChapter(detail)}
-        onEditPart={() => editPart(detail)}
-        onEnqueue={(k: string, replace?: boolean) =>
-          action(() => enqueue(k, replace))
-        }
-      />
-    );
-  } else if (page === "List Jadwal") {
-    heading = "List Jadwal";
-    sub = "";
-    content = <UpcomingCronsPage />;
-  } else if (page === "List Antrian") {
-    heading = "List Antrian";
-    sub = "";
-    content = <QueuePage />;
-  } else if (page === "Kreat Konten") {
-    heading = "Kreat Konten";
-    content = (
-      <ContentTypes
-        items={contentTypes}
-        onOpen={openContentType}
-        onSaved={loadContentTypes}
-      />
-    );
-  } else if (page === "Produksi Quote") {
-    sub = "";
-    content = activeType && (
-      <QuoteProduction
-        key={activeType.id}
-        type={activeType}
-        icon={(name) => <Icon name={name} size={14} />}
-      />
-    );
-  } else if (page === "Produksi Berita") {
-    sub = "";
-    content = (
-      <NewsProduction
-        key={activeType?.id}
-        instagram={instagram}
-        ttsReady={!!settings?.newsTts?.enabled}
-        ttsReason={settings?.newsTts?.reason ?? "Memeriksa Edge TTS berita…"}
-      />
-    );
-  } else if (page === "Pengaturan Berita") {
-    sub = "";
-    content = activeType && (
-      <ContentPlanCard
-        type={activeType}
-        onSave={async (outputs, settings) => {
-          await api(`/content-types/${activeType.id}`, "PUT", {
-            ...activeType,
-            outputs,
+            : ["menunggu editor", "draft", "revisi"].includes(
+                  detail.article_status,
+                )
+              ? {
+                  label: "Jalankan review editor",
+                  hint:
+                    detail.article_status === "revisi"
+                      ? "Sunting draf sesuai catatan editor, simpan, lalu review ulang."
+                      : "Struktur lolos; review makna wajib sebelum stok gambar.",
+                  run: () => action(() => enqueue("EDITOR")),
+                }
+              : {
+                  label: "Buka produksi",
+                  hint: "Artikel siap untuk keluaran yang dipilih.",
+                  run: () => setDetail(null),
+                };
+      async function saveDraft() {
+        await api("/chapters/" + detail.id, "PUT", { article: text });
+        await open(detail);
+        setMsg("Draf tersimpan");
+        await refresh();
+      }
+      content = (
+        <DetailView
+          {...{
+            detail,
+            part: partNumber(rows, detail),
+            text,
+            setText,
+            v,
+            report,
+            preview,
+            steps: steps.filter((step) =>
+              step.name === "Stok gambar"
+                ? uses("IMAGES_PANEL")
+                : step.name === "Video" || step.name === "Instagram Reels"
+                  ? uses("VIDEO_KALIMAT")
+                  : true,
+            ),
+            primary,
+            running,
+            ttsLive,
+            visualOk,
             settings,
-          });
-          await loadContentTypes();
-          setMsg("Pengaturan konten disimpan");
-        }}
-      >
-        {(draft, set) => (
-          <>
-            <ZernioPanel
-              settings={draft}
-              instagram={instagram}
-              onChange={set}
-            />
-          </>
-        )}
-      </ContentPlanCard>
-    );
-  } else if (page === "Jadwal Berita") {
-    sub =
-      "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
-    content = <NewsCronSettings key={activeType?.id} />;
-  } else if (page === "Lab Prompt Artikel" || page === "Lab Prompt Gambar") {
-    sub = "";
-    content = (
-      <PromptLab
-        key={page}
-        kind={page === "Lab Prompt Artikel" ? "article" : "image"}
-      />
-    );
-  } else if (page === "Stok Audio") {
-    content = <AudioStockPage />;
-  } else if (page === "Daftar Suara") {
-    content = <Voices />;
-  } else if (page === "Kredensial") {
-    sub = "Key khusus aplikasi untuk penyedia eksternal.";
-    content = (
-      <section className="card pad narrow">
-        <h2 className="h3">Kredensial aplikasi</h2>
-        <p className="muted">
-          Disimpan di file .env server (izin 0600) dan tidak pernah dikirim
-          kembali ke browser. Kosongkan kolom untuk membiarkan nilai tersimpan.
-          Restart worker agar nilai baru terbaca.
-        </p>
-        {creds ? (
-          <form
-            className="stack"
-            onSubmit={(e) => {
-              e.preventDefault();
-              action(async () => {
-                setCreds(
-                  await api("/credentials", "PUT", { values: credInput }),
-                );
-                setCredInput({});
-                setMsg("Kredensial disimpan");
-              });
+          }}
+          onBack={() => setDetail(null)}
+          bookSettings={settingsFor(detail.book)}
+          onSave={() => action(saveDraft)}
+          onDelete={() => removeChapter(detail)}
+          onEditPart={() => editPart(detail)}
+          onEnqueue={(k: string, replace?: boolean) =>
+            action(() => enqueue(k, replace))
+          }
+        />
+      );
+    } else if (page === "Kantor") {
+      heading = "Kantor";
+      sub =
+        "Setiap menu adalah satu karyawan; gerakannya mengikuti status job.";
+      content = (
+        <React.Suspense
+          fallback={<div className="card empty">Memuat kantor…</div>}
+        >
+          <KantorPage onOpenMenu={openOffice} />
+        </React.Suspense>
+      );
+    } else if (page === "Ruang Manajer") {
+      sub = "Capaian target posting harian per jenis konten.";
+      content = (
+        <React.Suspense fallback={<div className="card empty">Memuat…</div>}>
+          <ManagerRoom
+            onConfigure={(id) => {
+              const type = contentTypes.find((t) => t.id === id);
+              if (type) openContentType(type, "Pengaturan Konten");
             }}
-          >
-            {Object.entries<any>(creds).map(([name, c]) => (
-              <label key={name} className="field">
-                <span className="field-row">
-                  {c.label}
-                  <Chip
-                    s={
-                      c.set
-                        ? { tone: "ok", label: "Tersimpan" }
-                        : { tone: "none", label: "Belum diatur" }
+          />
+        </React.Suspense>
+      );
+    } else if (page === "Statistik Akun") {
+      sub = "Perkembangan harian follower, likes, dan views tiap akun sosmed.";
+      content = (
+        <React.Suspense fallback={<div className="card empty">Memuat…</div>}>
+          <AccountStatsPage />
+        </React.Suspense>
+      );
+    } else if (page === "Pusat Sosmed") {
+      sub = "Semua akun, aturan konten tiap sosmed, dan posting terbaru.";
+      content = (
+        <React.Suspense fallback={<div className="card empty">Memuat…</div>}>
+          <SosmedCenter
+            types={contentTypes}
+            instagram={instagram}
+            onConfigure={(t: ContentType) =>
+              openContentType(t, "Pengaturan Konten")
+            }
+            onOpenStats={() => go("Statistik Akun")}
+          />
+        </React.Suspense>
+      );
+    } else if (page === "List Jadwal") {
+      heading = "List Jadwal";
+      sub = "";
+      content = <UpcomingCronsPage />;
+    } else if (page === "List Antrian") {
+      heading = "List Antrian";
+      sub = "";
+      content = <QueuePage />;
+    } else if (page === "Kreat Konten") {
+      heading = "Kreat Konten";
+      content = (
+        <ContentTypes
+          items={contentTypes}
+          onOpen={openContentType}
+          onSaved={loadContentTypes}
+        />
+      );
+    } else if (page === "Produksi Quote") {
+      sub = "";
+      content = activeType && (
+        <QuoteProduction
+          key={activeType.id}
+          type={activeType}
+          icon={(name) => <Icon name={name} size={14} />}
+        />
+      );
+    } else if (page === "Produksi Berita") {
+      sub = "";
+      content = (
+        <NewsProduction
+          key={activeType?.id}
+          instagram={instagram}
+          ttsReady={!!settings?.newsTts?.enabled}
+          ttsReason={settings?.newsTts?.reason ?? "Memeriksa Edge TTS berita…"}
+        />
+      );
+    } else if (page === "Pengaturan Berita") {
+      sub = "";
+      content = activeType && (
+        <ContentPlanCard
+          type={activeType}
+          onSave={async (outputs, settings) => {
+            await api(`/content-types/${activeType.id}`, "PUT", {
+              ...activeType,
+              outputs,
+              settings,
+            });
+            await loadContentTypes();
+            setMsg("Pengaturan konten disimpan");
+          }}
+        >
+          {(draft, set) => (
+            <>
+              <ZernioPanel
+                settings={draft}
+                instagram={instagram}
+                onChange={set}
+              />
+            </>
+          )}
+        </ContentPlanCard>
+      );
+    } else if (page === "Jadwal Berita") {
+      sub =
+        "Jadwal otomatis per jenis berita dan tahap produksi, setiap beberapa jam.";
+      content = <NewsCronSettings key={activeType?.id} />;
+    } else if (page === "Lab Prompt Artikel" || page === "Lab Prompt Gambar") {
+      sub = "";
+      content = (
+        <PromptLab
+          key={page}
+          kind={page === "Lab Prompt Artikel" ? "article" : "image"}
+        />
+      );
+    } else if (page === "Stok Audio") {
+      content = <AudioStockPage />;
+    } else if (page === "Daftar Suara") {
+      content = <Voices />;
+    } else if (page === "Kredensial") {
+      sub = "Key khusus aplikasi untuk penyedia eksternal.";
+      content = (
+        <section className="card pad narrow">
+          <h2 className="h3">Kredensial aplikasi</h2>
+          <p className="muted">
+            Disimpan di file .env server (izin 0600) dan tidak pernah dikirim
+            kembali ke browser. Kosongkan kolom untuk membiarkan nilai
+            tersimpan. Restart worker agar nilai baru terbaca.
+          </p>
+          {creds ? (
+            <form
+              className="stack"
+              onSubmit={(e) => {
+                e.preventDefault();
+                action(async () => {
+                  setCreds(
+                    await api("/credentials", "PUT", { values: credInput }),
+                  );
+                  setCredInput({});
+                  setMsg("Kredensial disimpan");
+                });
+              }}
+            >
+              {Object.entries<any>(creds).map(([name, c]) => (
+                <label key={name} className="field">
+                  <span className="field-row">
+                    {c.label}
+                    <Chip
+                      s={
+                        c.set
+                          ? { tone: "ok", label: "Tersimpan" }
+                          : { tone: "none", label: "Belum diatur" }
+                      }
+                    />
+                  </span>
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={c.set ? "••••••••" : ""}
+                    value={credInput[name] ?? ""}
+                    onChange={(e) =>
+                      setCredInput({ ...credInput, [name]: e.target.value })
                     }
                   />
-                </span>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  placeholder={c.set ? "••••••••" : ""}
-                  value={credInput[name] ?? ""}
-                  onChange={(e) =>
-                    setCredInput({ ...credInput, [name]: e.target.value })
-                  }
-                />
-              </label>
-            ))}
-            <div>
-              <button className="btn btn-pri">Simpan kredensial</button>
-            </div>
-          </form>
-        ) : (
-          <p className="muted">Memuat…</p>
-        )}
-        <ZernioPanel credentials key={JSON.stringify(creds)} />
-      </section>
-    );
-  } else if (page === "Pengaturan") {
-    sub = "Koneksi dan kemampuan penyedia.";
-    content = (
-      <div className="split">
-        <section className="card pad grow">
-          <h2 className="h3">Penyedia</h2>
-          <ProviderList rows={providerRows} />
-        </section>
-        <section className="card pad side">
-          <h2 className="h3">Server</h2>
-          {settings ? (
-            <dl className="dl">
-              <dt>Origin lokal</dt>
-              <dd className="mono">{settings.origin}</dd>
-              <dt>Domain publik</dt>
-              <dd className="mono">{settings.publicOrigin}</dd>
-              <dt>Codex teks</dt>
-              <dd>{settings.codex.text}</dd>
-              <dt>Codex gambar</dt>
-              <dd>{settings.codex.image}</dd>
-              <dt>TTS</dt>
-              <dd>
-                {settings.tts.reason} · {settings.tts.model}
-              </dd>
-              <dt>Instagram</dt>
-              <dd>{settings.reels}</dd>
-            </dl>
+                </label>
+              ))}
+              <div>
+                <button className="btn btn-pri">Simpan kredensial</button>
+              </div>
+            </form>
           ) : (
-            <p className="muted">Memeriksa status CLI…</p>
+            <p className="muted">Memuat…</p>
+          )}
+          <ZernioPanel credentials key={JSON.stringify(creds)} />
+        </section>
+      );
+    } else if (page === "Pengaturan") {
+      sub = "Koneksi dan kemampuan penyedia.";
+      content = (
+        <div className="split">
+          <section className="card pad grow">
+            <h2 className="h3">Penyedia</h2>
+            <ProviderList rows={providerRows} />
+          </section>
+          <section className="card pad side">
+            <h2 className="h3">Server</h2>
+            {settings ? (
+              <dl className="dl">
+                <dt>Origin lokal</dt>
+                <dd className="mono">{settings.origin}</dd>
+                <dt>Domain publik</dt>
+                <dd className="mono">{settings.publicOrigin}</dd>
+                <dt>Codex teks</dt>
+                <dd>{settings.codex.text}</dd>
+                <dt>Codex gambar</dt>
+                <dd>{settings.codex.image}</dd>
+                <dt>TTS</dt>
+                <dd>
+                  {settings.tts.reason} · {settings.tts.model}
+                </dd>
+                <dt>Instagram</dt>
+                <dd>{settings.reels}</dd>
+              </dl>
+            ) : (
+              <p className="muted">Memeriksa status CLI…</p>
+            )}
+          </section>
+        </div>
+      );
+    } else if (page === "Jadwal") {
+      sub = "";
+      content = activeType && (
+        <section className="card pad stack">
+          <CronTable
+            key={activeType.id}
+            stages={CRON_TYPES.filter(([kind]) =>
+              contentAllows(activeType, kind),
+            )}
+            items={bookCrons}
+            onDelete={async (cron) => {
+              await api("/book-crons", "DELETE", { id: cron.id });
+              await refresh();
+            }}
+            onSave={async (cron) => {
+              await api("/book-crons", "PUT", cron);
+              await refresh();
+            }}
+          />
+          {!activeType.settings?.managed && (
+            <button
+              className="btn btn-pri"
+              onClick={() => go("Pengaturan Konten")}
+            >
+              Atur target output
+            </button>
           )}
         </section>
-      </div>
-    );
-  } else if (page === "Jadwal") {
-    sub = "";
-    content = activeType && (
-      <section className="card pad stack">
-        <CronTable
-          key={activeType.id}
-          stages={CRON_TYPES.filter(([kind]) =>
-            contentAllows(activeType, kind),
+      );
+    } else if (page === "Pengaturan Konten") {
+      sub = "";
+      content = activeType && (
+        <ContentPlanCard
+          type={activeType}
+          onSave={async (outputs, settings) => {
+            await api(`/content-types/${activeType.id}`, "PUT", {
+              ...activeType,
+              outputs,
+              settings,
+            });
+            await loadContentTypes();
+            await refresh();
+            setMsg("Pengaturan konten disimpan");
+          }}
+        >
+          {(draft, set, outputs) => (
+            <>
+              <ZernioPanel
+                settings={draft}
+                instagram={instagram}
+                onChange={set}
+                outputs={outputs}
+                engine={activeType.engine}
+              />
+            </>
           )}
-          items={bookCrons}
-          onDelete={async (cron) => {
-            await api("/book-crons", "DELETE", { id: cron.id });
-            await refresh();
-          }}
-          onSave={async (cron) => {
-            await api("/book-crons", "PUT", cron);
-            await refresh();
-          }}
+        </ContentPlanCard>
+      );
+    } else if (page === "Stok Konten Gambar") {
+      sub = "";
+      content = <FinishedImages key={activeType?.id || "images"} rows={rows} />;
+    } else if (page === "Stok Konten Panel") {
+      sub =
+        "Panel yang sudah dirender, siap dipublikasikan sebagai postingan gambar.";
+      content = (
+        <PanelContent
+          rows={rows.filter((c) => c.panel_status === "tersedia" && c.panels)}
+          onOpen={(c: any) => action(() => open(c))}
         />
-        {!activeType.settings?.managed && (
-          <button
-            className="btn btn-pri"
-            onClick={() => go("Pengaturan Konten")}
-          >
-            Atur target output
-          </button>
-        )}
-      </section>
-    );
-  } else if (page === "Pengaturan Konten") {
-    sub = "";
-    content = activeType && (
-      <ContentPlanCard
-        type={activeType}
-        onSave={async (outputs, settings) => {
-          await api(`/content-types/${activeType.id}`, "PUT", {
-            ...activeType,
-            outputs,
-            settings,
-          });
-          await loadContentTypes();
-          await refresh();
-          setMsg("Pengaturan konten disimpan");
-        }}
-      >
-        {(draft, set) => (
-          <>
-            <ZernioPanel
-              settings={draft}
-              instagram={instagram}
-              onChange={set}
-            />
-          </>
-        )}
-      </ContentPlanCard>
-    );
-  } else if (page === "Stok Konten Gambar") {
-    sub = "";
-    content = <FinishedImages key={activeType?.id || "images"} rows={rows} />;
-  } else if (page === "Stok Konten Panel") {
-    sub =
-      "Panel yang sudah dirender, siap dipublikasikan sebagai postingan gambar.";
-    content = (
-      <PanelContent
-        rows={rows.filter((c) => c.panel_status === "tersedia" && c.panels)}
-        onOpen={(c: any) => action(() => open(c))}
-      />
-    );
-    content = (
-      <div className="stack-lg">
-        {content}
-        {activeType?.engine === "news" && (
-          <NewsFinishedContent key={activeType.id} kind="PANEL" />
-        )}
-      </div>
-    );
-  } else if (page === "Stok Konten Video") {
-    sub = "";
-    content = <FinishedVideos />;
-  } else if (page === "Stok Gambar") {
-    sub = "Stok gambar berdasarkan preset.";
-    content = <StockGallery />;
-  } else {
-    // Produksi: halaman utama.
-    const books = new Set(rows.map((r) => bookKey(r.book))).size;
-    heading = page;
-    sub = `${rows.length} topik dari ${books} konteks.`;
-    content = queueCard;
-  }
+      );
+      content = (
+        <div className="stack-lg">
+          {content}
+          {activeType?.engine === "news" && (
+            <NewsFinishedContent key={activeType.id} kind="PANEL" />
+          )}
+        </div>
+      );
+    } else if (page === "Stok Konten Video") {
+      sub = "";
+      content = <FinishedVideos />;
+    } else if (page === "Stok Gambar") {
+      sub = "Stok gambar berdasarkan preset.";
+      content = <StockGallery />;
+    } else {
+      // Produksi: halaman utama.
+      const books = new Set(rows.map((r) => bookKey(r.book))).size;
+      heading = page;
+      sub = `${rows.length} topik dari ${books} konteks.`;
+      content = queueCard;
+    }
+    return { content, heading, sub };
+  };
+  const { content, heading, sub } = renderView(page, page !== "Kantor");
+  const officeView =
+    page === "Kantor" && officeMenu
+      ? renderView(forEngine(officeMenu.menu, activeType?.engine), true)
+      : null;
+  const officePage = officeMenu
+    ? forEngine(officeMenu.menu, activeType?.engine)
+    : "";
+  const officeStaff = STAFF.find((s) => s.id === officeMenu?.staff);
 
   const nextChapter = rows.find((c) => !c.article);
   return (
@@ -1966,7 +2114,7 @@ function App() {
               </div>
             </header>
           )}
-          {msg && (
+          {msg && !officeView && (
             <div className="alert" role="status">
               <span>{msg}</span>
               <button
@@ -1980,6 +2128,79 @@ function App() {
           )}
           {content}
           {!detail && page === "Produksi" && jobsCard}
+          {officeView && (
+            <div className="office-drawer-wrap">
+              <button
+                className="office-drawer-scrim"
+                aria-label="Kembali ke kantor"
+                onClick={closeOffice}
+              />
+              <section
+                className="office-drawer"
+                role="dialog"
+                aria-label={officeView.heading}
+              >
+                <header className="office-drawer-head">
+                  {officeStaff && (
+                    <img
+                      src={`/kantor/foto/${officeStaff.id}.webp`}
+                      alt=""
+                      width={56}
+                      height={70}
+                    />
+                  )}
+                  <div className="office-drawer-title">
+                    {officeStaff && (
+                      <small className="muted">
+                        {officeStaff.nama} · {DEPT_NAME[officeStaff.dept]}
+                      </small>
+                    )}
+                    <h2>
+                      {activeType &&
+                      ["Produksi", "Produksi Berita"].includes(officePage) &&
+                      !detail
+                        ? activeType.name
+                        : officeView.heading}
+                    </h2>
+                    {officeView.sub && (
+                      <p className="muted">{officeView.sub}</p>
+                    )}
+                  </div>
+                  <div className="row-gap">
+                    <button
+                      className="btn btn-sec btn-sm"
+                      onClick={() => goPage(officePage)}
+                    >
+                      Buka halaman penuh
+                    </button>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      aria-label="Tutup dan kembali ke kantor"
+                      onClick={closeOffice}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </header>
+                <div className="office-drawer-body">
+                  {msg && (
+                    <div className="alert" role="status">
+                      <span>{msg}</span>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        aria-label="Tutup pesan"
+                        onClick={() => setMsg("")}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  {officeView.content}
+                  {!detail && officePage === "Produksi" && jobsCard}
+                </div>
+              </section>
+            </div>
+          )}
           {viewing && (
             <ArticleModal c={viewing} onClose={() => setViewing(null)} />
           )}

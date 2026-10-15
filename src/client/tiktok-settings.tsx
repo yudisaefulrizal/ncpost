@@ -7,10 +7,13 @@ export function TikTokSettingsFields({
   accountId,
   value,
   onChange,
+  hideMedia = false,
 }: {
   accountId: string | null;
   value?: TikTokSettings;
   onChange: (value: TikTokSettings) => void;
+  // Media dipilih di Rencana konten sosmed; jangan tampilkan dua kali.
+  hideMedia?: boolean;
 }) {
   const settings = value || DEFAULT_TIKTOK_SETTINGS;
   const [creator, setCreator] = useState<any>(null);
@@ -45,20 +48,22 @@ export function TikTokSettingsFields({
     <fieldset className="stack">
       <legend>Pengaturan publish TikTok</legend>
       <div className="settings-grid">
-        <label className="field">
-          Media TikTok
-          <select
-            aria-label="Media TikTok"
-            value={settings.media}
-            onChange={(e) =>
-              set({ media: e.target.value as TikTokSettings["media"] })
-            }
-          >
-            <option value="v">Video vertikal</option>
-            <option value="h">Video horizontal</option>
-            <option value="photo">Carousel</option>
-          </select>
-        </label>
+        {!hideMedia && (
+          <label className="field">
+            Media TikTok
+            <select
+              aria-label="Media TikTok"
+              value={settings.media}
+              onChange={(e) =>
+                set({ media: e.target.value as TikTokSettings["media"] })
+              }
+            >
+              <option value="v">Video vertikal</option>
+              <option value="h">Video horizontal</option>
+              <option value="photo">Carousel</option>
+            </select>
+          </label>
+        )}
         <label className="field">
           Privasi TikTok
           <select

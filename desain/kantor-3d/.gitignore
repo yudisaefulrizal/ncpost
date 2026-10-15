@@ -1,0 +1,10 @@
+# Hasil generate dari skrip Blender di folder ini (jalankan ulang skripnya untuk membuatnya).
+# Aset yang dipakai web disalin ke public/kantor.
+*.blend
+*.blend1
+*.glb
+*.png
+*.gif
+foto_karyawan/
+tex/
+_frames_*/

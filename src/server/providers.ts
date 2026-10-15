@@ -265,6 +265,15 @@ export async function postStatus(
     throw Error("requestId tidak valid");
   return ncwa(`/posts/${requestId}`, { method: "GET" }, request);
 }
+// Statistik akun saat ini: follower, serta likes & views total bulan berjalan
+// (bulan UTC, maks. 30 hari). NC-WA tidak menyimpan riwayat; NC Post yang menyimpannya.
+export async function instagramSummary(
+  igUserId: string,
+  request: typeof fetch = fetch,
+) {
+  if (!/^\d{1,64}$/.test(igUserId)) throw Error("igUserId tidak valid");
+  return ncwa(`/accounts/${igUserId}/summary`, { method: "GET" }, request);
+}
 export function normalizeAccounts(data: unknown) {
   const rows = Array.isArray(data)
     ? data

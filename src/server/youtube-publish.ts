@@ -1,3 +1,4 @@
+import { youtubeMediaFor } from "./social-plan";
 import { socialTargets, type BookSettings } from "./book-settings";
 export function youtubePublishInput(
   source: string,
@@ -9,11 +10,7 @@ export function youtubePublishInput(
     !socialTargets(settings).includes("youtube")
   )
     throw Error("Aktifkan target dan pilih akun YouTube di Pengaturan Konten");
-  const media = settings.sentenceVideoKind
-    ? "v"
-    : settings.sentenceVideoHKind
-      ? "h"
-      : "v";
+  const media = youtubeMediaFor(settings);
   return {
     mediaKey: `${source}:${media}`,
     accountId: settings.youtubeAccountId,

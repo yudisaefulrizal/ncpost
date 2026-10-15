@@ -64,8 +64,15 @@ export function contentAllows(type: ContentType, kind: string) {
     !type.settings.socialTargets.includes("instagram")
   )
     return false;
-  if (kind === "POST_IG") return stages.has("PANEL");
-  if (kind === "REELS_IG") return stages.has("VIDEO_KALIMAT");
+  const igFormats = type.settings?.instagramFormats;
+  if (kind === "POST_IG")
+    return (
+      stages.has("PANEL") && (!igFormats || igFormats.includes("carousel"))
+    );
+  if (kind === "REELS_IG")
+    return (
+      stages.has("VIDEO_KALIMAT") && (!igFormats || igFormats.includes("reels"))
+    );
   if (kind.startsWith("S_IMAGE_")) return stages.has("IMAGES_VIDEO");
   if (kind.startsWith("IMAGE_")) return stages.has("IMAGES_PANEL");
   return stages.has(kind);

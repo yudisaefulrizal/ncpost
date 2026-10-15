@@ -1,3 +1,5 @@
+import { snapshotInstagram } from "../server/account-stats";
+import { managerTick } from "../server/manager";
 import {
   resolveVoice,
   generateVoiceAudio,
@@ -64,6 +66,7 @@ import {
 } from "../server/domain";
 import {
   accounts,
+  instagramSummary,
   publish,
   publishCarousel,
   postStatus,
@@ -1098,6 +1101,8 @@ async function runJob(job: Job) {
 const CONCURRENCY = workerConcurrency(process.env.WORKER_CONCURRENCY);
 const running = new Set<Promise<void>>();
 let lastCronMinute = -1;
+let lastManagerMinute = -1;
+let lastStatsHour = -1;
 let newsRunning = false;
 while (!stop) {
   if (existsSync(path.join(ROOT, "data/media-reset.guard"))) {
@@ -1128,6 +1133,36 @@ while (!stop) {
       console.error("Cron gagal:", (e as Error).message);
       // Retry next minute; queue processing remains available.
       lastCronMinute = minute;
+    }
+  }
+  // Statistik akun: data hari ini diperbarui tiap jam (nilai terakhir hari itu yang tersimpan).
+  const hour = Math.floor(Date.now() / 3600000);
+  if (hour !== lastStatsHour) {
+    lastStatsHour = hour;
+    try {
+      const r = await snapshotInstagram(store.db, {
+        accounts,
+        summary: (id) => instagramSummary(id),
+      });
+      if (r.errors.length)
+        console.error("Statistik akun:", r.errors.join("; "));
+    } catch (e) {
+      console.error("Statistik akun gagal:", (e as Error).message);
+    }
+  }
+  if (minute !== lastManagerMinute) {
+    lastManagerMinute = minute;
+    // Manajer: target posting harian per jenis konten (terpisah dari jadwal manual).
+    try {
+      await managerTick(store, (source, platform) =>
+        publishZernio(store, {
+          quickTikTok: platform !== "youtube",
+          quickYouTube: platform === "youtube",
+          source,
+        }),
+      );
+    } catch (e) {
+      console.error("Manajer gagal:", (e as Error).message);
     }
   }
   // At most one news research job per worker; book jobs share the remaining slots.

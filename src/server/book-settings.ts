@@ -55,6 +55,9 @@ const orderKinds = (kinds: string[]) => [
 ];
 export const SOCIAL_TARGETS = ["instagram", "youtube", "tiktok"] as const;
 export type SocialTarget = (typeof SOCIAL_TARGETS)[number];
+// Format yang diposting ke Instagram; tidak diisi = semua yang tersedia (perilaku lama).
+export const INSTAGRAM_FORMATS = ["carousel", "reels"] as const;
+export type InstagramFormat = (typeof INSTAGRAM_FORMATS)[number];
 export function socialTargets(
   settings:
     | {
@@ -104,6 +107,8 @@ export interface BookSettings {
   imageUnit?: ImageUnit;
   tiktok?: TikTokSettings;
   socialTargets?: SocialTarget[];
+  instagramFormats?: InstagramFormat[];
+  youtubeMedia?: "v" | "h";
   labPromptIds?: number[];
   managed?: boolean;
   autoProcess?: boolean;
@@ -147,6 +152,21 @@ export function normalizeBookSettings(input: any): BookSettings {
       ))
   )
     throw Error("Target sosmed tidak valid");
+  if (
+    input?.instagramFormats !== undefined &&
+    (!Array.isArray(input.instagramFormats) ||
+      input.instagramFormats.some(
+        (format: unknown) =>
+          !INSTAGRAM_FORMATS.includes(format as InstagramFormat),
+      ))
+  )
+    throw Error("Format Instagram tidak valid");
+  if (
+    input?.youtubeMedia !== undefined &&
+    input.youtubeMedia !== null &&
+    !["v", "h"].includes(input.youtubeMedia)
+  )
+    throw Error("Media YouTube tidak valid");
   const instagramAccountId =
     input?.instagramAccountId === ""
       ? null
@@ -280,6 +300,14 @@ export function normalizeBookSettings(input: any): BookSettings {
     ...(input?.socialTargets !== undefined
       ? { socialTargets: [...new Set<SocialTarget>(input.socialTargets)] }
       : {}),
+    ...(input?.instagramFormats !== undefined
+      ? {
+          instagramFormats: INSTAGRAM_FORMATS.filter((format) =>
+            input.instagramFormats.includes(format),
+          ),
+        }
+      : {}),
+    ...(input?.youtubeMedia ? { youtubeMedia: input.youtubeMedia } : {}),
     ...(input?.singleImageMode !== undefined
       ? { singleImageMode: input.singleImageMode }
       : {}),

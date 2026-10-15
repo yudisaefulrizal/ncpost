@@ -250,6 +250,7 @@ export function ContentPlanCard({
   children?: (
     settings: BookSettings,
     set: (patch: Partial<BookSettings>) => void,
+    outputs: string[],
   ) => React.ReactNode;
 }) {
   const [outputs, setOutputs] = useState(() => finalTargets(type.outputs));
@@ -333,8 +334,10 @@ export function ContentPlanCard({
         {children && (
           <section className="content-settings-section publication-settings">
             <h2>Publikasi</h2>
-            {children(settings, (patch) =>
-              setSettings((s) => ({ ...s, ...patch })),
+            {children(
+              settings,
+              (patch) => setSettings((s) => ({ ...s, ...patch })),
+              outputs,
             )}
           </section>
         )}

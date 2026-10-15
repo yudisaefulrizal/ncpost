@@ -318,3 +318,18 @@ CREATE TABLE IF NOT EXISTS voices (
   is_default TINYINT NOT NULL DEFAULT 0,
   KEY voice_default(provider,is_default)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Statistik akun sosmed harian (satu baris per akun per tanggal WIB).
+CREATE TABLE IF NOT EXISTS account_stats (
+  platform VARCHAR(16) NOT NULL,
+  account_id VARCHAR(64) NOT NULL,
+  stat_date DATE NOT NULL,
+  username VARCHAR(190) NOT NULL DEFAULT '',
+  followers INT NULL,
+  likes_month BIGINT NULL,
+  views_month BIGINT NULL,
+  month_from VARCHAR(40) NULL,
+  unavailable TEXT NULL,
+  fetched_at DATETIME NOT NULL,
+  PRIMARY KEY (platform, account_id, stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
