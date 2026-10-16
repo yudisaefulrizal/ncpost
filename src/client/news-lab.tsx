@@ -3,6 +3,7 @@
 // terbaru saat produksi jenis konten yang memakai lab ini memanggilnya.
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
+import { Modal } from "./modal";
 import type { NewsLab, NewsLabLink } from "../server/news-lab";
 
 type Draft = { theme: string; sources: string; prompt: string };
@@ -25,7 +26,9 @@ export function NewsLabPage() {
   const [labs, setLabs] = useState<NewsLab[]>([]);
   const [links, setLinks] = useState<NewsLabLink[]>([]);
   const [draft, setDraft] = useState<Draft>(empty);
-  const [editing, setEditing] = useState<number | null>(null);
+  // null = modal tertutup; "new" = tambah lab; angka = ubah lab itu.
+  const [editing, setEditing] = useState<number | "new" | null>(null);
+  const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const load = async () => {
@@ -58,23 +61,117 @@ export function NewsLabPage() {
       setBusy(false);
     }
   };
+  const close = () => {
+    setEditing(null);
+    setDraft(empty);
+    setFormError("");
+  };
   return (
     <div className="stack">
+      {editing !== null && (
+        <Modal
+          title={editing === "new" ? "Tambah lab" : "Ubah lab"}
+          onClose={close}
+        >
+          <form
+            className="stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setBusy(true);
+              setFormError("");
+              api(
+                editing === "new" ? "/news-labs" : `/news-labs/${editing}`,
+                editing === "new" ? "POST" : "PUT",
+                {
+                  theme: draft.theme,
+                  sources: draft.sources.split(/[\s,]+/).filter(Boolean),
+                  prompt: draft.prompt,
+                },
+                null,
+              )
+                .then(async () => {
+                  close();
+                  await load();
+                })
+                .catch((e) => setFormError((e as Error).message))
+                .finally(() => setBusy(false));
+            }}
+          >
+            {formError && (
+              <p className="warn" role="alert">
+                {formError}
+              </p>
+            )}
+            <label className="field">
+              Tema global
+              <input
+                autoFocus
+                required
+                maxLength={190}
+                placeholder="contoh: Teknologi"
+                value={draft.theme}
+                onChange={(e) => setDraft({ ...draft, theme: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              Link sumber rujukan
+              <textarea
+                rows={5}
+                required
+                placeholder={
+                  "satu link per baris, contoh:\nhttps://www.theverge.com/tech"
+                }
+                value={draft.sources}
+                onChange={(e) =>
+                  setDraft({ ...draft, sources: e.target.value })
+                }
+              />
+            </label>
+            <label className="field">
+              Prompt artikel
+              <textarea
+                rows={10}
+                required
+                maxLength={100000}
+                placeholder="Instruksi penulisan artikel final, termasuk jumlah paragraf. Bisa memakai {{link_berita}} dan {{konteks}} (tema)."
+                value={draft.prompt}
+                onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
+              />
+            </label>
+            <div className="toolbar">
+              <button className="btn btn-pri" disabled={busy}>
+                {busy
+                  ? "Memproses…"
+                  : editing === "new"
+                    ? "Tambah lab"
+                    : "Simpan perubahan"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sec"
+                disabled={busy}
+                onClick={close}
+              >
+                Batal
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
       <section className="card pad stack">
         <div className="card-title">
-          <h2 className="h3">{editing ? "Ubah lab" : "Lab baru"}</h2>
-          {editing && (
-            <button
-              className="btn btn-sec"
-              disabled={busy}
-              onClick={() => {
-                setEditing(null);
-                setDraft(empty);
-              }}
-            >
-              Batal
-            </button>
-          )}
+          <h2 className="h3">Daftar lab</h2>
+          <button
+            className="btn btn-pri"
+            disabled={busy}
+            onClick={() => {
+              setDraft(empty);
+              setEditing("new");
+            }}
+          >
+            Tambah lab
+          </button>
         </div>
         <p className="muted">
           Tiap lab menghasilkan artikel final sendiri. Saat produksi jenis
@@ -90,76 +187,6 @@ export function NewsLabPage() {
             {error}
           </p>
         )}
-        <form
-          className="stack"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void act(async () => {
-              await api(
-                editing ? `/news-labs/${editing}` : "/news-labs",
-                editing ? "PUT" : "POST",
-                {
-                  theme: draft.theme,
-                  sources: draft.sources.split(/[\s,]+/).filter(Boolean),
-                  prompt: draft.prompt,
-                },
-                null,
-              );
-              setDraft(empty);
-              setEditing(null);
-              await load();
-            });
-          }}
-        >
-          <div className="voice-form-grid">
-            <label className="field">
-              Tema global
-              <input
-                required
-                maxLength={190}
-                placeholder="contoh: Teknologi"
-                value={draft.theme}
-                onChange={(e) => setDraft({ ...draft, theme: e.target.value })}
-              />
-            </label>
-          </div>
-          <label className="field">
-            Link sumber rujukan
-            <textarea
-              rows={5}
-              required
-              placeholder={
-                "satu link per baris, contoh:\nhttps://www.theverge.com/tech"
-              }
-              value={draft.sources}
-              onChange={(e) => setDraft({ ...draft, sources: e.target.value })}
-            />
-          </label>
-          <label className="field">
-            Prompt artikel
-            <textarea
-              rows={10}
-              required
-              maxLength={100000}
-              placeholder="Instruksi penulisan artikel final. Bisa memakai {{link_berita}} dan {{konteks}} (tema)."
-              value={draft.prompt}
-              onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
-            />
-          </label>
-          <div>
-            <button className="btn btn-pri" disabled={busy}>
-              {busy
-                ? "Memproses…"
-                : editing
-                  ? "Simpan perubahan"
-                  : "Tambah lab"}
-            </button>
-          </div>
-        </form>
-      </section>
-
-      <section className="card pad stack">
-        <h2 className="h3">Daftar lab</h2>
         <div className="table">
           <table>
             <thead>
