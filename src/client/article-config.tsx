@@ -45,9 +45,15 @@ export function ArticleConfigFields({
         Sumber bahan
         <select
           value={value.source}
-          onChange={(e) =>
-            set({ source: e.target.value as ArticleConfig["source"] })
-          }
+          onChange={(e) => {
+            const source = e.target.value as ArticleConfig["source"];
+            // Lab Berita: topik datang dari berita pilihan Jurnalis.
+            set(
+              source === "lab"
+                ? { source, topicMode: "ai", topic: "", context: "" }
+                : { source },
+            );
+          }}
         >
           <option value="knowledge">Pengetahuan AI</option>
           <option value="manual">Bahan manual</option>
@@ -85,33 +91,37 @@ export function ArticleConfigFields({
           )}
         </label>
       )}
-      <label className="field">
-        Asal topik
-        <select
-          value={value.topicMode}
-          onChange={(e) =>
-            set({ topicMode: e.target.value as ArticleConfig["topicMode"] })
-          }
-        >
-          <option value="manual">Manual</option>
-          <option value="ai">Ditentukan AI</option>
-        </select>
-      </label>
-      <label className="field">
-        Konteks
-        <input
-          value={value.context}
-          onChange={(e) => set({ context: e.target.value })}
-        />
-      </label>
-      {value.topicMode === "manual" && (
-        <label className="field article-topic">
-          Topik
-          <input
-            value={value.topic}
-            onChange={(e) => set({ topic: e.target.value })}
-          />
-        </label>
+      {value.source !== "lab" && (
+        <>
+          <label className="field">
+            Asal topik
+            <select
+              value={value.topicMode}
+              onChange={(e) =>
+                set({ topicMode: e.target.value as ArticleConfig["topicMode"] })
+              }
+            >
+              <option value="manual">Manual</option>
+              <option value="ai">Ditentukan AI</option>
+            </select>
+          </label>
+          <label className="field">
+            Konteks
+            <input
+              value={value.context}
+              onChange={(e) => set({ context: e.target.value })}
+            />
+          </label>
+          {value.topicMode === "manual" && (
+            <label className="field article-topic">
+              Topik
+              <input
+                value={value.topic}
+                onChange={(e) => set({ topic: e.target.value })}
+              />
+            </label>
+          )}
+        </>
       )}
       {!quote && (
         <label className="field article-paragraphs">
