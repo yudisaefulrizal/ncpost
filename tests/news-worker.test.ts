@@ -121,7 +121,7 @@ it("tanpa Konfigurasi artikel, berita ditolak dan diminta memilih Lab Berita", a
 });
 it("sumber Lab Berita menulis dari link pilihan Jurnalis", async () => {
   const article = `# Judul\n\nIsi berita.\n\nSumber: Example ${LINK}/\n\nTag: tekno`;
-  vi.mocked(runCli).mockResolvedValue(searched(article));
+  vi.mocked(runCli).mockResolvedValue(searched(JSON.stringify({ article })));
   const s = labType([{ url: LINK }]);
   await runNewsJob(s, job);
   expect(s.fail).not.toHaveBeenCalled();
@@ -138,8 +138,14 @@ it("sumber Lab Berita menulis dari link pilihan Jurnalis", async () => {
   );
 });
 it("artikel lab yang tidak mengutip link Jurnalis ditolak", async () => {
+  // Artikel dan hasil perbaikan format sama-sama tidak mengutip link Jurnalis.
   vi.mocked(runCli).mockResolvedValue(
-    searched("# Judul\n\nIsi.\n\nSumber: https://example.com/lain\n\nTag: a"),
+    searched(
+      JSON.stringify({
+        article:
+          "# Judul\n\nIsi.\n\nSumber: https://example.com/lain\n\nTag: a",
+      }),
+    ),
   );
   const s = labType([{ url: LINK }]);
   await runNewsJob(s, job);
@@ -153,7 +159,7 @@ it("produksi memanggil Jurnalis untuk berita terbaru saat itu lalu menulisnya", 
   const article = `# Judul\n\nIsi berita.\n\nSumber: ${LINK}\n\nTag: tekno`;
   vi.mocked(runCli)
     .mockResolvedValueOnce(searched(JSON.stringify({ link: LINK })))
-    .mockResolvedValueOnce(searched(article));
+    .mockResolvedValueOnce(searched(JSON.stringify({ article })));
   const s = labType([]);
   await runNewsJob(s, job);
   expect(s.fail).not.toHaveBeenCalled();

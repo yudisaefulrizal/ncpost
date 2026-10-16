@@ -22,9 +22,7 @@ export function citesLink(source: string, link: string) {
     }
   });
 }
-// Sumber lab juga butuh pencarian web untuk membaca berita pilihan Jurnalis.
-const searches = (source: ArticleConfig["source"]) =>
-  source === "web" || source === "lab";
+const searches = (source: ArticleConfig["source"]) => source === "web";
 export function configuredCliArgs(source: ArticleConfig["source"]) {
   const args = searches(source)
     ? cliArgs.filter(
@@ -103,7 +101,6 @@ export async function generateConfiguredArticle(
   topic = "",
   generate = runConfiguredModel,
   typeId?: number,
-  newsLink = "",
 ) {
   const config = normalizeArticleConfig(settings.articleConfig);
   if (config.source === "manual" && !config.material)
@@ -144,7 +141,6 @@ export async function generateConfiguredArticle(
     effectiveContext,
     effectiveTopic,
     previous,
-    newsLink,
   );
   const article = await generate(prompt, config.source, work);
   const parsed = validateUnifiedArticle(
@@ -158,9 +154,5 @@ export async function generateConfiguredArticle(
       ? researchErrors(config.research, parsed.source)
       : [];
   if (research.length) throw Error(research.join("; "));
-  if (config.source === "lab" && !citesLink(parsed.source, newsLink))
-    throw Error(
-      "Sumber artikel wajib mencantumkan link berita pilihan Jurnalis",
-    );
   return { article, parsed, prompt };
 }

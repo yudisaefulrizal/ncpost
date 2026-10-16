@@ -143,7 +143,6 @@ export const ARTICLE_VARIABLES = {
   sumber_dikecualikan: "Riset web: situs yang tidak boleh dipakai",
   minimal_sumber: "Riset web: jumlah minimal sumber per fakta",
   topik_sebelumnya: "Topik yang sudah pernah dibuat (agar tidak berulang)",
-  link_berita: "Lab Berita: link berita pilihan Jurnalis",
 };
 export const IMAGE_VARIABLES = {
   konteks: "Konteks utama",
@@ -314,7 +313,6 @@ export function articleVariables(
   context = config.context,
   topic = config.topic,
   previousTopics: string[] = [],
-  newsLink = "",
 ) {
   const research = config.research ?? DEFAULT_WEB_RESEARCH;
   return {
@@ -332,7 +330,6 @@ export function articleVariables(
     sumber_dikecualikan: research.excluded.join(", "),
     minimal_sumber: String(research.minSources),
     topik_sebelumnya: previousTopics.join("; "),
-    link_berita: newsLink,
   };
 }
 
@@ -415,7 +412,6 @@ export function configuredArticlePrompt(
   context = config.context,
   topic = config.topic,
   previousTopics: string[] = [],
-  newsLink = "",
 ) {
   const effectiveTopic = config.topicMode === "manual" ? topic : "";
   if (config.source === "manual" && !config.material)
@@ -424,27 +420,21 @@ export function configuredArticlePrompt(
     throw Error("Topik manual wajib diisi");
   const content = fillVariables(
     template,
-    articleVariables(config, context, effectiveTopic, previousTopics, newsLink),
+    articleVariables(config, context, effectiveTopic, previousTopics),
   );
   const contract = quote
     ? "Hasil hanya satu paragraf isi tanpa judul atau metadata."
-    : config.source === "lab"
-      ? LAB_NEWS_FORMAT
-      : `Hasil: # Judul, satu ## Heading bila relevan, paragraf isi dipisahkan baris kosong, Sumber: keterangan sumber bila tersedia, lalu Tag: tag dipisahkan koma bila tersedia.${config.paragraphCount !== null ? ` Jumlah isi tepat ${config.paragraphCount} paragraf.` : " Jumlah paragraf mengikuti prompt."}`;
+    : `Hasil: # Judul, satu ## Heading bila relevan, paragraf isi dipisahkan baris kosong, Sumber: keterangan sumber bila tersedia, lalu Tag: tag dipisahkan koma bila tersedia.${config.paragraphCount !== null ? ` Jumlah isi tepat ${config.paragraphCount} paragraf.` : " Jumlah paragraf mengikuti prompt."}`;
   // Ketentuan riset hanya berlaku bila diaktifkan di Konfigurasi artikel.
   const rules =
     config.source === "web" && config.research
       ? researchRules(config.research, previousTopics)
       : "";
-  if (config.source === "lab" && !newsLink)
-    throw Error("Belum ada berita pilihan Jurnalis");
   const source =
-    config.source === "lab"
-      ? `Tulis berdasarkan berita pilihan Jurnalis berikut. Buka dan baca berita itu dengan tool pencarian web, lalu cantumkan URL ini pada baris Sumber:\n${newsLink}`
-      : config.source === "web"
-        ? `Gunakan tool pencarian web dan periksa sumbernya.${rules ? `\n${rules}` : ""}`
-        : config.source === "manual"
-          ? `Gunakan bahan manual berikut:\n${config.material}`
-          : "Gunakan pengetahuan model; jangan melakukan pencarian web.";
+    config.source === "web"
+      ? `Gunakan tool pencarian web dan periksa sumbernya.${rules ? `\n${rules}` : ""}`
+      : config.source === "manual"
+        ? `Gunakan bahan manual berikut:\n${config.material}`
+        : "Gunakan pengetahuan model; jangan melakukan pencarian web.";
   return `${content}\n\nInput produksi:\nKonteks: ${context}\nTopik: ${effectiveTopic || "Tentukan sendiri sesuai prompt"}\n${source}\n\nKontrak struktur hasil:\n${contract}`;
 }

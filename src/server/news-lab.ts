@@ -68,6 +68,13 @@ export function normalizeNewsLab(value: any): NewsLabInput {
   const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
   if (!prompt || prompt.length > 100000)
     throw Error("Prompt artikel wajib diisi, maksimal 100.000 karakter");
+  const unknown = [...prompt.matchAll(/\{\{(\w+)\}\}/g)]
+    .map((m) => m[1])
+    .filter((key) => !["link_berita", "konteks"].includes(key));
+  if (unknown.length)
+    throw Error(
+      `Placeholder {{${unknown[0]}}} tidak dikenal; gunakan {{link_berita}} atau {{konteks}}`,
+    );
   return { theme, sources, prompt };
 }
 
