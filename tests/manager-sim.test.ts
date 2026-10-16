@@ -1,10 +1,14 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_BOOK_SETTINGS } from "../src/server/book-settings";
 import { DEFAULT_TIKTOK_SETTINGS } from "../src/server/tiktok-settings";
-import { managerTick, type ManagerState } from "../src/server/manager";
+import {
+  emptyState as emptyManager,
+  managerTick,
+  type ManagerState,
+} from "../src/server/manager";
 import { saveTargets } from "../src/server/manager-targets";
 
 const WIB = 7 * 3600000;
@@ -117,6 +121,8 @@ const stateFile = () =>
   path.join(mkdtempSync(path.join(tmpdir(), "manajer-")), "manager.json");
 const read = (file: string): ManagerState =>
   JSON.parse(readFileSync(file, "utf8"));
+const writeState = (file: string, state: unknown) =>
+  writeFileSync(file, JSON.stringify(state));
 
 describe("Manajer bekerja", () => {
   it("memposting konten siap saat jatuh tempo, menjaga jarak, dan mencatat hasilnya", async () => {
@@ -433,7 +439,7 @@ describe("Manajer menangani job gagal", () => {
     const fake = fakeStore([chapter(1), chapter(2), chapter(3)], none);
     const deleted: number[][] = [];
     fake.hooks.push((sql, params) => {
-      if (sql.includes("j.state='failed'"))
+      if (sql.includes("j.state='failed'") && sql.includes("FROM jobs j"))
         return [
           failed.map((f, i) => ({
             id: 900 + i,
@@ -521,5 +527,185 @@ describe("Manajer menangani job gagal", () => {
     expect(
       read(file).log.some((l) => l.text.startsWith("Menghapus 3 job gagal")),
     ).toBe(true);
+  });
+});
+
+describe("Manajer menangani jenis konten berita", () => {
+  const newsSettings = {
+    ...settings,
+    panelVertical: null,
+    socialTargets: ["instagram", "tiktok"],
+  };
+  const ARTICLE =
+    "# Judul\n\n## Judul\n\nIsi berita.\n\nSumber: Media, https://a.com/x\n\nTag: tekno";
+  const article = (id: number, extra: any = {}) => ({
+    id,
+    content_type_id: 2,
+    category: "teknologi",
+    state: "completed",
+    attempts: 1,
+    lease: 0,
+    title: `Berita ${id}`,
+    article: ARTICLE,
+    source_url: "https://a.com/x",
+    candidates: null,
+    artifacts: null,
+    error: null,
+    created_at: "",
+    ...extra,
+  });
+  const panelReady = () => ({
+    outputs: {
+      PANEL: {
+        mode: "template",
+        sources: { panelHorizontal: "IMAGE_HORIZONTAL", panelVertical: null },
+        panels: [{ file: "a" }, { file: "b" }],
+        closing: "c",
+      },
+      VIDEO_KALIMAT: { file: "v.mp4", source: "IMAGE_VERTICAL" },
+    },
+    jobs: [] as any[],
+    stock: [],
+  });
+  function newsWorld(
+    articles: any[],
+    production: Record<number, any>,
+    targets = { instagram: 1, tiktok: 1, youtube: 0 },
+  ) {
+    const fake = fakeStore([], targets);
+    const newsType = {
+      id: 1,
+      name: "Berita Tekno",
+      engine: "news",
+      outputs: JSON.stringify(["PANEL", "VIDEO_KALIMAT"]),
+      settings: JSON.stringify(newsSettings),
+      deleted_at: null,
+    };
+    const mediaJobs = new Map<number, string>();
+    fake.hooks.push((sql, params) => {
+      if (sql.startsWith("SELECT * FROM content_types")) return [[newsType]];
+      if (sql.includes("FROM news_media_jobs WHERE id IN"))
+        return [
+          params[0].map((id: number) => ({
+            id,
+            state: mediaJobs.get(id) ?? "queued",
+          })),
+        ];
+    });
+    let nextId = 500;
+    const calls = { created: 0, enqueued: [] as [number, string][] };
+    const backend = {
+      list: async () => [...articles].reverse(),
+      detail: async (n: any) =>
+        production[n.id] ?? { outputs: {}, jobs: [], stock: [] },
+      create: async () => {
+        calls.created++;
+        const id = nextId++;
+        articles.push(article(id, { state: "queued", title: "" }));
+        return id;
+      },
+      enqueue: async (id: number, kind: string) => {
+        calls.enqueued.push([id, kind]);
+        const jobId = nextId++;
+        (production[id] ??= { outputs: {}, jobs: [], stock: [] }).jobs.unshift({
+          id: jobId,
+          kind,
+          state: "queued",
+        });
+        return jobId;
+      },
+      retry: async () => {},
+    };
+    return { ...fake, backend, calls, mediaJobs };
+  }
+  const run = (
+    w: any,
+    file: string,
+    at: number,
+    publish = async (_source: string) => ({ status: "published" }),
+  ) => managerTick(w.store, publish, at, file, w.store.targetFile, w.backend);
+
+  it("memposting berita siap ke Instagram lewat antrean berita dan TikTok dengan sumber news:", async () => {
+    const w = newsWorld([article(7)], { 7: panelReady() });
+    const sent: string[] = [];
+    const file = stateFile();
+    await run(w, file, NIGHT, async (source: string) => {
+      sent.push(source);
+      return { status: "published" };
+    });
+    expect(w.calls.enqueued).toContainEqual([7, "POST_IG"]);
+    expect(sent).toEqual(["news:7"]);
+    let state = read(file);
+    const ig = state.posts.find((p) => p.platform === "instagram")!;
+    expect(ig).toMatchObject({
+      chapterId: 7,
+      jobTable: "news_media_jobs",
+      status: "proses",
+    });
+    // Status job posting dibaca dari news_media_jobs.
+    w.mediaJobs.set(ig.jobId!, "completed");
+    await run(w, file, NIGHT + MIN);
+    state = read(file);
+    expect(state.posts.find((p) => p.platform === "instagram")!.status).toBe(
+      "terbit",
+    );
+  });
+
+  it("stok kurang: Manajer menyuruh membuat artikel baru (Jurnalis) lalu mengawal tahap berikutnya", async () => {
+    const articles: any[] = [];
+    const production: Record<number, any> = {};
+    const w = newsWorld(articles, production, {
+      instagram: 1,
+      tiktok: 0,
+      youtube: 0,
+    });
+    const file = stateFile();
+    await run(w, file, NIGHT);
+    expect(w.calls.created).toBeGreaterThan(0);
+    const state = read(file);
+    expect(state.orders[0]).toMatchObject({ typeId: 1, status: "berjalan" });
+    expect(state.log.some((l) => l.text.includes("artikel berita baru"))).toBe(
+      true,
+    );
+    // Jurnalis selesai menulis: Manajer menyuruh tahap produksi berikutnya.
+    for (const a of articles)
+      Object.assign(a, {
+        state: "completed",
+        title: "Berita baru",
+        article: ARTICLE,
+      });
+    await run(w, file, NIGHT + MIN);
+    expect(w.calls.enqueued[0]).toEqual([articles[0].id, "IMAGE_HORIZONTAL"]);
+    expect(read(file).orders[0].title).toBe("Berita baru");
+  });
+
+  it("artikel berita gagal ditulis: pesanan ditandai macet dengan pesan Jurnalis", async () => {
+    const articles = [
+      article(9, {
+        state: "failed",
+        error: "Jurnalis tidak menemukan berita baru",
+      }),
+    ];
+    const w = newsWorld(articles, {}, { instagram: 1, tiktok: 0, youtube: 0 });
+    const file = stateFile();
+    const state0 = {
+      ...emptyManager(),
+      orders: [
+        {
+          at: NIGHT,
+          updated: NIGHT,
+          typeId: 1,
+          chapterId: 9,
+          title: "",
+          reason: "x",
+          status: "berjalan",
+        },
+      ],
+    };
+    writeState(file, state0);
+    await run(w, file, NIGHT);
+    const order = read(file).orders.find((o) => o.chapterId === 9)!;
+    expect(order.status).toBe("macet");
+    expect(order.note).toContain("Jurnalis tidak menemukan berita baru");
   });
 });

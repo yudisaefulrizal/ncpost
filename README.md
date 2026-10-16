@@ -187,6 +187,13 @@ lain memakai link yang sama. Artefak Jurnalis (prompt, instruksi, schema,
 events, teks sumber `source.md`, jawaban) tersimpan per percobaan di
 `output/berita/<id>/<percobaan>/jurnalis/percobaan-<n>/`.
 
+Manajer (Ruang Manajer) juga menangani jenis konten berita dengan aturan yang
+sama seperti jenis lain: target posting harian per sosmed, jam posting acak,
+stok untuk sisa hari ini dan besok, serta coba ulang job gagal empat kali
+sehari. Bila stok kurang, Manajer membuat artikel baru (Jurnalis mencari berita
+terbaru) atau melanjutkan tahap produksi berikutnya, lalu memposting Instagram
+lewat antrean media berita dan TikTok/YouTube dengan sumber `news:<id>`.
+
 Lab bisa dinonaktifkan (tidak bisa dipilih dan pemanggilannya gagal). Tombol
 **Tes** meminta Jurnalis memilih berita terbaru dan menulis artikelnya
 secepatnya; hasilnya hanya ditampilkan dan tidak dicatat. Daftar media tetap dan

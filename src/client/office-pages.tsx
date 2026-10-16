@@ -350,9 +350,7 @@ function TargetForm({
         "PUT",
         {
           targets: Object.fromEntries(
-            office.types
-              .filter((t) => t.engine !== "news")
-              .map((t) => [t.id, draft[t.id] ?? t.targets]),
+            office.types.map((t) => [t.id, draft[t.id] ?? t.targets]),
           ),
         },
         null,
@@ -389,18 +387,10 @@ function TargetForm({
                 <tr key={t.id}>
                   <td>
                     <b>{t.name}</b>
-                    {t.engine === "news" && (
-                      <small className="muted">
-                        {" "}
-                        · berita belum ditangani Manajer
-                      </small>
-                    )}
                   </td>
                   {PLATFORMS.map((p) => (
                     <td key={p}>
-                      {t.engine === "news" ? (
-                        <span className="muted">—</span>
-                      ) : t.active.includes(p) ? (
+                      {t.active.includes(p) ? (
                         <span className="target-input">
                           <input
                             type="number"
@@ -693,8 +683,7 @@ export function SosmedCenter({
     const a = accounts.find((x) => x.id === id);
     return a ? "@" + a.username : id ? "akun tersimpan" : "";
   };
-  const planned = types.filter((t) => t.engine !== "news");
-  const news = types.filter((t) => t.engine === "news");
+  const planned = types;
   const officeType = (id: number) => office?.types.find((t) => t.id === id);
   return (
     <div className="stack-lg office-page">
@@ -797,12 +786,6 @@ export function SosmedCenter({
             </tbody>
           </table>
         </div>
-        {news.length > 0 && (
-          <p className="muted">
-            Jenis berita ({news.map((t) => t.name).join(", ")}) memakai alur
-            publikasinya sendiri di Pengaturan Berita dan menu Jadwal.
-          </p>
-        )}
       </section>
       <section className="card pad stack">
         <h2 className="h3">Posting terbaru</h2>

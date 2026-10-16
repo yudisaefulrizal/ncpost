@@ -4,6 +4,9 @@
 // memproduksi topik berikutnya bila stok konten siap kurang. Terpisah dari menu
 // Jadwal (manual): posting dari jadwal manual tidak dihitung ke target Manajer.
 // Empat kali sehari ia juga mencoba ulang job produksi yang gagal.
+// Berlaku untuk semua jenis konten: buku/quote (chapters) dan berita
+// (news_articles), lewat lapisan "unit"; untuk berita, produksi baru berarti
+// membuat artikel yang beritanya dicari Jurnalis Lab Berita.
 // Catatan Manajer disimpan di data/manager.json (tanpa perubahan skema DB).
 import {
   existsSync,
@@ -23,12 +26,18 @@ import {
 } from "./manager-targets";
 import { ContentTypeStore, withContentType } from "./content-types";
 import type { ContentType } from "./content-type-domain";
-import { nextBookJob } from "./content-plan";
+import { nextBookJob, nextNewsJob } from "./content-plan";
 import { NEEDS_OUTPUT, instagramFormats, socialPlan } from "./social-plan";
 import { normalizeTikTokSettings } from "./tiktok-settings";
 import { tiktokPublishInput } from "./tiktok-publish";
 import { youtubePublishInput } from "./youtube-publish";
 import type { Chapter, Store } from "./store";
+import { NewsStore, type NewsArticle } from "./news-store";
+import { NewsMediaStore } from "./news-media-store";
+import {
+  newsStageDone,
+  type NewsProductionData,
+} from "./news-production-domain";
 
 export type Platform = SocialTarget;
 export const PLATFORMS: Platform[] = ["instagram", "tiktok", "youtube"];
@@ -60,6 +69,8 @@ export type ManagerPost = {
   title: string;
   kind: string;
   jobId?: number;
+  // Posting Instagram berita memakai antrean news_media_jobs.
+  jobTable?: "news_media_jobs";
   source?: string;
   status: PostStatus;
   note?: string;
@@ -281,6 +292,181 @@ export function zernioInput(
   }
 }
 
+// ---------- unit konten: buku/quote (chapters) dan berita (news_articles) ----------
+// Manajer bekerja dengan "unit" yang sama untuk semua jenis konten; hanya cara
+// membaca kesiapan, memproduksi, dan memposting yang berbeda per mesin.
+type ZernioPick = {
+  source: string;
+  mediaKey: string;
+  accountId: string | null;
+};
+export type Unit = {
+  id: number;
+  title: string;
+  label: string;
+  busy: boolean;
+  /** Bisa diperintahkan produksi (artikel baru atau tahap berikutnya). */
+  producible: boolean;
+  igReady(format: "carousel" | "reels"): boolean;
+  zernio(platform: "tiktok" | "youtube"): Promise<ZernioPick | null>;
+  postIg(format: "carousel" | "reels"): Promise<number>;
+  jobTable?: "news_media_jobs";
+  /** Tahap produksi berikutnya; null bila menunggu atau tidak ada lagi. */
+  next(): string | null;
+  enqueue(kind: string): Promise<unknown>;
+  /** Output akhir yang belum ada dan alasan macet bila produksi berhenti. */
+  missing(): string[];
+  stuck(missing: string[]): string;
+};
+
+function bookUnit(
+  store: Store,
+  type: ContentType,
+  settings: BookSettings,
+  c: Chapter,
+  sendSettings: (c: Chapter) => Promise<BookSettings>,
+): Unit {
+  const attempts = c.production_jobs || [];
+  const results: Record<string, unknown> = {
+    POST_IMAGE: c.text_image,
+    PANEL: c.panels,
+    VIDEO_KALIMAT: c.sentence_video,
+    VIDEO_KALIMAT_H: c.sentence_video_h,
+  };
+  return {
+    id: c.id,
+    title: c.title,
+    label: partLabel(c),
+    busy: busy(c),
+    producible: !c.article || nextBookJob(type, c, settings, attempts) !== null,
+    igReady: (format) => igReady(c, format),
+    zernio: async (platform) => zernioInput(c, platform, await sendSettings(c)),
+    postIg: async (format) =>
+      Number(
+        await store.enqueue(c.id, format === "reels" ? "REELS_IG" : "POST_IG"),
+      ),
+    next: () =>
+      c.article ? nextBookJob(type, c, settings, attempts) : "ARTICLE",
+    enqueue: (kind) => store.enqueue(c.id, kind),
+    missing: () =>
+      type.outputs.filter((k: string) => k in results && !results[k]),
+    stuck: (missing) =>
+      attempts.find((j) => j.state === "failed")?.error ||
+      (c.article_status !== "siap"
+        ? `Artikel berstatus ${c.article_status}`
+        : `Output belum lengkap: ${missing.join(", ")}`),
+  };
+}
+
+/** Akses data berita untuk Manajer; bisa diganti di test. */
+export type NewsBackend = {
+  /** Artikel terbaru jenis konten ini (terbaru dulu). */
+  list(type: ContentType): Promise<NewsArticle[]>;
+  detail(n: NewsArticle): Promise<NewsProductionData>;
+  /** Artikel baru masuk antrean; Jurnalis Lab Berita yang mencari beritanya. */
+  create(type: ContentType): Promise<number>;
+  enqueue(id: number, kind: string): Promise<number>;
+  /** Antrekan ulang artikel berita yang gagal. */
+  retry(id: number): Promise<void>;
+};
+// Manajer memeriksa tiap menit; artikel lama di luar batas ini diabaikan.
+export const NEWS_WINDOW = 60;
+export function newsBackend(db: Store["db"]): NewsBackend {
+  const news = new NewsStore(db as any);
+  const media = new NewsMediaStore(db as any);
+  return {
+    list: async (type) =>
+      (await withContentType(type, () => news.list())).slice(0, NEWS_WINDOW),
+    detail: (n) => media.detail(n.id, n.attempts),
+    create: (type) => withContentType(type, () => news.create()),
+    enqueue: async (id, kind) => (await media.enqueue(id, kind)) ?? 0,
+    retry: (id) => news.retry(id),
+  };
+}
+const newsLabel = (n: Pick<NewsArticle, "id" | "title">) =>
+  `artikel berita #${n.id}${n.title ? ` (${n.title.slice(0, 50)})` : ""}`;
+// Output akhir berita yang harus jadi sebelum produksi dianggap selesai.
+const NEWS_FINAL = ["POST_IMAGE", "PANEL", "VIDEO_KALIMAT", "VIDEO_KALIMAT_H"];
+
+function newsUnit(
+  backend: NewsBackend,
+  type: ContentType,
+  settings: BookSettings,
+  n: NewsArticle,
+  p: NewsProductionData,
+): Unit {
+  const completed = n.state === "completed";
+  const active = (kind?: string) =>
+    p.jobs.some(
+      (j) =>
+        (!kind || j.kind === kind) && ["queued", "running"].includes(j.state),
+    );
+  const isBusy = ["queued", "running"].includes(n.state) || active();
+  const next = () =>
+    completed && !isBusy ? nextNewsJob(type, n.article, settings, p) : null;
+  const done = (stage: string) =>
+    completed && newsStageDone(stage, p, settings, n.article);
+  return {
+    id: n.id,
+    title: n.title || `Artikel berita #${n.id}`,
+    label: newsLabel(n),
+    busy: isBusy,
+    jobTable: "news_media_jobs",
+    producible: completed && nextNewsJob(type, n.article, settings, p) !== null,
+    igReady: (format) =>
+      format === "carousel"
+        ? done("PANEL") && !p.outputs.POST_IG?.status && !active("POST_IG")
+        : done("VIDEO_KALIMAT") &&
+          !p.outputs.REELS_IG?.status &&
+          !active("REELS_IG"),
+    zernio: async (platform) => {
+      if (!completed || isBusy) return null;
+      const source = `news:${n.id}`;
+      try {
+        if (platform === "youtube") {
+          const input = youtubePublishInput(source, n.title, settings);
+          const ready = input.mediaKey.endsWith(":h")
+            ? p.outputs.VIDEO_KALIMAT_H
+            : p.outputs.VIDEO_KALIMAT;
+          return ready
+            ? { source, mediaKey: input.mediaKey, accountId: input.accountId }
+            : null;
+        }
+        const options = normalizeTikTokSettings(settings.tiktok);
+        if (!settings.tiktokAccountId || !options.privacy) return null;
+        const panels = panelFiles({
+          panels: JSON.stringify(p.outputs.PANEL ?? {}),
+        } as Chapter);
+        const ready =
+          options.media === "photo"
+            ? done("PANEL") && panels >= 2 && panels <= 35
+            : options.media === "h"
+              ? p.outputs.VIDEO_KALIMAT_H
+              : p.outputs.VIDEO_KALIMAT;
+        if (!ready) return null;
+        const input = tiktokPublishInput(source, n.article, n.title, settings);
+        return { source, mediaKey: input.mediaKey, accountId: input.accountId };
+      } catch {
+        return null;
+      }
+    },
+    postIg: (format) =>
+      backend.enqueue(n.id, format === "reels" ? "REELS_IG" : "POST_IG"),
+    next,
+    enqueue: (kind) => backend.enqueue(n.id, kind),
+    missing: () =>
+      completed
+        ? type.outputs.filter((k: string) => NEWS_FINAL.includes(k) && !done(k))
+        : ["artikel"],
+    stuck: (missing) =>
+      (!completed && n.error) ||
+      p.jobs.find((j) => j.state === "failed")?.error ||
+      (!completed
+        ? `Artikel berita berstatus ${n.state}`
+        : `Output belum lengkap: ${missing.join(", ")}`),
+  };
+}
+
 const PLATFORM_LABEL: Record<Platform, string> = {
   instagram: "Instagram",
   tiktok: "TikTok",
@@ -381,6 +567,66 @@ async function retryFailed(store: Store, types: ContentType[]) {
   return { retried, removed };
 }
 
+/**
+ * Versi berita dari retryFailed: tahap media yang gagal dicoba ulang dengan
+ * aturan yang sama, artikel yang gagal (mis. Jurnalis tidak menemukan berita)
+ * diantrekan ulang selama percobaannya belum lebih dari MAX_JOB_FAILS kali.
+ */
+async function retryFailedNews(store: Store, news: NewsBackend) {
+  const [failed]: any = await store.db.query(
+    `SELECT j.id,j.news_id,j.kind,j.revision,n.attempts AS current_revision,n.title
+     FROM news_media_jobs j JOIN (SELECT MAX(id) id FROM news_media_jobs GROUP BY news_id,kind) last ON last.id=j.id
+     JOIN news_articles n ON n.id=j.news_id
+     WHERE j.state='failed' AND j.kind NOT IN (?) ORDER BY j.id`,
+    [POST_KINDS],
+  );
+  const retried: string[] = [];
+  const removed: string[] = [];
+  for (const job of failed) {
+    const label = `${taskFor(job.kind)} · ${newsLabel({ id: job.news_id, title: job.title })}`;
+    const [history]: any = await store.db.query(
+      "SELECT id,state FROM news_media_jobs WHERE news_id=? AND kind=? ORDER BY id DESC",
+      [job.news_id, job.kind],
+    );
+    const streak: number[] = [];
+    for (const h of history) {
+      if (h.state !== "failed") break;
+      streak.push(h.id);
+    }
+    let remove =
+      streak.length > MAX_JOB_FAILS || job.revision !== job.current_revision;
+    if (!remove) {
+      try {
+        await news.enqueue(job.news_id, job.kind);
+        retried.push(label);
+        continue;
+      } catch (e) {
+        if ((e as { code?: string }).code) continue;
+        if (/sudah dalam antrean/.test((e as Error).message)) continue;
+        remove = true;
+      }
+    }
+    await store.db.query(
+      "DELETE FROM news_media_jobs WHERE id IN (?) AND state='failed'",
+      [streak],
+    );
+    removed.push(label);
+  }
+  const [articles]: any = await store.db.query(
+    "SELECT id,title,attempts FROM news_articles WHERE state='failed' AND attempts<=? ORDER BY id",
+    [MAX_JOB_FAILS],
+  );
+  for (const n of articles) {
+    try {
+      await news.retry(n.id);
+      retried.push(`menulis artikel · ${newsLabel(n)}`);
+    } catch {
+      // Sudah diulang dari tempat lain; dicoba lagi pada blok berikutnya.
+    }
+  }
+  return { retried, removed };
+}
+
 // ---------- satu putaran kerja ----------
 type Publish = (
   source: string,
@@ -393,6 +639,7 @@ export async function managerTick(
   now = Date.now(),
   file = stateFile(),
   targetFile = targetsFile(),
+  news: NewsBackend = newsBackend(store.db),
 ) {
   // Hanya satu proses yang boleh menjalankan Manajer pada satu waktu.
   const connection = await store.db.getConnection();
@@ -406,7 +653,7 @@ export async function managerTick(
       const targets = await managerTargets(store.db, targetFile);
       // Yang sudah dikerjakan tetap tercatat walau putaran terhenti di tengah.
       try {
-        await work(store, publish, state, targets, now);
+        await work(store, publish, state, targets, now, news);
       } finally {
         saveManager(state, file);
       }
@@ -424,6 +671,7 @@ async function work(
   state: ManagerState,
   targetMap: TargetMap,
   now: number,
+  news: NewsBackend,
 ) {
   const today = wibDayStart(now);
   const log = (text: string, tone: ManagerLog["tone"], typeId?: number) => {
@@ -451,13 +699,25 @@ async function work(
 
   // 1. Hasil posting Instagram yang sedang diproses.
   const pending = state.posts.filter((p) => p.status === "proses" && p.jobId);
-  if (pending.length) {
-    const [jobs]: any = await store.db.query(
-      "SELECT id,state,error FROM jobs WHERE id IN (?)",
-      [pending.map((p) => p.jobId)],
+  const jobsOf = async (table: "jobs" | "news_media_jobs") => {
+    const ids = pending
+      .filter((p) => (p.jobTable ?? "jobs") === table)
+      .map((p) => p.jobId);
+    if (!ids.length) return [];
+    const [rows]: any = await store.db.query(
+      `SELECT id,state,error FROM ${table} WHERE id IN (?)`,
+      [ids],
     );
+    return rows as { id: number; state: string; error: string | null }[];
+  };
+  if (pending.length) {
+    const jobs = {
+      jobs: await jobsOf("jobs"),
+      news_media_jobs: await jobsOf("news_media_jobs"),
+    };
     for (const p of pending) {
-      const j = jobs.find((x: any) => x.id === p.jobId);
+      const table = p.jobTable ?? "jobs";
+      const j: any = jobs[table].find((x) => x.id === p.jobId);
       if (!j || ["failed", "cancelled"].includes(j.state)) {
         p.status = "gagal";
         p.note = j?.error || "Job posting dibatalkan";
@@ -477,7 +737,7 @@ async function work(
         // Belum terkirim, jadi aman dibatalkan; slot ini diisi konten lain.
         const note = `Job posting tidak berjalan dalam ${POST_QUEUE_LIMIT / MINUTE} menit`;
         const [r]: any = await store.db.query(
-          "UPDATE jobs SET state='cancelled',error=? WHERE id=? AND state='queued'",
+          `UPDATE ${table} SET state='cancelled',error=? WHERE id=? AND state='queued'`,
           [note, p.jobId],
         );
         if (r?.affectedRows) {
@@ -500,20 +760,36 @@ async function work(
       (o) => o.typeId === type.id && o.status === "berjalan",
     );
     if (!PLATFORMS.some((p) => targets[p] > 0) && !hasOrders) return;
-    const chapters = (await withContentType(type, () => store.list())).sort(
-      (a, b) =>
-        Number(a.part_number ?? a.id) - Number(b.part_number ?? b.id) ||
-        a.id - b.id,
-    );
+    const isNews = type.engine === "news";
+    let units: Unit[];
+    if (isNews) {
+      const articles = await news.list(type);
+      units = await Promise.all(
+        articles.map(async (n) =>
+          newsUnit(news, type, settings, n, await news.detail(n)),
+        ),
+      );
+      // Tertua dulu, sama seperti urutan bagian buku.
+      units.reverse();
+    } else {
+      const chapters = (await withContentType(type, () => store.list())).sort(
+        (a, b) =>
+          Number(a.part_number ?? a.id) - Number(b.part_number ?? b.id) ||
+          a.id - b.id,
+      );
+      // TikTok/YouTube dikirim dengan pengaturan per buku (seperti publishZernio),
+      // jadi stoknya dihitung dengan pengaturan yang sama.
+      const perBook = new Map<string, Promise<BookSettings>>();
+      const sendSettings = (c: Chapter) => {
+        if (!perBook.has(c.book))
+          perBook.set(c.book, store.bookSettings(c.book, store.db, type.id));
+        return perBook.get(c.book)!;
+      };
+      units = chapters.map((c) =>
+        bookUnit(store, type, settings, c, sendSettings),
+      );
+    }
     const plan = socialPlan(type.outputs, settings, type.engine);
-    // TikTok/YouTube dikirim dengan pengaturan per buku (seperti publishZernio),
-    // jadi stoknya dihitung dengan pengaturan yang sama.
-    const perBook = new Map<string, Promise<BookSettings>>();
-    const sendSettings = (c: Chapter) => {
-      if (!perBook.has(c.book))
-        perBook.set(c.book, store.bookSettings(c.book, store.db, type.id));
-      return perBook.get(c.book)!;
-    };
     let shortage = 0;
     const shortFor: string[] = [];
 
@@ -556,24 +832,28 @@ async function work(
       const formats = instagramFormats(settings).filter((f) =>
         type.outputs.includes(NEEDS_OUTPUT[f]),
       );
-      const candidates =
+      const candidates: {
+        u: Unit;
+        format?: "carousel" | "reels";
+        input?: ZernioPick;
+      }[] =
         platform === "instagram"
           ? formats.flatMap((format) =>
-              chapters
-                .filter((c) => igReady(c, format))
-                .map((c) => ({ c, format })),
+              units
+                .filter((u) => u.igReady(format))
+                .map((u) => ({ u, format })),
             )
           : (
               await Promise.all(
-                chapters.map(async (c) => ({
-                  c,
-                  input: zernioInput(c, platform, await sendSettings(c)),
+                units.map(async (u) => ({
+                  u,
+                  input: (await u.zernio(platform))!,
                 })),
               )
             ).filter(({ input }) => input && !published.has(input.mediaKey));
       const readyCount =
         platform === "instagram"
-          ? new Set(candidates.map((x: any) => x.c.id)).size
+          ? new Set(candidates.map((x) => x.u.id)).size
           : candidates.length;
       state.stock[`${type.id}:${platform}`] = { ready: readyCount, at: now };
       // Persiapan: sisa target hari ini dan target besok harus sudah siap.
@@ -616,38 +896,35 @@ async function work(
             ).length;
           const pick = [...formats]
             .sort((a, b) => counts(a) - counts(b))
-            .map(
-              (format) =>
-                candidates.find(
-                  (x: any) => x.format === format && !failedToday.has(x.c.id),
-                ) as any,
+            .map((format) =>
+              candidates.find(
+                (x) => x.format === format && !failedToday.has(x.u.id),
+              ),
             )
             .find(Boolean);
           if (!pick) {
             empty();
             continue;
           }
-          const kind = pick.format === "reels" ? "REELS_IG" : "POST_IG";
-          const jobId = await store.enqueue(pick.c.id, kind);
+          const jobId = await pick.u.postIg(pick.format!);
           state.posts.push({
             at: now,
             typeId: type.id,
             platform,
-            chapterId: pick.c.id,
-            title: pick.c.title,
+            chapterId: pick.u.id,
+            title: pick.u.title,
             kind: pick.format === "reels" ? "Reels" : "Carousel",
             jobId: Number(jobId),
+            ...(pick.u.jobTable ? { jobTable: pick.u.jobTable } : {}),
             status: "proses",
           });
           log(
-            `Memposting ${pick.format === "reels" ? "Reels" : "Carousel"} ${type.name} ke Instagram: ${partLabel(pick.c)}.`,
+            `Memposting ${pick.format === "reels" ? "Reels" : "Carousel"} ${type.name} ke Instagram: ${pick.u.label}.`,
             "info",
             type.id,
           );
         } else {
-          const pick = candidates.find(
-            ({ c }: any) => !failedToday.has(c.id),
-          ) as any;
+          const pick = candidates.find(({ u }) => !failedToday.has(u.id));
           if (!pick) {
             empty();
             continue;
@@ -656,16 +933,16 @@ async function work(
             at: now,
             typeId: type.id,
             platform,
-            chapterId: pick.c.id,
-            title: pick.c.title,
+            chapterId: pick.u.id,
+            title: pick.u.title,
             kind: platform === "youtube" ? "Video" : "Post",
-            source: pick.input.source,
+            source: pick.input!.source,
             status: "proses",
           };
           state.posts.push(post);
           try {
             const result = await publish(
-              pick.input.source,
+              pick.input!.source,
               platform === "youtube" ? "youtube" : "tiktok",
             );
             const status = String(result.status || "unknown").toLowerCase();
@@ -681,8 +958,8 @@ async function work(
             post.note = status;
             log(
               post.status === "terbit"
-                ? `${PLATFORM_LABEL[platform]} ${type.name} terkirim (${status}): ${partLabel(pick.c)}.`
-                : `${PLATFORM_LABEL[platform]} ${type.name} ${status === "unknown" ? "belum pasti" : "gagal"}: ${partLabel(pick.c)}. Dicoba dengan konten lain.`,
+                ? `${PLATFORM_LABEL[platform]} ${type.name} terkirim (${status}): ${pick.u.label}.`
+                : `${PLATFORM_LABEL[platform]} ${type.name} ${status === "unknown" ? "belum pasti" : "gagal"}: ${pick.u.label}. Dicoba dengan konten lain.`,
               post.status === "terbit" ? "ok" : "warn",
               type.id,
             );
@@ -717,62 +994,84 @@ async function work(
           .filter((o) => o.typeId === type.id && o.status !== "selesai")
           .map((o) => o.chapterId),
       );
-      const next = chapters.filter(
-        (c) =>
-          !taken.has(c.id) &&
-          !busy(c) &&
-          (!c.article ||
-            nextBookJob(type, c, settings, c.production_jobs || []) !== null),
+      const next = units.filter(
+        (u) => !taken.has(u.id) && !u.busy && u.producible,
       );
-      if (!next.length)
+      const order = (id: number, title: string, label: string) => {
+        state.orders.push({
+          at: now,
+          updated: now,
+          typeId: type.id,
+          chapterId: id,
+          title,
+          reason: `Persiapan stok ${shortFor.join(", ")}`,
+          status: "berjalan",
+        });
+        log(
+          `Stok ${type.name} kurang untuk ${shortFor.join(", ")}: memerintahkan tim memproduksi ${label}.`,
+          "info",
+          type.id,
+        );
+        state.lastActionAt = now;
+      };
+      for (const u of next.slice(0, want - active.length))
+        order(u.id, u.title, u.label);
+      const more =
+        want - active.length - Math.min(next.length, want - active.length);
+      if (isNews) {
+        // Berita tidak pernah kehabisan topik: Jurnalis mencari berita baru.
+        for (let i = 0; i < more; i++) {
+          try {
+            const id = await news.create(type);
+            order(
+              id,
+              `Artikel berita #${id}`,
+              `artikel berita baru #${id} (Jurnalis mencari berita terbaru)`,
+            );
+          } catch (e) {
+            log(
+              `${type.name}: gagal membuat artikel berita baru (${(e as Error).message}).`,
+              "warn",
+              type.id,
+            );
+            break;
+          }
+        }
+      } else if (!next.length)
         note(
           `topics:${type.id}`,
           `${type.name}: stok konten siap kurang untuk ${shortFor.join(", ")}, tetapi tidak ada topik yang bisa diproduksi. Tambahkan topik baru di Produksi.`,
           "warn",
           type.id,
         );
-      for (const c of next.slice(0, want - active.length)) {
-        state.orders.push({
-          at: now,
-          updated: now,
-          typeId: type.id,
-          chapterId: c.id,
-          title: c.title,
-          reason: `Persiapan stok ${shortFor.join(", ")}`,
-          status: "berjalan",
-        });
-        log(
-          `Stok ${type.name} kurang untuk ${shortFor.join(", ")}: memerintahkan tim memproduksi ${partLabel(c)}.`,
-          "info",
-          type.id,
-        );
-        state.lastActionAt = now;
-      }
     }
 
     // 3. Kawal produksi yang sudah diperintahkan sampai output akhirnya jadi.
     for (const order of state.orders.filter(
       (o) => o.typeId === type.id && o.status === "berjalan",
     )) {
-      const c = chapters.find((x) => x.id === order.chapterId);
-      if (!c) {
+      const u = units.find((x) => x.id === order.chapterId);
+      // Artikel berita yang baru dibuat putaran ini dikawal mulai putaran depan.
+      if (!u && order.at === now) continue;
+      if (!u) {
         order.status = "macet";
-        order.note = "Topik sudah dihapus";
+        order.note = isNews
+          ? "Artikel berita sudah dihapus"
+          : "Topik sudah dihapus";
         order.updated = now;
         continue;
       }
-      if (busy(c)) continue;
-      const attempts = c.production_jobs || [];
-      const kind = c.article
-        ? nextBookJob(type, c, settings, attempts)
-        : "ARTICLE";
+      // Judul berita baru diketahui setelah Jurnalis menulis artikelnya.
+      order.title = u.title;
+      if (u.busy) continue;
+      const kind = u.next();
       if (kind) {
         try {
-          await store.enqueue(c.id, kind);
+          await u.enqueue(kind);
           order.updated = now;
           state.lastActionAt = now;
           log(
-            `Menyuruh ${staffFor(kind)} ${taskFor(kind)}: ${partLabel(c)}.`,
+            `Menyuruh ${staffFor(kind)} ${taskFor(kind)}: ${u.label}.`,
             "info",
             type.id,
           );
@@ -780,37 +1079,20 @@ async function work(
           order.status = "macet";
           order.note = (e as Error).message;
           order.updated = now;
-          log(`Produksi ${partLabel(c)} macet: ${order.note}`, "warn", type.id);
+          log(`Produksi ${u.label} macet: ${order.note}`, "warn", type.id);
         }
         continue;
       }
-      const results: Record<string, unknown> = {
-        POST_IMAGE: c.text_image,
-        PANEL: c.panels,
-        VIDEO_KALIMAT: c.sentence_video,
-        VIDEO_KALIMAT_H: c.sentence_video_h,
-      };
-      const missing = type.outputs.filter(
-        (k: string) => k in results && !results[k],
-      );
+      const missing = u.missing();
       order.updated = now;
       if (!missing.length) {
         order.status = "selesai";
-        log(
-          `Produksi ${partLabel(c)} selesai dan siap diposting.`,
-          "ok",
-          type.id,
-        );
+        log(`Produksi ${u.label} selesai dan siap diposting.`, "ok", type.id);
       } else {
-        const failedJob = attempts.find((j) => j.state === "failed");
         order.status = "macet";
-        order.note =
-          failedJob?.error ||
-          (c.article_status !== "siap"
-            ? `Artikel berstatus ${c.article_status}`
-            : `Output belum lengkap: ${missing.join(", ")}`);
+        order.note = u.stuck(missing);
         log(
-          `Produksi ${partLabel(c)} macet: ${order.note}. Manajer beralih ke topik lain.`,
+          `Produksi ${u.label} macet: ${order.note}. Manajer beralih ke topik lain.`,
           "warn",
           type.id,
         );
@@ -820,7 +1102,7 @@ async function work(
 
   const types = await new ContentTypeStore(store.db).list();
   for (const type of types) {
-    if (type.engine === "news" || !type.settings) continue;
+    if (!type.settings) continue;
     try {
       await workType(type, type.settings);
     } catch (e) {
@@ -840,7 +1122,10 @@ async function work(
   if (block !== state.retryBlock) {
     state.retryBlock = block;
     try {
-      const { retried, removed } = await retryFailed(store, types);
+      const book = await retryFailed(store, types);
+      const fromNews = await retryFailedNews(store, news);
+      const retried = [...book.retried, ...fromNews.retried];
+      const removed = [...book.removed, ...fromNews.removed];
       const list = (items: string[]) =>
         items.slice(0, 5).join("; ") +
         (items.length > 5 ? `; dan ${items.length - 5} lainnya` : "");
