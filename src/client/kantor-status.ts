@@ -12,6 +12,7 @@ export type OfficeJob = {
   kind: string;
   state: string;
   error?: string | null;
+  title?: string;
 };
 export type Staff = {
   id: string;
@@ -23,6 +24,32 @@ export type Staff = {
   semua?: boolean;
 };
 
+/** Job semu dari Lab Berita: satu per lab, chapter_id = -id lab. */
+export const JURNALIS_KIND = "JURNALIS";
+export type OfficeLab = {
+  id: number;
+  theme: string;
+  state: "idle" | "running" | "failed";
+  error: string | null;
+  lastRunAt: number | null;
+};
+export const labJobs = (labs: OfficeLab[]): OfficeJob[] =>
+  labs
+    .filter((l) => l.state !== "idle" || l.lastRunAt)
+    .map((l) => ({
+      // id negatif berubah tiap putaran agar "selesai" terdeteksi sekali.
+      id: -((l.lastRunAt ?? 0) * 1000 + l.id),
+      chapter_id: -l.id,
+      kind: JURNALIS_KIND,
+      state:
+        l.state === "running"
+          ? "running"
+          : l.state === "failed"
+            ? "failed"
+            : "completed",
+      error: l.error,
+      title: l.theme,
+    }));
 const among =
   (...kinds: string[]) =>
   (k: string) =>
@@ -140,6 +167,15 @@ export const STAFF: Staff[] = [
     tugas: "Menguji prompt artikel.",
   },
   {
+    id: "jurnalis",
+    nama: "Jurnalis",
+    dept: "rnd",
+    menu: "Lab Berita",
+    tugas:
+      "Mencari berita dari sumber rujukan tiap Lab Berita sampai target harian.",
+    handles: among(JURNALIS_KIND),
+  },
+  {
     id: "visual",
     nama: "Peneliti Visual",
     dept: "rnd",
@@ -200,7 +236,11 @@ export function latestJobs(jobs: OfficeJob[]) {
 }
 
 export const jobsOf = (s: Staff, jobs: OfficeJob[]) =>
-  s.semua ? jobs : s.handles ? jobs.filter((j) => s.handles!(j.kind)) : [];
+  s.semua
+    ? jobs.filter((j) => j.kind !== JURNALIS_KIND)
+    : s.handles
+      ? jobs.filter((j) => s.handles!(j.kind))
+      : [];
 
 export function staffStatus(
   s: Staff,

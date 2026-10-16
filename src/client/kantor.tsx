@@ -11,6 +11,8 @@ import {
   STAFF,
   STATUS_LABEL,
   jobsOf,
+  labJobs,
+  type OfficeLab,
   latestJobs,
   newlyCompleted,
   staffStatus,
@@ -219,7 +221,7 @@ export function KantorPage({
     const makeStaff = (id: string) => {
       const src = staffModels!.getObjectByName("rig_" + id)!;
       const root = cloneSkinned(src);
-      // karyawan.glb memuat 18 rig bernama tulang sama; loader memberi akhiran _n.
+      // karyawan.glb memuat 19 rig bernama tulang sama; loader memberi akhiran _n.
       root.traverse((o) => {
         if ((o as THREE.Bone).isBone) o.name = o.name.replace(/_\d+$/, "");
         o.castShadow = true;
@@ -453,7 +455,14 @@ export function KantorPage({
     let alive = true;
     const load = async () => {
       try {
-        const list: OfficeJob[] = await api("/jobs", "GET", undefined, null);
+        const [jobs, labs] = await Promise.all([
+          api("/jobs", "GET", undefined, null) as Promise<OfficeJob[]>,
+          api("/news-labs", "GET", undefined, null).then(
+            (r: { labs: OfficeLab[] }) => r.labs,
+            () => [] as OfficeLab[],
+          ),
+        ]);
+        const list = [...jobs, ...labJobs(labs)];
         if (!alive) return;
         const done = newlyCompleted(prevStates.current, list);
         if (done.length) {
@@ -754,7 +763,9 @@ export function KantorPage({
                   {selJobs.map((j) => (
                     <li key={j.id}>
                       <span className="mono">{j.kind}</span>
-                      <span className="muted">bagian #{j.chapter_id}</span>
+                      <span className="muted">
+                        {j.title ?? `bagian #${j.chapter_id}`}
+                      </span>
                       <span className={"chip chip-xs " + jobTone(j.state)}>
                         {j.state}
                       </span>

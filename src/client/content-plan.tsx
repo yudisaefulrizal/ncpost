@@ -302,6 +302,7 @@ export function ContentPlanCard({
               value={settings.articleConfig}
               book={type.engine === "book"}
               quote={type.engine === "quote"}
+              news={type.engine === "news"}
               onChange={(value) =>
                 setSettings((s) => ({ ...s, articleConfig: value }))
               }

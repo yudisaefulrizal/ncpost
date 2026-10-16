@@ -165,10 +165,7 @@ export class NewsStore {
                 ? `${news.content_type_id}:`
                 : "") +
                 (edit.sourceUrl
-                  ? newsSourceKey(
-                      edit.sourceUrl,
-                      !!currentContentType()?.settings?.articleConfig,
-                    ).url
+                  ? newsSourceKey(edit.sourceUrl).url
                   : edit.article),
             )
             .digest("hex");
@@ -258,9 +255,7 @@ export class NewsStore {
         (j.content_type_id && j.content_type_id !== 2
           ? `${j.content_type_id}:`
           : "") +
-          (v.sourceUrl
-            ? newsSourceKey(v.sourceUrl, !!result.article_config).url
-            : result.article),
+          (v.sourceUrl ? newsSourceKey(v.sourceUrl).url : result.article),
       )
       .digest("hex");
     try {

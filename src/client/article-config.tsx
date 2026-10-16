@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { api } from "./api";
+import type { NewsLab } from "../server/news-lab";
 import {
   DEFAULT_WEB_RESEARCH,
   RESEARCH_RECENCY,
@@ -7,7 +9,7 @@ import {
   type WebResearch,
 } from "../server/content-contract";
 export const defaultArticleConfig = (engine: string): ArticleConfig => ({
-  source: engine === "news" ? "web" : "knowledge",
+  source: engine === "news" ? "lab" : "knowledge",
   topicMode: engine === "book" ? "manual" : "ai",
   context: "",
   topic: "",
@@ -19,14 +21,24 @@ export function ArticleConfigFields({
   onChange,
   book = false,
   quote = false,
+  news = false,
 }: {
   value: ArticleConfig;
   onChange: (value: ArticleConfig) => void;
   book?: boolean;
   quote?: boolean;
+  /** Artikel mandiri boleh mengambil berita pilihan Jurnalis di Lab Berita. */
+  news?: boolean;
 }) {
   const set = (patch: Partial<ArticleConfig>) =>
     onChange({ ...value, ...patch });
+  const [labs, setLabs] = useState<NewsLab[] | null>(null);
+  useEffect(() => {
+    if (!news) return;
+    api("/news-labs", "GET", undefined, null)
+      .then((r: { labs: NewsLab[] }) => setLabs(r.labs))
+      .catch(() => setLabs([]));
+  }, [news]);
   return (
     <div className="settings-grid article-config-grid">
       <label className="field">
@@ -40,8 +52,36 @@ export function ArticleConfigFields({
           <option value="knowledge">Pengetahuan AI</option>
           <option value="manual">Bahan manual</option>
           <option value="web">Riset web</option>
+          {(news || value.source === "lab") && (
+            <option value="lab">Lab Berita</option>
+          )}
         </select>
       </label>
+      {value.source === "lab" && (
+        <label className="field">
+          Lab Berita
+          <select
+            value={value.labId ?? ""}
+            onChange={(e) =>
+              set({
+                labId: e.target.value ? Number(e.target.value) : undefined,
+              })
+            }
+          >
+            <option value="">Pilih lab…</option>
+            {labs?.map((lab) => (
+              <option key={lab.id} value={lab.id}>
+                {lab.theme}
+              </option>
+            ))}
+          </select>
+          {labs && !labs.length && (
+            <small className="muted">
+              Belum ada lab; buat dulu di menu Lab Berita.
+            </small>
+          )}
+        </label>
+      )}
       <label className="field">
         Asal topik
         <select

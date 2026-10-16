@@ -42,6 +42,8 @@ import { runNewsMediaJob, pollNewsPublications } from "./news-media";
 import { generateStock } from "./stock-generator";
 import { NewsStore } from "../server/news-store";
 import { runNewsJob } from "./news";
+import { runJurnalis } from "./jurnalis";
+import { NewsLabStore } from "../server/news-lab";
 import { selectInstagramAccount } from "../server/instagram-account";
 import {
   mkdirSync,
@@ -111,6 +113,7 @@ configureMediaStock(store.db);
 const newsStore = new NewsStore(store.db);
 const labStore = new LabStore(store.db);
 const newsMediaStore = new NewsMediaStore(store.db);
+const newsLabStore = new NewsLabStore(store.db);
 let stop = false;
 process.on("SIGTERM", () => (stop = true));
 process.on("SIGINT", () => (stop = true));
@@ -1110,6 +1113,9 @@ let lastCronMinute = -1;
 let lastManagerMinute = -1;
 let lastStatsHour = -1;
 let newsRunning = false;
+// Jurnalis punya lajur sendiri: satu lab per putaran, dicek tiap menit.
+let jurnalis: Promise<void> | null = null;
+let lastJurnalisMinute = -1;
 // Error tak terduga (job, atau DB seperti deadlock) cukup dicatat; worker
 // tetap hidup dan mencoba lagi di putaran berikutnya.
 const logJobError = (e: unknown) =>
@@ -1174,6 +1180,23 @@ while (!stop) {
         );
       } catch (e) {
         console.error("Manajer gagal:", (e as Error).message);
+      }
+    }
+    if (!jurnalis && minute !== lastJurnalisMinute) {
+      lastJurnalisMinute = minute;
+      try {
+        const lab = await newsLabStore.due();
+        if (lab && (await newsLabStore.start(lab)))
+          jurnalis = runJurnalis(newsLabStore, lab)
+            .catch((e) =>
+              console.error("Jurnalis gagal:", (e as Error).message),
+            )
+            .finally(() => {
+              jurnalis = null;
+            });
+      } catch (e) {
+        if ((e as { code?: string }).code !== "ER_NO_SUCH_TABLE")
+          console.error("Jurnalis gagal:", (e as Error).message);
       }
     }
     // At most one news research job per worker; book jobs share the remaining slots.
@@ -1252,11 +1275,12 @@ while (!stop) {
       new Promise((r) => setTimeout(r, 1000)),
       ...running,
       ...(posting ? [posting] : []),
+      ...(jurnalis ? [jurnalis] : []),
     ]);
   } catch (e) {
     console.error("Putaran worker gagal:", (e as Error)?.message ?? e);
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 }
-await Promise.all([...running, posting]);
+await Promise.all([...running, posting, jurnalis]);
 await store.close();

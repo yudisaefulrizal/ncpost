@@ -1,17 +1,12 @@
 import { generateConfiguredArticle } from "./configured-article";
 import { finishProcessTiming } from "../server/process-timing";
 import { NewsMediaStore } from "../server/news-media-store";
-import { productionLabPrompt } from "../server/lab-production";
-import { createHash } from "node:crypto";
+import { NewsLabStore } from "../server/news-lab";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../server/config";
 import { cliArgs, parseEvents, runCli } from "../server/providers";
-import {
-  newsArticlePrompt,
-  type NewsResult,
-  validateNewsResult,
-} from "../server/news";
+import { type NewsResult, validateNewsResult } from "../server/news";
 import { NewsStore, type NewsArticle } from "../server/news-store";
 export const NEWS_SCHEMA_PATH = path.join(
   ROOT,
@@ -84,103 +79,67 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
       store.db,
       j.content_type_id ?? 2,
     );
-    if (settings.articleConfig) {
-      const generated = await generateConfiguredArticle(
-        store.db,
-        settings,
-        "news",
-        dir,
-        "",
-        "",
-        undefined,
-        j.content_type_id ?? 2,
+    // Berita kini selalu lewat Konfigurasi artikel; sumber Lab Berita memakai
+    // link pilihan Jurnalis (bukan lagi daftar situs tetap).
+    if (!settings.articleConfig)
+      throw Error(
+        "Aktifkan Konfigurasi artikel dan pilih Lab Berita di Pengaturan Berita",
       );
-      const sourceUrl =
-        /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";
-      const result: NewsResult = {
-        article: generated.article,
-        article_config: settings.articleConfig,
-        candidate_topics: sourceUrl
-          ? [
-              {
-                source: generated.parsed.source,
-                url: sourceUrl,
-                original_title: generated.parsed.title,
-                summary: "",
-                selected: true,
-                reason: "",
-              },
-            ]
-          : [],
-        article_plan: {
-          title: generated.parsed.title,
-          sections: generated.parsed.paragraphs.map((p) => ({
-            heading: generated.parsed.heading,
-            summary: p,
-          })),
-        },
-        claim_source_map: [],
-        article_validation: { checks: [] },
-      };
-      writeFileSync(path.join(dir, "prompt.md"), generated.prompt, {
-        mode: 0o600,
-      });
-      writeFileSync(path.join(dir, "article.md"), generated.article, {
-        mode: 0o600,
-      });
-      await store.complete(j, result, {
-        configured: true,
-        source: settings.articleConfig.source,
-      });
-      return;
-    }
-    const lab = await productionLabPrompt(store.db, settings, "news", {
-      buku: "",
-      bab: "",
-      teks: "",
-      artikel: "",
-      quote: "",
-    });
-    const prompt = lab?.prompt || newsArticlePrompt();
-    writeFileSync(path.join(dir, "prompt.md"), prompt, { mode: 0o600 });
-    const raw = await runCli(
-      process.env.CODEX_EXECUTABLE || "codex",
-      newsCliArgs(),
-      prompt,
+    const config = settings.articleConfig;
+    const link =
+      config.source === "lab"
+        ? await new NewsLabStore(store.db).assign(config.labId!, j.id)
+        : "";
+    if (config.source === "lab" && !link)
+      throw Error("Belum ada berita pilihan Jurnalis di Lab Berita ini");
+    const generated = await generateConfiguredArticle(
+      store.db,
+      settings,
+      "news",
       dir,
-      900000,
+      "",
+      "",
+      undefined,
+      j.content_type_id ?? 2,
+      link || "",
     );
-    writeFileSync(path.join(dir, "events.jsonl"), raw, { mode: 0o600 });
-    // Save raw final output before validation so failures can be inspected and retried explicitly.
-    writeFileSync(path.join(dir, "response.json"), parseEvents(raw), {
-      mode: 0o600,
-    });
-    const { result, research, validation } = parseNewsResearch(raw);
-    const artifacts = {
-      ...result,
-      validation,
-      research,
-      promptSha256: createHash("sha256").update(prompt).digest("hex"),
-    };
-    for (const [name, value] of Object.entries({
-      "candidate_topics.json": result.candidate_topics,
-      "article_plan.json": result.article_plan,
-      "claim_source_map.json": result.claim_source_map,
-      "article_validation.json": {
-        ...result.article_validation,
-        structural: validation,
+    const sourceUrl =
+      link || /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";
+    const result: NewsResult = {
+      article: generated.article,
+      article_config: settings.articleConfig,
+      candidate_topics: sourceUrl
+        ? [
+            {
+              source: generated.parsed.source,
+              url: sourceUrl,
+              original_title: generated.parsed.title,
+              summary: "",
+              selected: true,
+              reason: "",
+            },
+          ]
+        : [],
+      article_plan: {
+        title: generated.parsed.title,
+        sections: generated.parsed.paragraphs.map((p) => ({
+          heading: generated.parsed.heading,
+          summary: p,
+        })),
       },
-      "research.json": research,
-    }))
-      writeFileSync(
-        path.join(dir, name),
-        JSON.stringify(value, null, 2) + "\n",
-        { mode: 0o600 },
-      );
-    writeFileSync(path.join(dir, "article.md"), result.article, {
+      claim_source_map: [],
+      article_validation: { checks: [] },
+    };
+    writeFileSync(path.join(dir, "prompt.md"), generated.prompt, {
       mode: 0o600,
     });
-    await store.complete(j, result, artifacts);
+    writeFileSync(path.join(dir, "article.md"), generated.article, {
+      mode: 0o600,
+    });
+    await store.complete(j, result, {
+      configured: true,
+      source: settings.articleConfig.source,
+    });
   } catch (e) {
     const message =
       e instanceof Error ? e.message : "Pembuatan artikel berita gagal";

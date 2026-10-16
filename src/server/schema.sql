@@ -201,6 +201,30 @@ CREATE TABLE IF NOT EXISTS news_stock (
  KEY news_stock_asset(asset_id),
  CONSTRAINT news_stock_asset_fk FOREIGN KEY(asset_id) REFERENCES assets(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- Lab Berita: tema global, link sumber rujukan, dan target harian Jurnalis.
+CREATE TABLE IF NOT EXISTS news_labs (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ theme VARCHAR(190) NOT NULL,
+ sources MEDIUMTEXT NOT NULL,
+ daily_target INT NOT NULL DEFAULT 3,
+ state VARCHAR(16) NOT NULL DEFAULT 'idle',
+ error TEXT NULL,
+ last_run_at BIGINT NULL,
+ created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Link berita yang sudah dipakai Jurnalis; satu link tidak pernah dipakai dua kali.
+CREATE TABLE IF NOT EXISTS news_lab_links (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ lab_id INT NOT NULL,
+ url TEXT NOT NULL,
+ url_hash CHAR(64) NOT NULL,
+ used_at BIGINT NOT NULL,
+ news_id INT NULL,
+ UNIQUE KEY news_lab_url (url_hash),
+ KEY news_lab_pending (lab_id,news_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS news_cron (
  category VARCHAR(32) NOT NULL,
  kind VARCHAR(32) NOT NULL,

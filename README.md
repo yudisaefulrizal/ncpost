@@ -148,31 +148,33 @@ Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa a
 
 ## Konten Berita
 
-**Konten Berita → Produksi → Buat artikel** mengantrekan pencarian dan penulisan
-artikel teknologi. Prompt `prompts/berita/skill-artikel-teknologi.md` disalin
-utuh dari Hermes dan dikirim tanpa perubahan. Codex memakai live web search,
-memilih tiga kandidat dari media yang diizinkan, memilih satu sumber, lalu
-menulis artikel serta laporan sesuai instruksi sumber. Tahap produksi berikutnya
-memakai komponen gambar, audio, render, dan Instagram yang sama dengan buku.
+Bahan berita berasal dari **Lab Berita** (menu Lab). Tiap lab berisi tema
+global, link sumber rujukan, dan target berita per hari; jumlah lab bebas.
+Karyawan **Jurnalis** (worker, lajur sendiri) mengerjakan lab bergiliran: mencari
+berita sesuai tema hanya dari domain sumber rujukan, sampai target hari ini (WIB)
+tercapai. Link pilihannya dicatat di tabel berita terpakai (`news_lab_links`)
+dan tidak pernah dipakai dua kali. Jurnalis yang gagal mencoba lab itu lagi
+setelah 30 menit; artefaknya di `output/jurnalis/<lab>/<waktu>/`.
 
-Artikel, tiga kandidat, alasan pemilihan, sumber, dan laporan validasi bisa
-dibuka dari daftar produksi. Hasil dapat diunduh sebagai Markdown. Aplikasi
-memeriksa judul teks biasa dan empat paragraf tanpa header, masing-masing tepat
-dua kalimat lengkap, satu sumber terpilih, dan maksimal lima tag. Jumlah kata
-dan karakter artikel tidak dibatasi.
-Laporan fakta mengikuti riset model; selesai membuat artikel bukan status
-lolos editor produksi buku. URL sumber yang sudah digunakan ditolak untuk
-mencegah artikel duplikat. Kegagalan/lease kedaluwarsa perlu dicoba ulang
-secara eksplisit, tanpa membuat ulang hasil yang telah selesai.
+Jenis konten Berita wajib memakai **Konfigurasi artikel** dengan Sumber bahan
+**Lab Berita** dan memilih lab-nya di Pengaturan Berita. **Buat artikel**
+mengambil link tertua yang belum diproduksi dari lab tersebut; prompt Lab
+Artikel bisa memakai `{{link_berita}}`, dan baris Sumber artikel wajib memuat
+link itu. Jadwal artikel berita dilewati selama lab belum punya berita pilihan
+Jurnalis. Daftar media tetap dan jalur prompt Hermes lama tidak lagi dipakai
+untuk produksi.
 
-Jalankan `MYSQL_ROOT_PASSWORD=... npm run db:setup` untuk tabel artikel, antrean
+Tahap produksi berikutnya memakai komponen gambar, audio, render, dan Instagram
+yang sama dengan buku. URL sumber yang sudah digunakan ditolak untuk mencegah
+artikel duplikat. Kegagalan/lease kedaluwarsa perlu dicoba ulang secara
+eksplisit, tanpa membuat ulang hasil yang telah selesai.
+
+Jalankan `MYSQL_ROOT_PASSWORD=... npm run db:setup` (atau `npm run migrate`) untuk tabel artikel, Lab Berita, antrean
 media, ikatan stok, hasil per revisi, pengaturan, dan cron berita. Artefak
 berita tersimpan di `output/berita/<id>/<percobaan>/`.
-Worker berita mengaktifkan `code_mode_host` agar live web search dapat
-dieksekusi, dengan shell dan browser interaktif tetap dinonaktifkan.
+Worker berita dan Jurnalis mengaktifkan `code_mode_host` agar live web search
+dapat dieksekusi, dengan shell dan browser interaktif tetap dinonaktifkan.
 Log provider `events.jsonl` juga disimpan untuk diagnosis hasil yang ditolak.
-Penyesuaian format pada `prompts/berita/format.md` diberikan sebagai instruksi
-runtime terpisah. Gaya bahasa, urutan gagasan, dan riset dari Hermes tetap berlaku.
 
 Tabel produksi berita memakai kontrol tahap yang sama dengan buku: centang
 artikel selesai, generate ulang, dan lihat melalui modal. Kolom pertama

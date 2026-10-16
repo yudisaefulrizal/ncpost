@@ -33,7 +33,7 @@ LOOP = {"duduk_diam": 48, "mengetik": 8, "menunggu": 48, "selesai": 24, "gagal":
 STATUS = {
     "manajer": "duduk_diam", "produksi": "mengetik", "art": "selesai", "shift": "menunggu", "antrean": "mengetik",
     "sekretaris": "gagal", "foto": "menunggu", "audio": "mengetik", "casting": "duduk_diam", "gpanel": "duduk_diam",
-    "gvideo": "mengetik", "naskah": "duduk_diam", "visual": "mengetik", "kunci": "duduk_diam", "admin": "selesai",
+    "gvideo": "mengetik", "naskah": "duduk_diam", "visual": "mengetik", "jurnalis": "mengetik", "kunci": "duduk_diam", "admin": "selesai",
     "resepsionis": "duduk_diam", "sosmed": "mengetik",
 }
 BUBBLE = {  # warna, simbol

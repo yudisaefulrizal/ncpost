@@ -48,6 +48,7 @@ import { newsTtsConfig } from "./edge-tts";
 import { newsKinds, NEWS_MEDIA_STAGES } from "./news-production-domain";
 import { NewsMediaStore } from "./news-media-store";
 import { NewsStore } from "./news-store";
+import { NewsLabStore } from "./news-lab";
 import { selectInstagramAccount } from "./instagram-account";
 import express from "express";
 import path from "node:path";
@@ -298,6 +299,40 @@ app.delete("/api/content-types/:id", async (req, res) => {
   if (!Number.isSafeInteger(id) || id < 1)
     throw Error("ID jenis konten tidak valid");
   await new ContentTypeStore(store.db).remove(id);
+  res.json({ ok: true });
+});
+// Lab Berita: tema, sumber rujukan, target harian Jurnalis, dan link terpakai.
+const newsLabId = (value: unknown) => {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw Error("ID Lab Berita tidak valid");
+  return id;
+};
+app.get("/api/news-labs", async (_, res) => {
+  const labs = new NewsLabStore(store.db);
+  res.json({ labs: await labs.list(), links: await labs.links() });
+});
+app.post("/api/news-labs", async (req, res) =>
+  res
+    .status(201)
+    .json({ id: await new NewsLabStore(store.db).create(req.body) }),
+);
+app.put("/api/news-labs/:id", async (req, res) => {
+  await new NewsLabStore(store.db).update(newsLabId(req.params.id), req.body);
+  res.json({ ok: true });
+});
+app.delete("/api/news-labs/:id", async (req, res) => {
+  const id = newsLabId(req.params.id);
+  const users = (await new ContentTypeStore(store.db).list()).filter(
+    (t) =>
+      t.settings?.articleConfig?.source === "lab" &&
+      t.settings.articleConfig.labId === id,
+  );
+  if (users.length)
+    throw Error(
+      `Lab dipakai jenis konten ${users.map((t) => t.name).join(", ")}; ganti sumbernya dulu`,
+    );
+  await new NewsLabStore(store.db).remove(id);
   res.json({ ok: true });
 });
 app.use("/api", async (req, res, next) => {

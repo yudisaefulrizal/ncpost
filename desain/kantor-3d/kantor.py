@@ -383,8 +383,9 @@ for i in range(3):
 
 # --- Departemen R&D ---
 CUR[0] = "rnd"
-station("naskah", -8.6, -2.6, screens=("green", "blue"), extra=("kertas", "cangkir"))
-station("visual", -5.6, -2.6, screens=("purple", "blue", "purple"), extra=("tablet",))
+station("naskah", -9.0, -2.6, screens=("green", "blue"), extra=("kertas", "cangkir"))
+station("jurnalis", -7.0, -2.6, screens=("blue", "green"), extra=("kertas",))
+station("visual", -5.0, -2.6, screens=("purple", "blue", "purple"), extra=("tablet",))
 B("meja_lab", (2.2, 0.9, 0.08), (-7.0, -5.4, 0.75), M["white"])
 for sx in (-1.0, 1.0):
     B("kaki_lab", (0.08, 0.8, 0.72), (-7.0 + sx, -5.4, 0.37), M["metal"])

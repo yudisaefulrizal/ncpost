@@ -10,28 +10,12 @@ export const NEWS_PROMPT_PATH = path.join(
 );
 // Do not trim, interpolate, prepend or append instructions to the source prompt.
 export const newsArticlePrompt = () => readFileSync(NEWS_PROMPT_PATH, "utf8");
-export const NEWS_SOURCE_DOMAINS = [
-  "foxnews.com",
-  "theguardian.com",
-  "t-online.de",
-  "tech.sina.com.cn",
-  "itmedia.co.jp",
-  "donga.com",
-  "timesofindia.indiatimes.com",
-  "channelnewsasia.com",
-  "khaleejtimes.com",
-  "ynet.co.il",
-  "mybroadband.co.za",
-  "canaltech.com.br",
-  "abc.net.au",
-];
-export function newsSourceKey(value: string, unrestricted = false) {
+/** Normalisasi link berita (HTTPS, tanpa www/utm/hash) sebagai kunci anti-duplikat. */
+export function newsSourceKey(value: string) {
   const url = new URL(value);
   if (url.protocol !== "https:" || url.username || url.password || url.port)
     throw Error("URL sumber berita harus HTTPS tanpa kredensial");
   const host = url.hostname.replace(/^www\./, "");
-  if (!unrestricted && !NEWS_SOURCE_DOMAINS.includes(host))
-    throw Error("Domain sumber berita tidak diizinkan");
   url.hostname = host;
   url.hash = "";
   for (const key of [...url.searchParams.keys()])
@@ -45,7 +29,7 @@ export function validateNewsArticle(raw: string, config?: ArticleConfig) {
     const url = /https:\/\/[^\s)]+/.exec(data.source)?.[0] || null;
     if (url) {
       try {
-        newsSourceKey(url, true);
+        newsSourceKey(url);
       } catch (e) {
         data.errors.push((e as Error).message);
         data.ok = false;

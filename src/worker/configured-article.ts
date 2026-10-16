@@ -10,19 +10,33 @@ import {
 } from "../server/content-contract";
 import type { BookSettings } from "../server/book-settings";
 import type mysql from "mysql2/promise";
+import { newsSourceKey } from "../server/news";
+/** Apakah baris Sumber memuat link (dibandingkan setelah normalisasi URL). */
+export function citesLink(source: string, link: string) {
+  const want = newsSourceKey(link).url;
+  return [...source.matchAll(/https?:\/\/[^\s)>\]]+/g)].some((m) => {
+    try {
+      return newsSourceKey(m[0].replace(/^http:/, "https:")).url === want;
+    } catch {
+      return false;
+    }
+  });
+}
+// Sumber lab juga butuh pencarian web untuk membaca berita pilihan Jurnalis.
+const searches = (source: ArticleConfig["source"]) =>
+  source === "web" || source === "lab";
 export function configuredCliArgs(source: ArticleConfig["source"]) {
-  const args =
-    source === "web"
-      ? cliArgs.filter(
-          (arg, i) =>
-            arg !== "code_mode_host" &&
-            !(arg === "--disable" && cliArgs[i + 1] === "code_mode_host"),
-        )
-      : [...cliArgs];
+  const args = searches(source)
+    ? cliArgs.filter(
+        (arg, i) =>
+          arg !== "code_mode_host" &&
+          !(arg === "--disable" && cliArgs[i + 1] === "code_mode_host"),
+      )
+    : [...cliArgs];
   return [
-    ...(source === "web" ? ["--search"] : []),
+    ...(searches(source) ? ["--search"] : []),
     ...args,
-    ...(source === "web" ? ["--enable", "code_mode_host"] : []),
+    ...(searches(source) ? ["--enable", "code_mode_host"] : []),
     ...(process.env.CODEX_MODEL ? ["--model", process.env.CODEX_MODEL] : []),
     "-",
   ];
@@ -41,7 +55,7 @@ export async function runConfiguredModel(
   );
   writeFileSync(path.join(work, "events.jsonl"), raw, { mode: 0o600 });
   if (
-    source === "web" &&
+    searches(source) &&
     !raw
       .split("\n")
       .filter(Boolean)
@@ -89,6 +103,7 @@ export async function generateConfiguredArticle(
   topic = "",
   generate = runConfiguredModel,
   typeId?: number,
+  newsLink = "",
 ) {
   const config = normalizeArticleConfig(settings.articleConfig);
   if (config.source === "manual" && !config.material)
@@ -129,6 +144,7 @@ export async function generateConfiguredArticle(
     effectiveContext,
     effectiveTopic,
     previous,
+    newsLink,
   );
   const article = await generate(prompt, config.source, work);
   const parsed = validateUnifiedArticle(
@@ -142,5 +158,9 @@ export async function generateConfiguredArticle(
       ? researchErrors(config.research, parsed.source)
       : [];
   if (research.length) throw Error(research.join("; "));
+  if (config.source === "lab" && !citesLink(parsed.source, newsLink))
+    throw Error(
+      "Sumber artikel wajib mencantumkan link berita pilihan Jurnalis",
+    );
   return { article, parsed, prompt };
 }

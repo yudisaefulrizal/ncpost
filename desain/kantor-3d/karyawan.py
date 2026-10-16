@@ -29,6 +29,7 @@ STAFF = [
     dict(id="manajer", nama="Manajer Produksi", dept="manajer", skin="#E8B48A", hair="#1B1B1F", rambut="rapi", shirt="#F4F1EA", pants="#2B2F3A", outer="jas", outer_col="#3A4050", aks=["dasi", "jam"]),
     dict(id="resepsionis", nama="Resepsionis", dept="lobi", skin="#F2C29B", hair="#4A2A1A", rambut="kerudung", kerudung="#C98B86", shirt="#F4F1EA", pants="#2D3C6E", outer="jas", outer_col="#3B5FB0", aks=[], rok=True),
     dict(id="admin", nama="Admin / HRD", dept="umum", skin="#E8B48A", hair="#6B3E1F", rambut="kerudung", kerudung="#8FA9CF", shirt="#E7A0B5", pants="#3A4256", aks=[], rok=True),
+    dict(id="jurnalis", nama="Jurnalis", dept="rnd", skin="#E8B48A", hair="#2A1F1A", rambut="rapi", shirt="#F4F1EA", pants="#2B3550", outer="rompi", outer_col="#2F4A6B", aks=["pena", "hp"]),
     dict(id="visual", nama="Peneliti Visual", dept="rnd", skin="#C98E62", hair="#24180F", rambut="jambul", shirt="#2E2E3A", pants="#3A4256", outer="jas_lab", aks=["vr"]),
     # baris tengah
     dict(id="produksi", nama="Tim Produksi", dept="konten", skin="#C98E62", hair="#24180F", rambut="pendek", shirt="#3D7BE0", pants="#2B3550", topi="cap_balik", topi_col="#E04A4A", aks=["headphone_leher"]),

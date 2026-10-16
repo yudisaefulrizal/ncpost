@@ -22,6 +22,7 @@ export const outputRoot = () =>
   path.join(ROOT, "output", process.env.NCPOST_TEST === "true" ? ".test" : "");
 const RESERVED = new Set([
   "berita",
+  "jurnalis",
   "lab",
   "lab-references",
   "stock",

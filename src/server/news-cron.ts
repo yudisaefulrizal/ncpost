@@ -20,6 +20,7 @@ import { cronNextRun } from "./cron-schedule";
 import { decodeCron, saveCronRecord, deleteCronRecord } from "./cron-records";
 import { NewsMediaStore } from "./news-media-store";
 import { NewsStore } from "./news-store";
+import { NewsLabStore } from "./news-lab";
 
 export class NewsCronStore {
   constructor(
@@ -107,8 +108,16 @@ export class NewsCronStore {
         const articles = await news.list();
         let processed = 0;
         const batchSize = 1;
+        const lab =
+          type.settings?.articleConfig?.source === "lab"
+            ? type.settings.articleConfig.labId!
+            : null;
         if (cron.kind === "ARTICLE") {
-          if (!articles.some((n) => ["queued", "running"].includes(n.state))) {
+          if (lab && !(await new NewsLabStore(this.db).pending(lab)))
+            message = "Belum ada berita pilihan Jurnalis di Lab Berita";
+          else if (
+            !articles.some((n) => ["queued", "running"].includes(n.state))
+          ) {
             for (let i = 0; i < batchSize; i++) await news.create();
             message = `${batchSize} artikel baru masuk antrean`;
           } else message = "Artikel masih dalam proses";

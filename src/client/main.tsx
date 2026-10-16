@@ -118,6 +118,9 @@ const ManagerRoom = React.lazy(() =>
 const AccountStatsPage = React.lazy(() =>
   import("./account-stats").then((m) => ({ default: m.AccountStatsPage })),
 );
+const NewsLabPage = React.lazy(() =>
+  import("./news-lab").then((m) => ({ default: m.NewsLabPage })),
+);
 const SosmedCenter = React.lazy(() =>
   import("./office-pages").then((m) => ({ default: m.SosmedCenter })),
 );
@@ -157,6 +160,7 @@ const navGroups: [string, [string, IconName][]][] = [
     [
       ["Lab Prompt Artikel", "doc"],
       ["Lab Prompt Gambar", "image"],
+      ["Lab Berita", "search"],
     ],
   ],
   [
@@ -1827,6 +1831,13 @@ function App() {
           key={page}
           kind={page === "Lab Prompt Artikel" ? "article" : "image"}
         />
+      );
+    } else if (page === "Lab Berita") {
+      sub = "Tema, sumber rujukan, dan target harian Jurnalis.";
+      content = (
+        <React.Suspense fallback={<div className="card empty">Memuat…</div>}>
+          <NewsLabPage />
+        </React.Suspense>
       );
     } else if (page === "Stok Audio") {
       content = <AudioStockPage />;

@@ -50,16 +50,16 @@ it("artikel berita memakai judul teks biasa dan empat paragraf tanpa header dan 
     validateNewsArticle(newsFixture().article + "\n\nCatatan tambahan").ok,
   ).toBe(false);
 });
-it("domain sumber bukan sekadar kecocokan substring", () => {
+it("link sumber dinormalisasi dan wajib HTTPS tanpa kredensial", () => {
   expect(
-    newsSourceKey("https://www.theguardian.com/technology/test#ref"),
+    newsSourceKey(
+      "https://www.theguardian.com/technology/test/?utm_source=x#ref",
+    ),
   ).toEqual({
     host: "theguardian.com",
     url: "https://theguardian.com/technology/test",
   });
   for (const url of [
-    "https://theguardian.com.evil.test/news",
-    "https://evil.test/?source=theguardian.com",
     "https://user:pass@theguardian.com/news",
     "http://theguardian.com/news",
   ])

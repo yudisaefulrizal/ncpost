@@ -266,6 +266,7 @@ export function ContentTypes({
                 value={settings.articleConfig}
                 book={engine === "book"}
                 quote={engine === "quote"}
+                news={engine === "news"}
                 onChange={(value) =>
                   setSettings((current) => ({
                     ...current,

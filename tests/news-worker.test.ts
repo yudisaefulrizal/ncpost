@@ -2,8 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { readFileSync, rmSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../src/server/config";
-import { newsArticlePrompt } from "../src/server/news";
-import { newsFixture } from "./fixtures/news";
 import { runCli } from "../src/server/providers";
 import { runNewsJob } from "../src/worker/news";
 import type { NewsStore, NewsArticle } from "../src/server/news-store";
@@ -39,136 +37,118 @@ const store = () =>
     complete: vi.fn().mockResolvedValue(true),
     fail: vi.fn(),
   }) as unknown as NewsStore;
-it("worker mengirim prompt utuh dan menyimpan artikel serta seluruh artefak riset", async () => {
-  const result = newsFixture();
-  vi.mocked(runCli).mockResolvedValue(
-    [
-      {
-        type: "item.completed",
-        item: {
-          type: "web_search",
-          action: { type: "search", query: "fixture" },
-        },
-      },
-      {
-        type: "item.completed",
-        item: { type: "agent_message", text: JSON.stringify(result) },
-      },
-    ]
-      .map((e) => JSON.stringify(e))
-      .join("\n"),
-  );
-  const s = store();
-  await runNewsJob(s, job);
-  expect(runCli).toHaveBeenCalledWith(
-    expect.any(String),
-    expect.arrayContaining(["--search", "--output-schema"]),
-    newsArticlePrompt(),
-    dir,
-    900000,
-  );
-  expect(readFileSync(path.join(dir, "prompt.md"), "utf8")).toBe(
-    newsArticlePrompt(),
-  );
-  expect(readFileSync(path.join(dir, "article.md"), "utf8")).toBe(
-    result.article,
-  );
-  expect(
-    JSON.parse(readFileSync(path.join(dir, "candidate_topics.json"), "utf8")),
-  ).toHaveLength(3);
-  expect(s.complete).toHaveBeenCalledWith(
-    job,
-    result,
-    expect.objectContaining({
-      validation: expect.objectContaining({ ok: true }),
-    }),
-  );
-  expect(s.fail).not.toHaveBeenCalled();
-});
-it("hasil yang tidak memiliki riset disimpan untuk diagnosis tetapi tidak ditandai selesai", async () => {
-  vi.mocked(runCli).mockResolvedValue(
-    JSON.stringify({
-      type: "item.completed",
-      item: { type: "agent_message", text: JSON.stringify(newsFixture()) },
-    }),
-  );
-  const s = store();
-  await runNewsJob(s, job);
-  expect(s.complete).not.toHaveBeenCalled();
-  expect(s.fail).toHaveBeenCalledWith(
-    job,
-    expect.stringContaining("bukti pencarian web"),
-  );
-  expect(
-    JSON.parse(readFileSync(path.join(dir, "response.json"), "utf8")),
-  ).toHaveProperty("article");
-  expect(readFileSync(path.join(dir, "events.jsonl"), "utf8")).toContain(
-    '"agent_message"',
-  );
-});
-it("provider gagal dilaporkan tanpa retry diam-diam atau hasil artikel palsu", async () => {
-  vi.mocked(runCli).mockRejectedValue(Error("Provider timeout"));
-  const s = store();
-  await runNewsJob(s, job);
-  expect(s.fail).toHaveBeenCalledWith(job, "Provider timeout");
-  expect(s.complete).not.toHaveBeenCalled();
-  expect(runCli).toHaveBeenCalledTimes(1);
-});
-
-it("uses the enabled Lab news prompt while preserving research and output validation", async () => {
-  const result = newsFixture();
-  vi.mocked(runCli).mockResolvedValue(
-    [
-      {
-        type: "item.completed",
-        item: {
-          type: "web_search",
-          action: { type: "search", query: "fixture" },
-        },
-      },
-      {
-        type: "item.completed",
-        item: { type: "agent_message", text: JSON.stringify(result) },
-      },
-    ]
-      .map((item) => JSON.stringify(item))
-      .join("\n"),
-  );
+const LINK = "https://example.com/tekno/berita-1";
+const labType = (
+  links: { url: string }[],
+  prompt = "Tulis berita {{link_berita}}.",
+) => {
   const s = store();
   vi.mocked(s.db.query).mockImplementation(
     async (sql: any) =>
       [
-        String(sql).includes("content_types")
+        sql.includes("content_types")
           ? [
               {
                 id: 2,
                 name: "Berita",
                 engine: "news",
-                outputs: ["ARTICLE"],
-                settings: { stockKinds: [], labPromptIds: [12] },
+                outputs: ["POST_IMAGE"],
+                settings: {
+                  managed: true,
+                  articleConfig: {
+                    source: "lab",
+                    labId: 5,
+                    topicMode: "ai",
+                    context: "",
+                    topic: "",
+                    material: "",
+                    paragraphCount: null,
+                  },
+                  labPromptIds: [1],
+                  stockKinds: [],
+                  sentenceKinds: [],
+                  panelHorizontal: null,
+                  panelVertical: null,
+                  sentenceVideoKind: null,
+                  sentenceVideoHKind: null,
+                },
               },
             ]
-          : [
-              {
-                id: 12,
-                kind: "article",
-                reference_key: "news",
-                prompt: "Instruksi berita dari Lab",
-                reference_images: "[]",
-              },
-            ],
+          : sql.includes("lab_prompts")
+            ? [{ id: 1, kind: "article", reference_key: null, prompt }]
+            : sql.startsWith("SELECT url FROM news_lab_links")
+              ? links
+              : [],
       ] as any,
   );
+  return s;
+};
+const searched = (text: string) =>
+  [
+    {
+      type: "item.completed",
+      item: { type: "web_search", action: { type: "search", query: "x" } },
+    },
+    { type: "item.completed", item: { type: "agent_message", text } },
+  ]
+    .map((e) => JSON.stringify(e))
+    .join("\n");
+it("tanpa Konfigurasi artikel, berita ditolak dan diminta memilih Lab Berita", async () => {
+  const s = store();
   await runNewsJob(s, job);
-  expect(runCli).toHaveBeenCalledWith(
-    expect.any(String),
-    expect.any(Array),
-    "Instruksi berita dari Lab",
-    dir,
-    900000,
+  expect(runCli).not.toHaveBeenCalled();
+  expect(s.complete).not.toHaveBeenCalled();
+  expect(s.fail).toHaveBeenCalledWith(
+    job,
+    expect.stringContaining("Lab Berita"),
   );
-  expect(s.complete).toHaveBeenCalled();
+});
+it("sumber Lab Berita menulis dari link pilihan Jurnalis", async () => {
+  const article = `# Judul\n\nIsi berita.\n\nSumber: Example ${LINK}/\n\nTag: tekno`;
+  vi.mocked(runCli).mockResolvedValue(searched(article));
+  const s = labType([{ url: LINK }]);
+  await runNewsJob(s, job);
   expect(s.fail).not.toHaveBeenCalled();
+  const [, args, prompt] = vi.mocked(runCli).mock.calls[0];
+  expect(args).toContain("--search");
+  expect(prompt).toContain(`Tulis berita ${LINK}.`);
+  expect(s.complete).toHaveBeenCalledWith(
+    job,
+    expect.objectContaining({
+      article,
+      candidate_topics: [expect.objectContaining({ url: LINK })],
+    }),
+    expect.objectContaining({ configured: true, source: "lab" }),
+  );
+});
+it("artikel lab yang tidak mengutip link Jurnalis ditolak", async () => {
+  vi.mocked(runCli).mockResolvedValue(
+    searched("# Judul\n\nIsi.\n\nSumber: https://example.com/lain\n\nTag: a"),
+  );
+  const s = labType([{ url: LINK }]);
+  await runNewsJob(s, job);
+  expect(s.complete).not.toHaveBeenCalled();
+  expect(s.fail).toHaveBeenCalledWith(
+    job,
+    expect.stringContaining("link berita pilihan Jurnalis"),
+  );
+});
+it("lab tanpa berita pilihan Jurnalis gagal tanpa memanggil provider", async () => {
+  const s = labType([]);
+  await runNewsJob(s, job);
+  expect(runCli).not.toHaveBeenCalled();
+  expect(s.fail).toHaveBeenCalledWith(
+    job,
+    expect.stringContaining("Belum ada berita pilihan Jurnalis"),
+  );
+});
+it("provider gagal dilaporkan tanpa retry diam-diam atau hasil artikel palsu", async () => {
+  vi.mocked(runCli).mockRejectedValue(Error("Provider timeout"));
+  const s = labType([{ url: LINK }]);
+  await runNewsJob(s, job);
+  expect(s.fail).toHaveBeenCalledWith(job, "Provider timeout");
+  expect(s.complete).not.toHaveBeenCalled();
+  expect(runCli).toHaveBeenCalledTimes(1);
 });
 
 it.each(["knowledge", "manual", "web"] as const)(
