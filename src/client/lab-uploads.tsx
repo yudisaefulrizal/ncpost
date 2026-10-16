@@ -66,7 +66,7 @@ export function ImageUploads({
                   width: 140,
                   height: 120,
                   objectFit: "contain",
-                  background: "#eee",
+                  background: "var(--placeholder)",
                 }}
               />
               <button

@@ -31,6 +31,20 @@
   --check-line: #e2b86b;
   --disabled-bg: #eef1ef;
   --disabled-fg: #7d8681;
+  --on-fill: #ffffff;
+  --on-fill-muted: #c9d2cd;
+  --nav-label: #6b7570;
+  --surface-2: #f8faf8;
+  --hover: #f2f5f3;
+  --hover-strong: #eaefeb;
+  --placeholder: #dce3df;
+  --track: #c9d1cc;
+  --knob: #ffffff;
+  --block-line: #edd2ce;
+  --brand-bright: #24a58a;
+  --progress: #cceadd;
+  --scrim: rgba(21, 32, 26, 0.45);
+  color-scheme: light;
   --s1: 4px;
   --s2: 8px;
   --s3: 12px;
@@ -49,6 +63,54 @@
   background: var(--bg);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
+}
+/* Mode gelap: data-theme diset skrip di index.html (pilihan tersimpan atau preferensi sistem). */
+:root[data-theme="dark"] {
+  --bg: #0f1512;
+  --surface: #171e1a;
+  --ink: #e6ece8;
+  --ink-2: #c3ccc7;
+  --ink-3: #a9b3ae;
+  --muted: #94a09a;
+  --line: #2a332e;
+  --line-soft: #212925;
+  --control: #3a4540;
+  --brand: #34b886;
+  --brand-hover: #48c795;
+  --brand-ink: #6fd3a8;
+  --brand-soft: #173a2c;
+  --ok-bg: #173a2c;
+  --ok-fg: #6fd3a8;
+  --ok-dot: #34b886;
+  --run-bg: #1b2a4a;
+  --run-fg: #a9c3ff;
+  --run-dot: #5b8def;
+  --act-bg: #3a2c12;
+  --act-fg: #f2c27a;
+  --act-dot: #e0a53a;
+  --block-bg: #3d1d1a;
+  --block-fg: #ffaca1;
+  --block-dot: #e5604c;
+  --none-bg: #232b27;
+  --none-fg: #a9b3ae;
+  --none-dot: #6b7570;
+  --check-line: #a8823f;
+  --disabled-bg: #1e2622;
+  --disabled-fg: #7d8781;
+  --on-fill: #0f1512;
+  --on-fill-muted: #3f4b45;
+  --nav-label: #94a09a;
+  --surface-2: #1d2521;
+  --hover: #232c27;
+  --hover-strong: #26302b;
+  --placeholder: #26302b;
+  --track: #3d4842;
+  --knob: #dfe6e2;
+  --block-line: #5a2a25;
+  --brand-bright: #5fd1a4;
+  --progress: #1f4d3a;
+  --scrim: rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
 }
 * {
   box-sizing: border-box;
@@ -189,7 +251,7 @@ p {
   height: 32px;
   border-radius: var(--r-ctl);
   background: var(--brand);
-  color: #fff;
+  color: var(--on-fill);
   display: grid;
   place-items: center;
   font-weight: 800;
@@ -204,13 +266,17 @@ p {
   color: var(--muted);
   font-size: 12px;
 }
+.theme-toggle {
+  margin-left: auto;
+  color: var(--ink-2);
+}
 .nav-label {
   font-size: 11px;
   line-height: 16px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6b7570;
+  color: var(--nav-label);
   padding: 0 var(--s3);
   margin: var(--s4) 0 var(--s1);
 }
@@ -230,7 +296,7 @@ p {
   text-align: left;
 }
 .nav-btn:hover {
-  background: #eaefeb;
+  background: var(--hover-strong);
   color: var(--ink);
 }
 .nav-btn.on {
@@ -443,7 +509,7 @@ footer {
   --dot-c: var(--none-dot);
 }
 .t-check {
-  --bg-c: #fff;
+  --bg-c: var(--surface);
   --fg-c: var(--act-fg);
   --dot-c: transparent;
 }
@@ -478,7 +544,7 @@ footer {
 .bar {
   height: 6px;
   border-radius: 3px;
-  background: #eaeeeb;
+  background: var(--hover-strong);
   overflow: hidden;
   flex: 1;
 }
@@ -500,7 +566,7 @@ footer {
   font-weight: 600;
 }
 .banner .chip {
-  background: #fff;
+  background: var(--surface);
 }
 
 /* Tombol & kontrol */
@@ -528,7 +594,7 @@ footer {
 }
 .btn-pri {
   background: var(--brand);
-  color: #fff;
+  color: var(--on-fill);
 }
 .btn-pri:hover {
   background: var(--brand-hover);
@@ -539,7 +605,7 @@ footer {
   border-color: var(--control);
 }
 .btn-sec:hover {
-  background: #f2f5f3;
+  background: var(--hover);
 }
 .btn-ghost {
   background: transparent;
@@ -602,7 +668,7 @@ footer {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(21, 32, 26, 0.45);
+  background: var(--scrim);
   display: grid;
   place-items: center;
   padding: var(--s4);
@@ -784,7 +850,7 @@ footer {
 .play:hover:not(:disabled) {
   background: var(--brand);
   border-color: var(--brand);
-  color: #fff;
+  color: var(--on-fill);
 }
 .play:disabled {
   opacity: 0.35;
@@ -868,7 +934,7 @@ footer {
   flex: 1;
 }
 .btn-inv {
-  background: #fff;
+  background: var(--surface);
   color: var(--brand-ink);
 }
 .btn:disabled,
@@ -996,7 +1062,7 @@ th {
   padding: 0 var(--s3);
   height: 40px;
   border-bottom: 1px solid var(--line);
-  background: #f8faf8;
+  background: var(--surface-2);
   white-space: nowrap;
 }
 td {
@@ -1018,7 +1084,7 @@ td:last-child {
 }
 tr.grp td {
   height: 40px;
-  background: #fbfcfb;
+  background: var(--surface-2);
   font-weight: 700;
 }
 tr.grp span {
@@ -1028,7 +1094,7 @@ tr.grp span {
   margin-left: var(--s2);
 }
 tr.row:hover td {
-  background: #f7faf8;
+  background: var(--surface-2);
 }
 .title-cell {
   min-width: 260px;
@@ -1201,10 +1267,10 @@ tr.row:hover td {
   font-size: 12px;
   flex: none;
   background: var(--dot-c);
-  color: #fff;
+  color: var(--on-fill);
 }
 .step.t-check .step-dot {
-  background: #fff;
+  background: var(--surface);
   color: var(--act-fg);
   box-shadow: inset 0 0 0 1.5px var(--act-dot);
 }
@@ -1212,7 +1278,7 @@ tr.row:hover td {
   box-shadow: inset 0 0 0 1px var(--check-line);
 }
 .step.t-none .step-dot {
-  background: #dde3df;
+  background: var(--placeholder);
   color: var(--ink-3);
 }
 .step b {
@@ -1261,7 +1327,7 @@ tr.row:hover td {
   margin: 0;
   aspect-ratio: 4 / 5;
   border-radius: 10px;
-  background: #dce3df;
+  background: var(--placeholder);
   overflow: hidden;
 }
 .preview img {
@@ -1322,7 +1388,7 @@ tr.row:hover td {
   padding: 14px 20px;
   border-radius: var(--r-card);
   background: var(--ink);
-  color: #fff;
+  color: var(--on-fill);
   box-shadow: 0 8px 24px rgba(21, 32, 26, 0.18);
 }
 .nextbar b {
@@ -1330,7 +1396,7 @@ tr.row:hover td {
 }
 .nextbar small {
   font-size: 12px;
-  color: #c9d2cd;
+  color: var(--on-fill-muted);
 }
 
 /* Halaman lain */
@@ -1415,7 +1481,7 @@ tr.row:hover td {
   height: 36px;
   border-radius: 50%;
   background: var(--ink);
-  color: #fff;
+  color: var(--on-fill);
   display: grid;
   place-items: center;
   font-weight: 800;
@@ -1607,7 +1673,7 @@ tr.grp .grp-action {
   flex-wrap: wrap;
 }
 .cron-hours span {
-  background: #f5f7f5;
+  background: var(--hover);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 2px 7px;
@@ -1647,7 +1713,7 @@ input.cron-switch {
   padding: 0;
   border: 0;
   border-radius: 20px;
-  background: #c9d1cc;
+  background: var(--track);
   flex: none;
   cursor: pointer;
   transition: background 0.15s;
@@ -1659,7 +1725,7 @@ input.cron-switch::after {
   left: 3px;
   width: 14px;
   height: 14px;
-  background: white;
+  background: var(--knob);
   border-radius: 50%;
   box-shadow: 0 1px 2px #0002;
   transition: transform 0.15s;
@@ -1696,7 +1762,7 @@ input.cron-switch:checked::after {
   color: var(--muted);
 }
 .cron-table tbody tr:hover {
-  background: #fafcfb;
+  background: var(--surface-2);
 }
 .cron-table tbody tr:last-child td {
   border-bottom: 0;
@@ -1846,7 +1912,7 @@ input.cron-switch:checked::after {
   line-height: 1.5;
 }
 .queue-list-table tbody tr:hover {
-  background: #fafcfb;
+  background: var(--surface-2);
 }
 .queue-list-table tbody tr:last-child td {
   border-bottom: 0;
@@ -1956,7 +2022,7 @@ input.cron-switch:checked::after {
   margin: 0;
   padding: 16px;
   background: var(--block-bg);
-  border: 1px solid #edd2ce;
+  border: 1px solid var(--block-line);
   border-radius: 8px;
   color: var(--block-fg);
   font-size: 13px;
@@ -2029,7 +2095,7 @@ dialog.app-dialog {
   color: inherit;
 }
 dialog.app-dialog::backdrop {
-  background: rgba(21, 32, 26, 0.45);
+  background: var(--scrim);
 }
 
 .check-row input.lab-prompt-switch {
@@ -2039,7 +2105,7 @@ dialog.app-dialog::backdrop {
   flex: 0 0 36px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: #d6ded8;
+  background: var(--track);
   position: relative;
   cursor: pointer;
 }
@@ -2051,7 +2117,7 @@ dialog.app-dialog::backdrop {
   top: 2px;
   left: 2px;
   border-radius: 50%;
-  background: white;
+  background: var(--knob);
   transition: transform 120ms;
 }
 .check-row input.lab-prompt-switch:checked {
@@ -2088,8 +2154,8 @@ dialog.app-dialog::backdrop {
   cursor: pointer;
 }
 .output-target-options .check-row:has(input:checked) {
-  background: #e3f1ea;
-  border-color: #16805e;
+  background: var(--brand-soft);
+  border-color: var(--brand);
 }
 .output-target-options input:disabled {
   opacity: 1;
@@ -2290,7 +2356,7 @@ dialog.app-dialog::backdrop {
   align-items: center;
   gap: 16px;
   padding: 14px 22px;
-  background: white;
+  background: var(--surface);
   border-top: 1px solid var(--line-soft);
   border-radius: 0 0 12px 12px;
 }
@@ -2458,7 +2524,7 @@ dialog.app-dialog::backdrop {
 }
 .cron-chart-bar:hover,
 .cron-chart-bar.selected {
-  fill: #24a58a;
+  fill: var(--brand-bright);
 }
 .cron-chart-bar.empty {
   fill: var(--line);
@@ -2687,8 +2753,8 @@ dialog.app-dialog::backdrop {
 }
 .cron-optimization-legend .before,
 .cron-chart-before {
-  fill: #c4ccd0;
-  background: #c4ccd0;
+  fill: var(--track);
+  background: var(--track);
 }
 .cron-optimization-legend .after {
   background: var(--brand);
@@ -2720,8 +2786,8 @@ dialog.app-dialog::backdrop {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
-  background: white;
-  color: var(--ink2);
+  background: var(--surface);
+  color: var(--ink-2);
   cursor: pointer;
 }
 .timing-stage-tabs button[aria-selected="true"] {
@@ -2768,8 +2834,8 @@ dialog.app-dialog::backdrop {
   box-shadow: 0 2px 6px #0002;
 }
 .stock-delete:hover {
-  color: #b42318;
-  background: #fff1f0;
+  color: var(--block-fg);
+  background: var(--block-bg);
 }
 .stock-delete:disabled {
   opacity: 0.5;
@@ -2798,7 +2864,7 @@ dialog.app-dialog::backdrop {
 .regenerate-fill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: #cceadd;
+  background: var(--progress);
   transition: width 1s linear;
   z-index: -1;
 }
@@ -3052,7 +3118,7 @@ dialog.app-dialog::backdrop {
 }
 .kantor-dir-btn:hover {
   border-color: var(--control);
-  background: #f8faf8;
+  background: var(--surface-2);
 }
 .kantor-dir-btn > span:first-child {
   grid-area: name;
