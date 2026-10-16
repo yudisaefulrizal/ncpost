@@ -161,8 +161,10 @@ memanggil karyawan **Jurnalis**: ia memilih **satu** berita yang paling baru
 terbit saat itu sesuai tema, hanya dari domain sumber rujukan dan belum pernah
 dipakai, mencatat link-nya di tabel berita terpakai (`news_lab_links`), lalu
 menulis artikel final dengan prompt lab. Prompt lab bisa memakai
-`{{link_berita}}` dan `{{konteks}}` (tema); baris Sumber artikel wajib memuat
-link itu. Artikel final dipakai apa adanya oleh tahap produksi berikutnya.
+`{{link_berita}}` dan `{{konteks}}` (tema). Backend selalu menambahkan format
+Markdown wajib (`LAB_NEWS_FORMAT`: `# Judul`, `## Heading`, paragraf, `Sumber:
+[Nama media], [link berita]`, `Tag:`); jumlah paragraf mengikuti prompt lab, dan
+baris Sumber artikel wajib memuat link itu. Artikel final dipakai apa adanya oleh tahap produksi berikutnya.
 Percobaan ulang artikel memakai link yang sama. Artefak Jurnalis tersimpan di
 `output/berita/<id>/<percobaan>/jurnalis/`.
 

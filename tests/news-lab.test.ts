@@ -11,6 +11,7 @@ import {
 } from "../src/server/news-lab";
 import {
   configuredArticlePrompt,
+  LAB_NEWS_FORMAT,
   normalizeArticleConfig,
 } from "../src/server/content-contract";
 import {
@@ -220,6 +221,11 @@ it("sumber Lab Berita wajib memilih lab dan menyisipkan link ke prompt", () => {
   );
   expect(prompt).toContain("Baca https://a.com/x");
   expect(prompt).toContain("baris Sumber:\nhttps://a.com/x");
+  expect(prompt).toContain(`Kontrak struktur hasil:\n${LAB_NEWS_FORMAT}`);
+  expect(LAB_NEWS_FORMAT).toContain("Sumber: [Nama media], [link berita]");
+  expect(LAB_NEWS_FORMAT).toContain("Hanya paragraf 1 yang memakai heading");
+  expect(LAB_NEWS_FORMAT).toContain("maksimal lima tag");
+  expect(LAB_NEWS_FORMAT).toContain("Tampilkan hanya artikel final");
   expect(citesLink("Media https://www.a.com/x/", "https://a.com/x")).toBe(true);
   expect(citesLink("Media https://a.com/y", "https://a.com/x")).toBe(false);
 });

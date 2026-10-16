@@ -383,6 +383,31 @@ export function researchErrors(
   return errors;
 }
 
+/** Format wajib artikel Lab Berita; selalu ditambahkan backend ke prompt lab. */
+export const LAB_NEWS_FORMAT = `Format hasil wajib (Markdown):
+
+\`\`\`markdown
+# [Judul yang relevan dan tidak sensasional]
+
+## [Judul yang relevan dan tidak sensasional]
+
+[Paragraf 1]
+
+[Paragraf 2]
+
+[Paragraf ...]
+
+Sumber: [Nama media], [link berita]
+
+Tag: tag pertama, tag kedua, tag ketiga
+\`\`\`
+
+- Jumlah paragraf mengikuti prompt.
+- Hanya paragraf 1 yang memakai heading (\`## \`), isinya identik dengan judul utama; paragraf berikutnya langsung berupa teks tanpa heading.
+- Baris \`Sumber:\` diletakkan setelah seluruh isi; \`Tag:\` diletakkan paling akhir, maksimal lima tag.
+- Jangan menaruh atribusi, URL, atau tag di dalam paragraf isi.
+- Tampilkan hanya artikel final: judul, heading, paragraf, baris Sumber, lalu Tag. Jangan menampilkan proses berpikir, rencana internal, nama skill, atau komentar teknis.`;
+
 export function configuredArticlePrompt(
   template: string,
   config: ArticleConfig,
@@ -403,7 +428,9 @@ export function configuredArticlePrompt(
   );
   const contract = quote
     ? "Hasil hanya satu paragraf isi tanpa judul atau metadata."
-    : `Hasil: # Judul, satu ## Heading bila relevan, paragraf isi dipisahkan baris kosong, Sumber: keterangan sumber bila tersedia, lalu Tag: tag dipisahkan koma bila tersedia.${config.paragraphCount !== null ? ` Jumlah isi tepat ${config.paragraphCount} paragraf.` : " Jumlah paragraf mengikuti prompt."}`;
+    : config.source === "lab"
+      ? LAB_NEWS_FORMAT
+      : `Hasil: # Judul, satu ## Heading bila relevan, paragraf isi dipisahkan baris kosong, Sumber: keterangan sumber bila tersedia, lalu Tag: tag dipisahkan koma bila tersedia.${config.paragraphCount !== null ? ` Jumlah isi tepat ${config.paragraphCount} paragraf.` : " Jumlah paragraf mengikuti prompt."}`;
   // Ketentuan riset hanya berlaku bila diaktifkan di Konfigurasi artikel.
   const rules =
     config.source === "web" && config.research
