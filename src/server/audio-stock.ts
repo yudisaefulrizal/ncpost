@@ -100,9 +100,24 @@ export async function convertAudioDownload(
     );
   }
 }
-export async function createAudioZip(rows: AudioStock[], destination: string) {
-  const eligible = rows.filter((row) => audioDownloadName(row.text));
-  if (!eligible.length)
+// File unik yang masuk ZIP: teks lebih dari 230 karakter dilewati dan narasi
+// identik berbagi satu entri; jangan tambahkan pengenal ke nama file.
+export function audioZipEntries(rows: AudioStock[]) {
+  const entries = new Map<string, AudioStock>();
+  for (const row of rows) {
+    const name = audioDownloadName(row.text);
+    if (name && !entries.has(name)) entries.set(name, row);
+  }
+  return [...entries].map(([name, row]) => ({ name, row }));
+}
+// Audio yang gagal dikonversi dilewati dan dilaporkan, tidak menggagalkan ZIP.
+export async function createAudioZip(
+  rows: AudioStock[],
+  destination: string,
+  onProgress?: (done: number, failed: readonly string[]) => void,
+) {
+  const entries = audioZipEntries(rows);
+  if (!entries.length)
     throw Error(
       "Tidak ada audio dengan teks maksimal 230 karakter untuk diunduh",
     );
@@ -111,25 +126,30 @@ export async function createAudioZip(rows: AudioStock[], destination: string) {
   );
   try {
     const files: string[] = [];
-    const used = new Set<string>();
-    for (const row of eligible) {
-      const source = audioStockFile(row.file);
-      const name = audioDownloadName(row.text);
-      if (!name) continue;
-      const relative = name;
-      // Identical narration filenames share one entry; do not add identifiers.
-      if (used.has(relative)) continue;
-      used.add(relative);
-      await convertAudioDownload(source, path.join(stage, relative));
-      files.push(relative);
+    const failed: string[] = [];
+    for (const { name, row } of entries) {
+      try {
+        const source = audioStockFile(row.file);
+        await convertAudioDownload(source, path.join(stage, name));
+        files.push(name);
+      } catch (error) {
+        // File hilang dilewati; path di luar kolam audio tetap ditolak.
+        if ((error as Error).message === "Path aset ditolak") throw error;
+        failed.push(name);
+      }
+      onProgress?.(files.length + failed.length, failed);
     }
+    if (!files.length)
+      throw Error(
+        "Semua audio gagal dikonversi ke WAV; periksa audio dan ffmpeg di server",
+      );
     await new Promise<void>((resolve, reject) => {
       const child = spawn("zip", ["-q", destination, "-@"], {
         cwd: stage,
         shell: false,
         stdio: ["pipe", "ignore", "ignore"],
       });
-      const timer = setTimeout(() => child.kill("SIGKILL"), 120000);
+      const timer = setTimeout(() => child.kill("SIGKILL"), 30 * 60 * 1000);
       child.on("error", () => {
         clearTimeout(timer);
         reject(
@@ -143,6 +163,7 @@ export async function createAudioZip(rows: AudioStock[], destination: string) {
       child.stdin.on("error", () => {});
       child.stdin.end(files.join("\n") + "\n");
     });
+    return { files: files.length, failed };
   } finally {
     await rm(stage, { recursive: true, force: true });
   }

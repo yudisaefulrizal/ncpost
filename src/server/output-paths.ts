@@ -27,6 +27,7 @@ const RESERVED = new Set([
   "stock",
   "stock-audio",
   "stock-video",
+  "audio-download",
   "media-backups",
   "public",
   "cache",

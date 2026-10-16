@@ -2,10 +2,15 @@ import {
   listAudioStock,
   filterAudioStock,
   audioStockFile,
-  createAudioZip,
   audioDownloadName,
   convertAudioDownload,
 } from "./audio-stock";
+import {
+  audioZipFile,
+  audioZipStatus,
+  clearAudioZips,
+  startAudioZip,
+} from "./audio-zip-job";
 import os from "node:os";
 import { mkdirSync } from "node:fs";
 import {
@@ -93,6 +98,8 @@ app.disable("x-powered-by");
 // body menang, jadi ini harus dipasang sebelum parser umum.
 app.use("/api/chapters/import", express.json({ limit: "512kb" }));
 app.use("/api/lab", express.json({ limit: "256kb" }));
+// Daftar ID pilihan bisa ribuan.
+app.use("/api/audio-stock/download", express.json({ limit: "1mb" }));
 app.use(express.json({ limit: "64kb" }));
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -202,19 +209,17 @@ app.post("/api/audio-stock/download", async (req, res) => {
     rows = rows.filter((row) => ids.has(row.id));
   }
   if (!rows.length) throw Error("Tidak ada audio untuk diunduh");
-  const { mkdtemp, rm } = await import("node:fs/promises");
-  const temporary = await mkdtemp(path.join(os.tmpdir(), "ncpost-audio-"));
-  try {
-    const archive = path.join(temporary, "stok-audio.zip");
-    await createAudioZip(rows, archive);
-    await new Promise<void>((resolve, reject) =>
-      res.download(archive, "stok-audio.zip", (error) =>
-        error ? reject(error) : resolve(),
-      ),
-    );
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+  res.status(202).json(startAudioZip(rows));
+});
+app.get("/api/audio-stock/download", (_, res) => res.json(audioZipStatus()));
+app.get("/api/audio-stock/download/file", (_, res) => {
+  const job = audioZipStatus();
+  if (job?.status !== "done")
+    return void res
+      .status(404)
+      .json({ error: "ZIP audio belum siap atau sudah kedaluwarsa" });
+  res.set("Cache-Control", "private, no-store");
+  res.download(audioZipFile(job.id), "stok-audio.zip");
 });
 app.get("/api/voices", async (_, res) => res.json(await listVoices(store.db)));
 app.post("/api/voices", async (req, res) =>
@@ -1056,6 +1061,7 @@ app.use(
 const server = app.listen(8072, "127.0.0.1", async () => {
   store = new Store();
   configureMediaStock(store.db);
+  await clearAudioZips();
   if (process.env.NODE_ENV !== "production") {
     const { createServer } = await import("vite");
     vite = await createServer({

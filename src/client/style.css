@@ -2910,6 +2910,9 @@ dialog.app-dialog::backdrop {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.audio-zip-bar {
+  flex: 1 1 100%;
+}
 /* Halaman Kantor (diorama 3D) */
 .kantor {
   display: flex;

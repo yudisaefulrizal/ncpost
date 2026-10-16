@@ -9,6 +9,24 @@ type Audio = {
   voiceName: string;
   url: string;
 };
+type ZipJob = {
+  id: string;
+  status: "running" | "done" | "failed";
+  done: number;
+  total: number;
+  failed: string[];
+  error?: string;
+  size?: number;
+  expiresAt?: number;
+};
+const fileSize = (size: number) => {
+  const gb = size >= 1024 ** 3;
+  return (
+    (size / 1024 ** (gb ? 3 : 2)).toLocaleString("id-ID", {
+      maximumFractionDigits: 1,
+    }) + (gb ? " GB" : " MB")
+  );
+};
 export function AudioStockPage() {
   const [items, setItems] = useState<Audio[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +36,7 @@ export function AudioStockPage() {
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [job, setJob] = useState<ZipJob | null>(null);
   const load = async () => {
     setLoading(true);
     setError("");
@@ -31,7 +50,28 @@ export function AudioStockPage() {
   };
   useEffect(() => {
     void load();
+    // ZIP yang disiapkan sebelumnya tetap bisa diunduh setelah tab ditutup.
+    api("/audio-stock/download", "GET", undefined, null)
+      .then(setJob)
+      .catch(() => {});
   }, []);
+  useEffect(() => {
+    if (job?.status !== "running") return;
+    const timer = setTimeout(() => {
+      api("/audio-stock/download", "GET", undefined, null)
+        .then((next: ZipJob | null) => {
+          if (!next)
+            setError(
+              "Server dimulai ulang sebelum ZIP selesai. Klik download lagi.",
+            );
+          setJob(next);
+        })
+        // Gangguan jaringan sesaat: coba lagi pada putaran berikutnya.
+        .catch(() => setJob({ ...job }));
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [job]);
+  const running = job?.status === "running";
   const filtered = items.filter(
     (row) =>
       (!provider || row.provider === provider) &&
@@ -56,28 +96,19 @@ export function AudioStockPage() {
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/audio-stock/download", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q,
-          provider,
-          voice,
-          ...(onlySelected ? { ids: chosen.map((row) => row.id) } : {}),
-        }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw Error(data.error || "Download audio gagal");
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "stok-audio.zip";
-      document.body.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setJob(
+        await api(
+          "/audio-stock/download",
+          "POST",
+          {
+            q,
+            provider,
+            voice,
+            ...(onlySelected ? { ids: chosen.map((row) => row.id) } : {}),
+          },
+          null,
+        ),
+      );
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -146,14 +177,14 @@ export function AudioStockPage() {
       <div className="toolbar">
         <button
           className="btn btn-pri"
-          disabled={busy || !chosen.length}
+          disabled={busy || running || !chosen.length}
           onClick={() => void download(true)}
         >
           Download terpilih ({chosen.length})
         </button>
         <button
           className="btn btn-sec"
-          disabled={busy || !downloadable.length}
+          disabled={busy || running || !downloadable.length}
           onClick={() => void download(false)}
         >
           Download semua hasil filter ({downloadable.length})
@@ -165,8 +196,57 @@ export function AudioStockPage() {
         >
           Batal pilih
         </button>
-        {busy && <span role="status">Menyiapkan ZIP…</span>}
       </div>
+      {running && (
+        <div className="banner t-run" role="status">
+          <span>
+            Menyiapkan ZIP: {job.done}/{job.total} audio dikonversi. Halaman
+            boleh ditutup; ZIP tetap disiapkan di server.
+          </span>
+          <div className="bar audio-zip-bar">
+            <span
+              className="bg-ok"
+              style={{ width: `${(job.done / job.total) * 100}%` }}
+            ></span>
+          </div>
+        </div>
+      )}
+      {job?.status === "done" && (
+        <div className="banner t-ok" role="status">
+          <span>
+            ZIP siap: {job.total - job.failed.length} file WAV ·{" "}
+            {fileSize(job.size ?? 0)} · tersedia sampai{" "}
+            {new Date(job.expiresAt ?? 0).toLocaleTimeString("id-ID", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+          <a
+            className="btn btn-pri btn-sm"
+            href="/api/audio-stock/download/file"
+            download
+          >
+            Unduh ZIP
+          </a>
+        </div>
+      )}
+      {job?.status === "failed" && (
+        <p className="warn" role="alert">
+          {job.error}
+        </p>
+      )}
+      {!!job?.failed.length && (
+        <details>
+          <summary className="warn">
+            {job.failed.length} audio gagal dikonversi dan dilewati
+          </summary>
+          <ul className="small">
+            {job.failed.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </details>
+      )}
       <small className="muted">
         Download dalam format WAV, PCM 16-bit, mono, 44,1 kHz. Nama file memakai
         teks narasi. Audio dengan teks lebih dari 230 karakter tidak ikut

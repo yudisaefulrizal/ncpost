@@ -10,6 +10,12 @@ import {
   createAudioZip,
   type AudioStock,
 } from "../src/server/audio-stock";
+import {
+  audioZipFile,
+  clearAudioZips,
+  startAudioZip,
+} from "../src/server/audio-zip-job";
+import { existsSync } from "node:fs";
 import { outputRoot } from "../src/server/output-paths";
 import { ROOT } from "../src/server/config";
 const rows: AudioStock[] = [
@@ -109,6 +115,73 @@ it("creates a ZIP with original filenames and rejects files outside the audio po
   } finally {
     await rm(folder, { recursive: true, force: true });
     await rm(temporary, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+  }
+});
+
+async function sineAudio(folder: string) {
+  await mkdir(folder, { recursive: true });
+  const file = path.join(folder, "voice__hello.mp3");
+  await promisify(execFile)("ffmpeg", [
+    "-y",
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=440:duration=0.2",
+    file,
+  ]);
+  return path.relative(ROOT, file);
+}
+it("skips audio that fails to convert and reports it", async () => {
+  vi.stubEnv("NCPOST_TEST", "true");
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "ncpost-zip-test-"));
+  const folder = path.join(outputRoot(), "stock-audio", "zip-skip-test");
+  try {
+    const file = await sineAudio(folder);
+    const zip = path.join(temporary, "audio.zip");
+    const progress: number[] = [];
+    const result = await createAudioZip(
+      [
+        { ...rows[0], file },
+        { ...rows[1], file: path.relative(ROOT, path.join(folder, "x.mp3")) },
+      ],
+      zip,
+      (done) => progress.push(done),
+    );
+    expect(result).toEqual({ files: 1, failed: ["kalimat-kedua.wav"] });
+    expect(progress).toEqual([1, 2]);
+    const { stdout } = await promisify(execFile)("unzip", ["-Z1", zip]);
+    expect(stdout.trim()).toBe("hello-world.wav");
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+    await rm(temporary, { recursive: true, force: true });
+    vi.unstubAllEnvs();
+  }
+});
+it("prepares one background ZIP at a time and keeps it for download", async () => {
+  vi.stubEnv("NCPOST_TEST", "true");
+  const folder = path.join(outputRoot(), "stock-audio", "zip-job-test");
+  try {
+    const file = await sineAudio(folder);
+    const job = startAudioZip([{ ...rows[0], file }]);
+    expect(job).toMatchObject({ status: "running", done: 0, total: 1 });
+    expect(startAudioZip([{ ...rows[1], file }])).toBe(job);
+    await vi.waitFor(() => expect(job.status).toBe("done"), {
+      timeout: 10000,
+    });
+    expect(job.done).toBe(1);
+    expect(job.size).toBeGreaterThan(0);
+    expect(existsSync(audioZipFile(job.id))).toBe(true);
+    await clearAudioZips();
+    expect(existsSync(audioZipFile(job.id))).toBe(false);
+    expect(() =>
+      startAudioZip([{ ...rows[0], text: "x".repeat(231) }]),
+    ).toThrow("Tidak ada audio dengan teks maksimal 230 karakter");
+  } finally {
+    await clearAudioZips();
+    await rm(folder, { recursive: true, force: true });
     vi.unstubAllEnvs();
   }
 });
