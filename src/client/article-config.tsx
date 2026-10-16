@@ -69,11 +69,14 @@ export function ArticleConfigFields({
             }
           >
             <option value="">Pilih lab…</option>
-            {labs?.map((lab) => (
-              <option key={lab.id} value={lab.id}>
-                {lab.theme}
-              </option>
-            ))}
+            {labs
+              ?.filter((lab) => lab.enabled || lab.id === value.labId)
+              .map((lab) => (
+                <option key={lab.id} value={lab.id}>
+                  {lab.theme}
+                  {lab.enabled ? "" : " (nonaktif)"}
+                </option>
+              ))}
           </select>
           {labs && !labs.length && (
             <small className="muted">

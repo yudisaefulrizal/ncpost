@@ -38,9 +38,20 @@ const store = () =>
     fail: vi.fn(),
   }) as unknown as NewsStore;
 const LINK = "https://example.com/tekno/berita-1";
+const labRow = (enabled = 1) => ({
+  id: 5,
+  theme: "Teknologi",
+  sources: '["https://example.com"]',
+  enabled,
+  test_state: null,
+  state: "idle",
+  error: null,
+  last_run_at: null,
+});
 const labType = (
   links: { url: string }[],
   prompt = "Tulis berita {{link_berita}}.",
+  lab = labRow(),
 ) => {
   const s = store();
   vi.mocked(s.db.query).mockImplementation(
@@ -76,9 +87,13 @@ const labType = (
             ]
           : sql.includes("lab_prompts")
             ? [{ id: 1, kind: "article", reference_key: null, prompt }]
-            : sql.startsWith("SELECT url FROM news_lab_links")
+            : sql.startsWith("SELECT url FROM news_lab_links WHERE news_id")
               ? links
-              : [],
+              : sql.startsWith("SELECT * FROM news_labs WHERE id")
+                ? [lab]
+                : sql.startsWith("INSERT IGNORE INTO news_lab_links")
+                  ? { affectedRows: 1 }
+                  : [],
       ] as any,
   );
   return s;
@@ -133,14 +148,29 @@ it("artikel lab yang tidak mengutip link Jurnalis ditolak", async () => {
     expect.stringContaining("link berita pilihan Jurnalis"),
   );
 });
-it("lab tanpa berita pilihan Jurnalis gagal tanpa memanggil provider", async () => {
+it("produksi memanggil Jurnalis untuk berita terbaru saat itu lalu menulisnya", async () => {
+  const article = `# Judul\n\nIsi berita.\n\nSumber: ${LINK}\n\nTag: tekno`;
+  vi.mocked(runCli)
+    .mockResolvedValueOnce(searched(JSON.stringify({ links: [LINK] })))
+    .mockResolvedValueOnce(searched(article));
   const s = labType([]);
   await runNewsJob(s, job);
-  expect(runCli).not.toHaveBeenCalled();
-  expect(s.fail).toHaveBeenCalledWith(
-    job,
-    expect.stringContaining("Belum ada berita pilihan Jurnalis"),
+  expect(s.fail).not.toHaveBeenCalled();
+  const calls = vi.mocked(runCli).mock.calls;
+  expect(calls[0][2]).toContain("paling baru terbit saat ini");
+  expect(calls[0][3]).toBe(path.join(dir, "jurnalis"));
+  expect(calls[1][2]).toContain(`Tulis berita ${LINK}.`);
+  expect(vi.mocked(s.db.query)).toHaveBeenCalledWith(
+    expect.stringContaining("INSERT IGNORE INTO news_lab_links"),
+    [5, LINK, expect.any(String), expect.any(Number), job.id],
   );
+  expect(s.complete).toHaveBeenCalled();
+});
+it("lab nonaktif tidak dipanggil dan artikel gagal tanpa memanggil provider", async () => {
+  const s = labType([], undefined, labRow(0));
+  await runNewsJob(s, job);
+  expect(runCli).not.toHaveBeenCalled();
+  expect(s.fail).toHaveBeenCalledWith(job, expect.stringContaining("nonaktif"));
 });
 it("provider gagal dilaporkan tanpa retry diam-diam atau hasil artikel palsu", async () => {
   vi.mocked(runCli).mockRejectedValue(Error("Provider timeout"));

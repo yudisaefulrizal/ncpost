@@ -2,6 +2,7 @@ import { generateConfiguredArticle } from "./configured-article";
 import { finishProcessTiming } from "../server/process-timing";
 import { NewsMediaStore } from "../server/news-media-store";
 import { NewsLabStore } from "../server/news-lab";
+import { newsForArticle } from "./jurnalis";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../server/config";
@@ -79,8 +80,8 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
       store.db,
       j.content_type_id ?? 2,
     );
-    // Berita kini selalu lewat Konfigurasi artikel; sumber Lab Berita memakai
-    // link pilihan Jurnalis (bukan lagi daftar situs tetap).
+    // Berita kini selalu lewat Konfigurasi artikel; sumber Lab Berita memanggil
+    // Jurnalis untuk berita terbaru saat ini (bukan lagi daftar situs tetap).
     if (!settings.articleConfig)
       throw Error(
         "Aktifkan Konfigurasi artikel dan pilih Lab Berita di Pengaturan Berita",
@@ -88,10 +89,13 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
     const config = settings.articleConfig;
     const link =
       config.source === "lab"
-        ? await new NewsLabStore(store.db).assign(config.labId!, j.id)
+        ? await newsForArticle(
+            new NewsLabStore(store.db),
+            config.labId!,
+            j.id,
+            path.join(dir, "jurnalis"),
+          )
         : "";
-    if (config.source === "lab" && !link)
-      throw Error("Belum ada berita pilihan Jurnalis di Lab Berita ini");
     const generated = await generateConfiguredArticle(
       store.db,
       settings,

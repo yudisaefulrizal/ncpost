@@ -1,38 +1,43 @@
-// Lab Berita: tiap lab punya tema global, daftar link sumber rujukan, dan target
-// berita per hari. Jurnalis (worker) mengerjakan semua lab bergiliran; link yang
-// dipilihnya dicatat di news_lab_links dan tidak pernah dipakai dua kali.
-// Produksi jenis konten Berita mengambil link pilihan Jurnalis dari lab-nya.
+// Lab Berita: tiap lab punya tema global dan daftar link sumber rujukan. Jurnalis
+// tidak menimbun stok: ia baru mencari berita terbaru saat produksi jenis konten
+// yang memakai lab ini memanggilnya (jadwal milik jenis konten), atau saat Tes.
+// Link yang dipakai dicatat di news_lab_links dan tidak pernah dipakai dua kali.
 import { createHash } from "node:crypto";
 import type mysql from "mysql2/promise";
 import { normalizeDomain } from "./content-contract";
 import { newsSourceKey } from "./news";
-import { wibDayStart } from "./office";
 
 export type NewsLabInput = {
   theme: string;
   sources: string[];
-  dailyTarget: number;
+};
+/** Hasil Tes: link yang ditemukan hanya ditampilkan, tidak dicatat. */
+export type NewsLabTest = {
+  state: "queued" | "running" | "done" | "failed";
+  links: string[];
+  error: string | null;
+  at: number | null;
 };
 export type NewsLab = NewsLabInput & {
   id: number;
+  enabled: boolean;
+  test: NewsLabTest | null;
+  // Aktivitas Jurnalis terakhir untuk lab ini (dipanggil produksi).
   state: "idle" | "running" | "failed";
   error: string | null;
   lastRunAt: number | null;
-  today: number;
-  pending: number;
 };
 export type NewsLabLink = {
   id: number;
   labId: number;
-  theme: string | null;
   url: string;
   usedAt: number;
   newsId: number | null;
 };
-// Jurnalis yang gagal menunggu sebentar sebelum mencoba lab itu lagi; job
-// "running" yang tidak selesai dalam batas ini dianggap terhenti.
-export const JURNALIS_RETRY_MS = 30 * 60000;
+// Tes "running" yang tidak selesai dalam batas ini dianggap terhenti.
 export const JURNALIS_STALE_MS = 20 * 60000;
+// Jumlah kandidat terbaru yang diminta; yang pertama valid dipakai produksi.
+export const JURNALIS_CANDIDATES = 3;
 
 export function normalizeNewsLab(value: any): NewsLabInput {
   const theme = typeof value?.theme === "string" ? value.theme.trim() : "";
@@ -50,16 +55,16 @@ export function normalizeNewsLab(value: any): NewsLabInput {
     } catch {
       throw Error(`Sumber "${text.slice(0, 60)}" bukan link yang valid`);
     }
-    if (!["http:", "https:"].includes(url.protocol) || !normalizeDomain(url.hostname))
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      !normalizeDomain(url.hostname)
+    )
       throw Error(`Sumber "${text.slice(0, 60)}" bukan link yang valid`);
     const href = url.href.replace(/\/$/, "");
     if (!sources.includes(href)) sources.push(href);
   }
   if (!sources.length) throw Error("Isi minimal satu link sumber rujukan");
-  const target = value.dailyTarget;
-  if (!Number.isSafeInteger(target) || target < 0 || target > 50)
-    throw Error("Target per hari harus bilangan bulat 0–50");
-  return { theme, sources, dailyTarget: target };
+  return { theme, sources };
 }
 
 /** Domain sumber rujukan; link berita wajib berasal dari salah satunya. */
@@ -105,15 +110,15 @@ export function acceptLinks(
 
 export function jurnalisPrompt(
   lab: Pick<NewsLab, "theme" | "sources">,
-  count: number,
   used: string[],
+  count = JURNALIS_CANDIDATES,
 ) {
   return `Kamu adalah Jurnalis NC Post. Tema liputan: ${lab.theme}.
 
-Cari berita terbaru yang sesuai tema, hanya dari sumber rujukan berikut:
+Cari berita yang paling baru terbit saat ini dan sesuai tema, hanya dari sumber rujukan berikut:
 ${lab.sources.map((s) => `- ${s}`).join("\n")}
 
-Pilih ${count} berita berbeda yang paling layak diangkat menjadi konten. Setiap pilihan wajib berupa link lengkap halaman artikel berita (HTTPS, bukan halaman depan, kategori, atau pencarian) dari domain sumber di atas, dan sudah kamu buka untuk memastikan isinya sesuai tema.
+Pilih ${count} berita berbeda, urutkan dari yang paling baru terbit. Setiap pilihan wajib berupa link lengkap halaman artikel berita (HTTPS, bukan halaman depan, kategori, atau pencarian) dari domain sumber di atas, dan sudah kamu buka untuk memastikan isinya sesuai tema serta waktu terbitnya.
 ${used.length ? `\nJangan memilih link berikut karena sudah pernah dipakai:\n${used.map((u) => `- ${u}`).join("\n")}\n` : ""}
 Kembalikan hanya JSON: {"links": ["https://..."]}`;
 }
@@ -122,44 +127,56 @@ const toLab = (r: any): NewsLab => ({
   id: r.id,
   theme: r.theme,
   sources: JSON.parse(r.sources || "[]"),
-  dailyTarget: r.daily_target,
+  enabled: !!r.enabled,
+  test: r.test_state
+    ? {
+        state: r.test_state,
+        ...{ links: [], error: null },
+        ...(r.test_result ? JSON.parse(r.test_result) : {}),
+        at: r.test_at === null ? null : Number(r.test_at),
+      }
+    : null,
   state: r.state,
   error: r.error ?? null,
   lastRunAt: r.last_run_at === null ? null : Number(r.last_run_at),
-  today: Number(r.today ?? 0),
-  pending: Number(r.pending ?? 0),
 });
 
 export class NewsLabStore {
   constructor(readonly db: Pick<mysql.Pool, "query">) {}
-  async list(now = Date.now()): Promise<NewsLab[]> {
+  async list(): Promise<NewsLab[]> {
     const [rows]: any = await this.db.query(
-      `SELECT l.*,
-        (SELECT COUNT(*) FROM news_lab_links k WHERE k.lab_id=l.id AND k.used_at>=?) AS today,
-        (SELECT COUNT(*) FROM news_lab_links k WHERE k.lab_id=l.id AND k.news_id IS NULL) AS pending
-       FROM news_labs l ORDER BY l.id`,
-      [wibDayStart(now)],
+      "SELECT * FROM news_labs ORDER BY id",
     );
     return rows.map(toLab);
   }
   async get(id: number) {
-    const lab = (await this.list()).find((l) => l.id === id);
-    if (!lab) throw Error("Lab Berita tidak ditemukan");
-    return lab;
+    const [rows]: any = await this.db.query(
+      "SELECT * FROM news_labs WHERE id=?",
+      [id],
+    );
+    if (!rows.length) throw Error("Lab Berita tidak ditemukan");
+    return toLab(rows[0]);
   }
   async create(input: unknown) {
     const lab = normalizeNewsLab(input);
     const [r]: any = await this.db.query(
-      "INSERT INTO news_labs(theme,sources,daily_target) VALUES(?,?,?)",
-      [lab.theme, JSON.stringify(lab.sources), lab.dailyTarget],
+      "INSERT INTO news_labs(theme,sources) VALUES(?,?)",
+      [lab.theme, JSON.stringify(lab.sources)],
     );
     return r.insertId as number;
   }
   async update(id: number, input: unknown) {
     const lab = normalizeNewsLab(input);
     const [r]: any = await this.db.query(
-      "UPDATE news_labs SET theme=?,sources=?,daily_target=?,error=NULL,state=IF(state='failed','idle',state) WHERE id=?",
-      [lab.theme, JSON.stringify(lab.sources), lab.dailyTarget, id],
+      "UPDATE news_labs SET theme=?,sources=? WHERE id=?",
+      [lab.theme, JSON.stringify(lab.sources), id],
+    );
+    if (!r.affectedRows) throw Error("Lab Berita tidak ditemukan");
+  }
+  async setEnabled(id: number, enabled: boolean) {
+    const [r]: any = await this.db.query(
+      "UPDATE news_labs SET enabled=? WHERE id=?",
+      [enabled ? 1 : 0, id],
     );
     if (!r.affectedRows) throw Error("Lab Berita tidak ditemukan");
   }
@@ -167,41 +184,12 @@ export class NewsLabStore {
   async remove(id: number) {
     await this.db.query("DELETE FROM news_labs WHERE id=?", [id]);
   }
-  async links(limit = 200): Promise<NewsLabLink[]> {
-    const [rows]: any = await this.db.query(
-      "SELECT k.id,k.lab_id,l.theme,k.url,k.used_at,k.news_id FROM news_lab_links k LEFT JOIN news_labs l ON l.id=k.lab_id ORDER BY k.id DESC LIMIT ?",
-      [limit],
+  /** Status Jurnalis untuk lab (tampil di Lab Berita dan kantor). */
+  async working(id: number, now = Date.now()) {
+    await this.db.query(
+      "UPDATE news_labs SET state='running',error=NULL,last_run_at=? WHERE id=?",
+      [now, id],
     );
-    return rows.map((r: any) => ({
-      id: r.id,
-      labId: r.lab_id,
-      theme: r.theme ?? null,
-      url: r.url,
-      usedAt: Number(r.used_at),
-      newsId: r.news_id ?? null,
-    }));
-  }
-  /** Lab berikutnya yang belum memenuhi target hari ini, bergiliran. */
-  async due(now = Date.now()) {
-    return (await this.list(now))
-      .filter(
-        (l) =>
-          l.today < l.dailyTarget &&
-          l.sources.length > 0 &&
-          (l.state === "idle" ||
-            (l.state === "failed" &&
-              (l.lastRunAt ?? 0) < now - JURNALIS_RETRY_MS) ||
-            (l.state === "running" &&
-              (l.lastRunAt ?? 0) < now - JURNALIS_STALE_MS)),
-      )
-      .sort((a, b) => (a.lastRunAt ?? 0) - (b.lastRunAt ?? 0))[0];
-  }
-  async start(lab: NewsLab, now = Date.now()) {
-    const [r]: any = await this.db.query(
-      "UPDATE news_labs SET state='running',last_run_at=? WHERE id=? AND state=? AND (last_run_at IS NULL OR last_run_at=?)",
-      [now, lab.id, lab.state, lab.lastRunAt],
-    );
-    return r.affectedRows > 0;
   }
   async finish(id: number, error: string | null) {
     await this.db.query("UPDATE news_labs SET state=?,error=? WHERE id=?", [
@@ -209,6 +197,48 @@ export class NewsLabStore {
       error,
       id,
     ]);
+  }
+  /** Antrekan Tes; dikerjakan Jurnalis di worker secepatnya. */
+  async requestTest(id: number, now = Date.now()) {
+    const [r]: any = await this.db.query(
+      "UPDATE news_labs SET test_state='queued',test_result=NULL,test_at=? WHERE id=? AND (test_state IS NULL OR test_state NOT IN ('queued','running') OR test_at<?)",
+      [now, id, now - JURNALIS_STALE_MS],
+    );
+    if (!r.affectedRows) throw Error("Tes lab ini masih berjalan");
+  }
+  async claimTest(now = Date.now()) {
+    const lab = (await this.list()).find(
+      (l) =>
+        l.test &&
+        (l.test.state === "queued" ||
+          (l.test.state === "running" &&
+            (l.test.at ?? 0) < now - JURNALIS_STALE_MS)),
+    );
+    if (!lab) return null;
+    const [r]: any = await this.db.query(
+      "UPDATE news_labs SET test_state='running',test_at=? WHERE id=? AND test_state=? AND test_at=?",
+      [now, lab.id, lab.test!.state, lab.test!.at],
+    );
+    return r.affectedRows ? lab : null;
+  }
+  async finishTest(id: number, links: string[], error: string | null) {
+    await this.db.query(
+      "UPDATE news_labs SET test_state=?,test_result=? WHERE id=?",
+      [error ? "failed" : "done", JSON.stringify({ links, error }), id],
+    );
+  }
+  async links(limit = 200): Promise<NewsLabLink[]> {
+    const [rows]: any = await this.db.query(
+      "SELECT id,lab_id,url,used_at,news_id FROM news_lab_links ORDER BY id DESC LIMIT ?",
+      [limit],
+    );
+    return rows.map((r: any) => ({
+      id: r.id,
+      labId: r.lab_id,
+      url: r.url,
+      usedAt: Number(r.used_at),
+      newsId: r.news_id ?? null,
+    }));
   }
   async usedUrls(limit = 150): Promise<string[]> {
     const [rows]: any = await this.db.query(
@@ -225,40 +255,20 @@ export class NewsLabStore {
     );
     return new Set<string>(rows.map((r: any) => r.url_hash));
   }
-  /** Catat link pilihan Jurnalis; link yang sudah ada dilewati. */
-  async record(labId: number, urls: string[], now = Date.now()) {
-    let added = 0;
-    for (const url of urls) {
-      const [r]: any = await this.db.query(
-        "INSERT IGNORE INTO news_lab_links(lab_id,url,url_hash,used_at) VALUES(?,?,?,?)",
-        [labId, url, linkHash(url), now],
-      );
-      added += r.affectedRows;
-    }
-    return added;
-  }
-  async pending(labId: number) {
+  /** Link yang sudah dipegang artikel ini (percobaan ulang memakai link yang sama). */
+  async held(newsId: number): Promise<string | null> {
     const [rows]: any = await this.db.query(
-      "SELECT COUNT(*) AS n FROM news_lab_links WHERE lab_id=? AND news_id IS NULL",
-      [labId],
+      "SELECT url FROM news_lab_links WHERE news_id=? ORDER BY id LIMIT 1",
+      [newsId],
     );
-    return Number(rows[0]?.n ?? 0);
+    return (rows[0]?.url as string) ?? null;
   }
-  /** Link untuk artikel berita: pakai yang sudah dipegang, atau ambil yang tertua. */
-  async assign(labId: number, newsId: number): Promise<string | null> {
-    const held = async () => {
-      const [rows]: any = await this.db.query(
-        "SELECT url FROM news_lab_links WHERE news_id=? ORDER BY id LIMIT 1",
-        [newsId],
-      );
-      return (rows[0]?.url as string) ?? null;
-    };
-    const current = await held();
-    if (current) return current;
-    await this.db.query(
-      "UPDATE news_lab_links SET news_id=? WHERE lab_id=? AND news_id IS NULL ORDER BY id LIMIT 1",
-      [newsId, labId],
+  /** Catat link yang dipakai artikel; gagal bila link sudah pernah dipakai. */
+  async use(labId: number, url: string, newsId: number, now = Date.now()) {
+    const [r]: any = await this.db.query(
+      "INSERT IGNORE INTO news_lab_links(lab_id,url,url_hash,used_at,news_id) VALUES(?,?,?,?,?)",
+      [labId, url, linkHash(url), now, newsId],
     );
-    return held();
+    if (!r.affectedRows) throw Error("Link berita sudah pernah dipakai");
   }
 }

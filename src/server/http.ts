@@ -301,7 +301,7 @@ app.delete("/api/content-types/:id", async (req, res) => {
   await new ContentTypeStore(store.db).remove(id);
   res.json({ ok: true });
 });
-// Lab Berita: tema, sumber rujukan, target harian Jurnalis, dan link terpakai.
+// Lab Berita: tema, sumber rujukan, status aktif, Tes, dan link terpakai.
 const newsLabId = (value: unknown) => {
   const id = Number(value);
   if (!Number.isSafeInteger(id) || id < 1)
@@ -319,6 +319,19 @@ app.post("/api/news-labs", async (req, res) =>
 );
 app.put("/api/news-labs/:id", async (req, res) => {
   await new NewsLabStore(store.db).update(newsLabId(req.params.id), req.body);
+  res.json({ ok: true });
+});
+app.put("/api/news-labs/:id/enabled", async (req, res) => {
+  if (typeof req.body?.enabled !== "boolean")
+    throw Error("Status aktif tidak valid");
+  await new NewsLabStore(store.db).setEnabled(
+    newsLabId(req.params.id),
+    req.body.enabled,
+  );
+  res.json({ ok: true });
+});
+app.post("/api/news-labs/:id/test", async (req, res) => {
+  await new NewsLabStore(store.db).requestTest(newsLabId(req.params.id));
   res.json({ ok: true });
 });
 app.delete("/api/news-labs/:id", async (req, res) => {

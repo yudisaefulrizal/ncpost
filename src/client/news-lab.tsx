@@ -1,11 +1,12 @@
-// Lab Berita: tema global, link sumber rujukan, dan target harian Jurnalis per
-// lab, plus riwayat link berita yang sudah dipakai (tidak pernah dipakai ulang).
+// Lab Berita: tema global dan link sumber rujukan per lab, plus riwayat link
+// berita yang sudah dipakai (tidak pernah dipakai ulang). Jurnalis mencari berita
+// terbaru saat produksi jenis konten yang memakai lab ini memanggilnya.
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import type { NewsLab, NewsLabLink } from "../server/news-lab";
 
-type Draft = { theme: string; sources: string; dailyTarget: number };
-const empty: Draft = { theme: "", sources: "", dailyTarget: 3 };
+type Draft = { theme: string; sources: string };
+const empty: Draft = { theme: "", sources: "" };
 const when = (ts: number) =>
   new Date(ts).toLocaleString("id-ID", {
     dateStyle: "medium",
@@ -13,12 +14,11 @@ const when = (ts: number) =>
   });
 
 function labState(lab: NewsLab) {
+  if (!lab.enabled) return { tone: "t-block", label: "Nonaktif" };
   if (lab.state === "running")
     return { tone: "t-run", label: "Jurnalis mencari berita" };
   if (lab.state === "failed") return { tone: "t-act", label: "Gagal" };
-  if (lab.today >= lab.dailyTarget)
-    return { tone: "t-ok", label: "Target hari ini tercapai" };
-  return { tone: "t-none", label: "Menunggu giliran" };
+  return { tone: "t-ok", label: "Siap dipanggil" };
 }
 
 export function NewsLabPage() {
@@ -35,10 +35,18 @@ export function NewsLabPage() {
   };
   useEffect(() => {
     void load().catch((e) => setError(e.message));
-    // Status Jurnalis berubah di worker; segarkan berkala.
-    const timer = setInterval(() => void load().catch(() => {}), 15000);
-    return () => clearInterval(timer);
   }, []);
+  // Status Jurnalis berubah di worker; segarkan berkala, lebih sering saat Tes.
+  const testing = labs.some((l) =>
+    ["queued", "running"].includes(l.test?.state ?? ""),
+  );
+  useEffect(() => {
+    const timer = setInterval(
+      () => void load().catch(() => {}),
+      testing ? 5000 : 15000,
+    );
+    return () => clearInterval(timer);
+  }, [testing]);
   const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError("");
@@ -69,9 +77,12 @@ export function NewsLabPage() {
           )}
         </div>
         <p className="muted">
-          Jurnalis mencari berita sesuai tema, hanya dari link sumber rujukan,
-          sampai target per hari tercapai. Jenis konten Berita memilih lab di
-          Pengaturan Berita (Sumber bahan: Lab Berita).
+          Saat produksi jenis konten yang memakai lab ini membuat artikel,
+          Jurnalis mencari berita paling baru saat itu sesuai tema, hanya dari
+          link sumber rujukan. Jadwal dan jumlah produksi diatur di jenis
+          kontennya (Pengaturan Berita, Sumber bahan: Lab Berita). Lab nonaktif
+          tidak bisa dipakai; Tes menampilkan berita terbaru yang ditemukan
+          tanpa mencatatnya.
         </p>
         {error && (
           <p className="warn" role="alert">
@@ -89,7 +100,6 @@ export function NewsLabPage() {
                 {
                   theme: draft.theme,
                   sources: draft.sources.split(/[\s,]+/).filter(Boolean),
-                  dailyTarget: draft.dailyTarget,
                 },
                 null,
               );
@@ -108,19 +118,6 @@ export function NewsLabPage() {
                 placeholder="contoh: Teknologi"
                 value={draft.theme}
                 onChange={(e) => setDraft({ ...draft, theme: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              Target berita per hari
-              <input
-                type="number"
-                min={0}
-                max={50}
-                required
-                value={draft.dailyTarget}
-                onChange={(e) =>
-                  setDraft({ ...draft, dailyTarget: Number(e.target.value) })
-                }
               />
             </label>
           </div>
@@ -156,7 +153,6 @@ export function NewsLabPage() {
               <tr>
                 <th>Tema</th>
                 <th>Sumber</th>
-                <th>Hari ini</th>
                 <th>Status</th>
                 <th>Aksi</th>
               </tr>
@@ -164,70 +160,137 @@ export function NewsLabPage() {
             <tbody>
               {labs.map((lab) => {
                 const st = labState(lab);
+                const test = lab.test;
+                const testBusy = ["queued", "running"].includes(
+                  test?.state ?? "",
+                );
                 return (
-                  <tr key={lab.id}>
-                    <td>{lab.theme}</td>
-                    <td>{lab.sources.length} link</td>
-                    <td>
-                      {lab.today}/{lab.dailyTarget}
-                      {lab.pending > 0 && (
-                        <small className="muted">
-                          {" "}
-                          · {lab.pending} siap diproduksi
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`chip chip-xs ${st.tone}`}>
-                        <i />
-                        {st.label}
-                      </span>
-                      {lab.state === "failed" && lab.error && (
-                        <small className="warn"> {lab.error}</small>
-                      )}
-                    </td>
-                    <td>
-                      <div className="toolbar">
-                        <button
-                          className="btn btn-sm"
-                          disabled={busy}
-                          onClick={() => {
-                            setEditing(lab.id);
-                            setDraft({
-                              theme: lab.theme,
-                              sources: lab.sources.join("\n"),
-                              dailyTarget: lab.dailyTarget,
-                            });
-                          }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-sm"
-                          disabled={busy}
-                          onClick={() =>
-                            confirm(`Hapus lab ${lab.theme}?`) &&
-                            void act(async () => {
-                              await api(
-                                `/news-labs/${lab.id}`,
-                                "DELETE",
-                                undefined,
-                                null,
-                              );
-                              await load();
-                            })
-                          }
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <React.Fragment key={lab.id}>
+                    <tr>
+                      <td>{lab.theme}</td>
+                      <td>{lab.sources.length} link</td>
+                      <td>
+                        <span className={`chip chip-xs ${st.tone}`}>
+                          <i />
+                          {st.label}
+                        </span>
+                        {lab.state === "failed" && lab.error && (
+                          <small className="warn"> {lab.error}</small>
+                        )}
+                      </td>
+                      <td>
+                        <div className="toolbar">
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy}
+                            onClick={() => {
+                              setEditing(lab.id);
+                              setDraft({
+                                theme: lab.theme,
+                                sources: lab.sources.join("\n"),
+                              });
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy}
+                            onClick={() =>
+                              void act(async () => {
+                                await api(
+                                  `/news-labs/${lab.id}/enabled`,
+                                  "PUT",
+                                  { enabled: !lab.enabled },
+                                  null,
+                                );
+                                await load();
+                              })
+                            }
+                          >
+                            {lab.enabled ? "Nonaktifkan" : "Aktifkan"}
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy || testBusy}
+                            onClick={() =>
+                              void act(async () => {
+                                await api(
+                                  `/news-labs/${lab.id}/test`,
+                                  "POST",
+                                  undefined,
+                                  null,
+                                );
+                                await load();
+                              })
+                            }
+                          >
+                            {testBusy ? "Menguji…" : "Tes"}
+                          </button>
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy}
+                            onClick={() =>
+                              confirm(`Hapus lab ${lab.theme}?`) &&
+                              void act(async () => {
+                                await api(
+                                  `/news-labs/${lab.id}`,
+                                  "DELETE",
+                                  undefined,
+                                  null,
+                                );
+                                await load();
+                              })
+                            }
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {test && (
+                      <tr>
+                        <td colSpan={4}>
+                          <div className="stack">
+                            <small className="muted">
+                              Tes
+                              {test.at ? ` · ${when(test.at)}` : ""} ·{" "}
+                              {test.state === "queued"
+                                ? "menunggu Jurnalis"
+                                : test.state === "running"
+                                  ? "Jurnalis mencari berita…"
+                                  : test.state === "failed"
+                                    ? "gagal"
+                                    : `${test.links.length} berita ditemukan (tidak dicatat)`}
+                            </small>
+                            {test.error && (
+                              <small className="warn">{test.error}</small>
+                            )}
+                            {test.links.length > 0 && (
+                              <ol>
+                                {test.links.map((url) => (
+                                  <li key={url}>
+                                    <a
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      {url}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ol>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
               {!labs.length && (
                 <tr>
-                  <td colSpan={5}>Belum ada lab. Tambahkan lab untuk mulai.</td>
+                  <td colSpan={4}>Belum ada lab. Tambahkan lab untuk mulai.</td>
                 </tr>
               )}
             </tbody>

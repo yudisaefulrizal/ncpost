@@ -32,24 +32,32 @@ export type OfficeLab = {
   state: "idle" | "running" | "failed";
   error: string | null;
   lastRunAt: number | null;
+  test: { state: string; at: number | null } | null;
 };
 export const labJobs = (labs: OfficeLab[]): OfficeJob[] =>
-  labs
-    .filter((l) => l.state !== "idle" || l.lastRunAt)
-    .map((l) => ({
-      // id negatif berubah tiap putaran agar "selesai" terdeteksi sekali.
-      id: -((l.lastRunAt ?? 0) * 1000 + l.id),
-      chapter_id: -l.id,
-      kind: JURNALIS_KIND,
-      state:
-        l.state === "running"
-          ? "running"
-          : l.state === "failed"
-            ? "failed"
-            : "completed",
-      error: l.error,
-      title: l.theme,
-    }));
+  labs.flatMap((l) => {
+    // Tes yang antre/berjalan juga membuat Jurnalis terlihat bekerja.
+    const testing = ["queued", "running"].includes(l.test?.state ?? "");
+    if (!testing && l.state === "idle" && !l.lastRunAt) return [];
+    const at = testing ? (l.test!.at ?? 0) : (l.lastRunAt ?? 0);
+    return [
+      {
+        // id negatif berubah tiap putaran agar "selesai" terdeteksi sekali.
+        id: -(at * 1000 + l.id),
+        chapter_id: -l.id,
+        kind: JURNALIS_KIND,
+        state: testing
+          ? l.test!.state
+          : l.state === "running"
+            ? "running"
+            : l.state === "failed"
+              ? "failed"
+              : "completed",
+        error: l.error,
+        title: testing ? `Tes · ${l.theme}` : l.theme,
+      },
+    ];
+  });
 const among =
   (...kinds: string[]) =>
   (k: string) =>
@@ -171,8 +179,7 @@ export const STAFF: Staff[] = [
     nama: "Jurnalis",
     dept: "rnd",
     menu: "Lab Berita",
-    tugas:
-      "Mencari berita dari sumber rujukan tiap Lab Berita sampai target harian.",
+    tugas: "Mencari berita terbaru dari Lab Berita saat produksi memanggil.",
     handles: among(JURNALIS_KIND),
   },
   {

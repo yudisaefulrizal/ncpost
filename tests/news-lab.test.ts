@@ -13,7 +13,11 @@ import {
   configuredArticlePrompt,
   normalizeArticleConfig,
 } from "../src/server/content-contract";
-import { parseJurnalisLinks, runJurnalis } from "../src/worker/jurnalis";
+import {
+  newsForArticle,
+  parseJurnalisLinks,
+  runJurnalisTest,
+} from "../src/worker/jurnalis";
 import { citesLink } from "../src/worker/configured-article";
 import { outputRoot } from "../src/server/output-paths";
 
@@ -21,41 +25,31 @@ const lab: NewsLab = {
   id: 7,
   theme: "Teknologi",
   sources: ["https://www.theverge.com/tech", "https://dailysocial.id"],
-  dailyTarget: 3,
-  state: "running",
+  enabled: true,
+  test: null,
+  state: "idle",
   error: null,
-  lastRunAt: 1,
-  today: 1,
-  pending: 0,
+  lastRunAt: null,
 };
-afterEach(() =>
-  rmSync(path.join(outputRoot(), "jurnalis", "7"), {
-    recursive: true,
-    force: true,
-  }),
-);
+const work = path.join(outputRoot(), "jurnalis", "7");
+afterEach(() => rmSync(work, { recursive: true, force: true }));
 
-it("lab dinormalisasi: tema wajib, link sumber unik, target 0–50", () => {
+it("lab dinormalisasi: tema wajib, link sumber unik dan valid", () => {
   expect(
     normalizeNewsLab({
       theme: " Teknologi ",
       sources: ["theverge.com/tech", "https://theverge.com/tech/", ""],
-      dailyTarget: 2,
     }),
-  ).toEqual({
-    theme: "Teknologi",
-    sources: ["https://theverge.com/tech"],
-    dailyTarget: 2,
-  });
+  ).toEqual({ theme: "Teknologi", sources: ["https://theverge.com/tech"] });
+  expect(() => normalizeNewsLab({ theme: "", sources: ["a.com"] })).toThrow(
+    "Tema",
+  );
+  expect(() => normalizeNewsLab({ theme: "T", sources: [] })).toThrow(
+    "minimal satu",
+  );
   expect(() =>
-    normalizeNewsLab({ theme: "", sources: ["a.com"], dailyTarget: 1 }),
-  ).toThrow("Tema");
-  expect(() =>
-    normalizeNewsLab({ theme: "T", sources: [], dailyTarget: 1 }),
-  ).toThrow("minimal satu");
-  expect(() =>
-    normalizeNewsLab({ theme: "T", sources: ["a.com"], dailyTarget: 51 }),
-  ).toThrow("Target");
+    normalizeNewsLab({ theme: "T", sources: ["bukan link"] }),
+  ).toThrow("bukan link");
 });
 
 it("link Jurnalis hanya dari domain sumber, bukan halaman depan, belum dipakai, unik", () => {
@@ -80,61 +74,98 @@ it("link Jurnalis hanya dari domain sumber, bukan halaman depan, belum dipakai, 
   ).toEqual(["https://theverge.com/news/1", "https://m.dailysocial.id/post/3"]);
 });
 
-it("prompt Jurnalis memuat tema, sumber, jumlah, dan link terpakai", () => {
-  const prompt = jurnalisPrompt(lab, 2, ["https://theverge.com/lama"]);
+it("prompt Jurnalis meminta berita paling baru saat ini dari sumber lab", () => {
+  const prompt = jurnalisPrompt(lab, ["https://theverge.com/lama"]);
   expect(prompt).toContain("Tema liputan: Teknologi");
+  expect(prompt).toContain("paling baru terbit saat ini");
   expect(prompt).toContain("- https://dailysocial.id");
-  expect(prompt).toContain("Pilih 2 berita");
+  expect(prompt).toContain("urutkan dari yang paling baru");
   expect(prompt).toContain("- https://theverge.com/lama");
   expect(parseJurnalisLinks('```json\n{"links":["a"]}\n```')).toEqual(["a"]);
   expect(() => parseJurnalisLinks("tidak ada")).toThrow("JSON");
 });
 
-const fakeStore = () =>
+const fakeStore = (current: NewsLab = lab, held: string | null = null) =>
   ({
+    get: vi.fn().mockResolvedValue(current),
+    held: vi.fn().mockResolvedValue(held),
     usedUrls: vi.fn().mockResolvedValue([]),
     usedHashes: vi.fn().mockResolvedValue(new Set()),
-    record: vi.fn(async (_: number, urls: string[]) => urls.length),
+    use: vi.fn(),
+    working: vi.fn(),
     finish: vi.fn(),
+    finishTest: vi.fn(),
   }) as unknown as NewsLabStore & Record<string, any>;
 
-it("Jurnalis mencatat link valid sampai sisa target hari ini", async () => {
+it("dipanggil produksi: berita terbaru pertama yang valid dipakai dan dicatat", async () => {
   const store = fakeStore();
   const generate = vi.fn().mockResolvedValue(
     JSON.stringify({
       links: [
-        "https://theverge.com/news/a",
+        "https://lain.com/x",
         "https://dailysocial.id/b",
         "https://dailysocial.id/c",
       ],
     }),
   );
-  await runJurnalis(store, lab, generate, 123);
-  expect(generate).toHaveBeenCalledWith(
-    expect.stringContaining("Pilih 2 berita"),
-    "web",
-    expect.any(String),
-  );
-  expect(store.record).toHaveBeenCalledWith(7, [
-    "https://theverge.com/news/a",
+  expect(await newsForArticle(store, 7, 41, work, generate)).toBe(
     "https://dailysocial.id/b",
-  ]);
+  );
+  expect(store.working).toHaveBeenCalledWith(7);
+  expect(store.use).toHaveBeenCalledWith(7, "https://dailysocial.id/b", 41);
   expect(store.finish).toHaveBeenCalledWith(7, null);
 });
 
-it("Jurnalis tanpa link baru dicatat gagal", async () => {
-  const store = fakeStore();
-  await runJurnalis(
-    store,
-    lab,
-    vi.fn().mockResolvedValue('{"links":["https://lain.com/x"]}'),
-    124,
+it("percobaan ulang artikel memakai link yang sudah dipegang tanpa mencari lagi", async () => {
+  const store = fakeStore(lab, "https://dailysocial.id/lama");
+  const generate = vi.fn();
+  expect(await newsForArticle(store, 7, 41, work, generate)).toBe(
+    "https://dailysocial.id/lama",
   );
-  expect(store.record).toHaveBeenCalledWith(7, []);
+  expect(generate).not.toHaveBeenCalled();
+});
+
+it("lab nonaktif atau tanpa berita baru menggagalkan pemanggilan", async () => {
+  await expect(
+    newsForArticle(fakeStore({ ...lab, enabled: false }), 7, 41, work, vi.fn()),
+  ).rejects.toThrow("nonaktif");
+  const store = fakeStore();
+  await expect(
+    newsForArticle(
+      store,
+      7,
+      41,
+      work,
+      vi.fn().mockResolvedValue('{"links":["https://lain.com/x"]}'),
+    ),
+  ).rejects.toThrow("tidak menemukan berita baru");
+  expect(store.use).not.toHaveBeenCalled();
   expect(store.finish).toHaveBeenCalledWith(
     7,
-    expect.stringContaining("tidak menemukan berita baru"),
+    expect.stringContaining("tidak menemukan"),
   );
+});
+
+it("Tes menampilkan berita terbaru yang ditemukan tanpa mencatatnya", async () => {
+  const store = fakeStore();
+  await runJurnalisTest(
+    store,
+    lab,
+    vi
+      .fn()
+      .mockResolvedValue(
+        '{"links":["https://dailysocial.id/a","https://lain.com/b"]}',
+      ),
+    125,
+  );
+  expect(store.use).not.toHaveBeenCalled();
+  expect(store.finishTest).toHaveBeenCalledWith(
+    7,
+    ["https://dailysocial.id/a"],
+    null,
+  );
+  await runJurnalisTest(store, lab, vi.fn().mockRejectedValue(Error("x")), 126);
+  expect(store.finishTest).toHaveBeenLastCalledWith(7, [], "x");
 });
 
 it("sumber Lab Berita wajib memilih lab dan menyisipkan link ke prompt", () => {

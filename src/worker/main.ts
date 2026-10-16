@@ -42,7 +42,7 @@ import { runNewsMediaJob, pollNewsPublications } from "./news-media";
 import { generateStock } from "./stock-generator";
 import { NewsStore } from "../server/news-store";
 import { runNewsJob } from "./news";
-import { runJurnalis } from "./jurnalis";
+import { runJurnalisTest } from "./jurnalis";
 import { NewsLabStore } from "../server/news-lab";
 import { selectInstagramAccount } from "../server/instagram-account";
 import {
@@ -1113,7 +1113,7 @@ let lastCronMinute = -1;
 let lastManagerMinute = -1;
 let lastStatsHour = -1;
 let newsRunning = false;
-// Jurnalis punya lajur sendiri: satu lab per putaran, dicek tiap menit.
+// Tes Lab Berita punya lajur sendiri, dicek tiap menit.
 let jurnalis: Promise<void> | null = null;
 let lastJurnalisMinute = -1;
 // Error tak terduga (job, atau DB seperti deadlock) cukup dicatat; worker
@@ -1185,11 +1185,12 @@ while (!stop) {
     if (!jurnalis && minute !== lastJurnalisMinute) {
       lastJurnalisMinute = minute;
       try {
-        const lab = await newsLabStore.due();
-        if (lab && (await newsLabStore.start(lab)))
-          jurnalis = runJurnalis(newsLabStore, lab)
+        // Jurnalis dipanggil produksi artikel; lajur ini hanya untuk Tes.
+        const test = await newsLabStore.claimTest();
+        if (test)
+          jurnalis = runJurnalisTest(newsLabStore, test)
             .catch((e) =>
-              console.error("Jurnalis gagal:", (e as Error).message),
+              console.error("Tes Jurnalis gagal:", (e as Error).message),
             )
             .finally(() => {
               jurnalis = null;
