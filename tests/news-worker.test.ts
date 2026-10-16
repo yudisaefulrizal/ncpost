@@ -42,7 +42,7 @@ const labRow = (enabled = 1) => ({
   id: 5,
   theme: "Teknologi",
   sources: '["https://example.com"]',
-  prompt: "Tulis berita {{link_berita}}.",
+  prompt: "Tulis berita dengan gaya lab.",
   enabled,
   test_state: null,
   state: "idle",
@@ -127,7 +127,8 @@ it("sumber Lab Berita menulis dari link pilihan Jurnalis", async () => {
   expect(s.fail).not.toHaveBeenCalled();
   const [, args, prompt] = vi.mocked(runCli).mock.calls[0];
   expect(args).toContain("--search");
-  expect(prompt).toContain(`Tulis berita ${LINK}.`);
+  expect(prompt).toBe("Tulis berita dengan gaya lab.");
+  expect(args.join(" ")).toContain(LINK);
   expect(s.complete).toHaveBeenCalledWith(
     job,
     expect.objectContaining({
@@ -165,8 +166,8 @@ it("produksi memanggil Jurnalis untuk berita terbaru saat itu lalu menulisnya", 
   expect(s.fail).not.toHaveBeenCalled();
   const calls = vi.mocked(runCli).mock.calls;
   expect(calls[0][2]).toContain("paling baru terbit saat ini");
-  expect(calls[0][3]).toBe(path.join(dir, "jurnalis"));
-  expect(calls[1][2]).toContain(`Tulis berita ${LINK}.`);
+  expect(calls[0][3]).toBe(path.join(dir, "jurnalis", "percobaan-1"));
+  expect(calls[1][2]).toBe("Tulis berita dengan gaya lab.");
   expect(vi.mocked(s.db.query)).toHaveBeenCalledWith(
     expect.stringContaining("INSERT IGNORE INTO news_lab_links"),
     [5, LINK, expect.any(String), expect.any(Number), job.id],

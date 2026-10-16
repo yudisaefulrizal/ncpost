@@ -27,7 +27,7 @@ const lab: NewsLab = {
   id: 7,
   theme: "Teknologi",
   sources: ["https://www.theverge.com/tech", "https://dailysocial.id"],
-  prompt: "Tulis artikel dari {{link_berita}} untuk tema {{konteks}}.",
+  prompt: "Tulis empat paragraf dengan bahasa santai.",
   enabled: true,
   test: null,
   state: "idle",
@@ -64,7 +64,14 @@ it("lab dinormalisasi: tema, link sumber unik dan valid, prompt wajib", () => {
   ).toThrow("Prompt artikel");
   expect(() =>
     normalizeNewsLab({ theme: "T", sources: ["a.com"], prompt: "{{judul}}" }),
-  ).toThrow("{{judul}}");
+  ).toThrow("placeholder");
+  expect(() =>
+    normalizeNewsLab({
+      theme: "T",
+      sources: ["a.com"],
+      prompt: "Baca {{link_berita}}",
+    }),
+  ).toThrow("dikirim otomatis");
 });
 
 it("link Jurnalis hanya dari domain sumber, bukan halaman depan, belum dipakai, unik", () => {
@@ -98,17 +105,20 @@ const fakeStore = (current: NewsLab = lab, held: string | null = null) =>
     usedUrls: vi.fn().mockResolvedValue([]),
     usedHashes: vi.fn().mockResolvedValue(new Set()),
     use: vi.fn(),
+    release: vi.fn(),
     working: vi.fn(),
     finish: vi.fn(),
     finishTest: vi.fn(),
   }) as unknown as NewsLabStore & Record<string, any>;
-/** Model palsu: jawaban per langkah (search, article, format). */
-const fakeModel = (answers: Partial<Record<string, string>>) =>
+/** Model palsu: jawaban per langkah (search, article, format); daftar = berurutan. */
+const fakeModel = (answers: Partial<Record<string, string | string[]>>) =>
   vi.fn(async (call: JurnalisCall) => {
-    const answer = answers[call.name];
+    const value = answers[call.name];
+    const answer = Array.isArray(value) ? value.shift() : value;
     if (answer === undefined) throw Error(`tak terduga: ${call.name}`);
     return answer;
   });
+const BLOCKED = JSON.stringify({ accessible: false, article: "" });
 
 it("prompt Jurnalis meminta satu berita paling baru saat ini dari sumber lab", () => {
   const prompt = jurnalisPrompt(lab, ["https://theverge.com/lama"]);
@@ -169,9 +179,10 @@ it("dipanggil produksi: satu berita dicatat, prompt lab dikirim utuh, artikel da
   expect(result.article).toBe(ARTICLE(link));
   const [searchCall, articleCall] = model.mock.calls.map((c) => c[0]);
   expect(searchCall).toMatchObject({ name: "search", search: true });
-  expect(articleCall.prompt).toBe(
-    `Tulis artikel dari ${link} untuk tema Teknologi.`,
-  );
+  // Prompt lab dikirim apa adanya; link dan tema lewat instruksi runtime.
+  expect(articleCall.prompt).toBe(lab.prompt);
+  expect(articleCall.instructions).toContain(link);
+  expect(articleCall.instructions).toContain("tema lab: Teknologi");
   expect(articleCall).toMatchObject({
     search: true,
     schema: expect.any(Object),
@@ -202,6 +213,59 @@ it("format rusak diperbaiki sekali tanpa web lalu dicek ulang", async () => {
   await expect(labArticle(fakeStore(), 7, 41, work, broken)).rejects.toThrow(
     "Format artikel tetap rusak",
   );
+});
+
+it("link tidak bisa diakses dilepas lalu Jurnalis mencari berita lain", async () => {
+  const store = fakeStore();
+  const [a, b] = ["https://dailysocial.id/a", "https://dailysocial.id/b"];
+  const model = fakeModel({
+    search: [JSON.stringify({ link: a }), JSON.stringify({ link: b })],
+    article: [
+      BLOCKED,
+      JSON.stringify({ accessible: true, article: ARTICLE(b) }),
+    ],
+  });
+  const result = await labArticle(store, 7, 41, work, model);
+  expect(result.link).toBe(b);
+  expect(store.release).toHaveBeenCalledWith(41, a);
+  expect(store.use).toHaveBeenNthCalledWith(1, 7, a, 41);
+  expect(store.use).toHaveBeenNthCalledWith(2, 7, b, 41);
+  // Pencarian kedua diminta menghindari link yang gagal.
+  expect(model.mock.calls[2][0].prompt).toContain(`- ${a}`);
+  expect(model.mock.calls[2][0].work).toBe(path.join(work, "percobaan-2"));
+});
+
+it("tiga berita berturut-turut tidak bisa diakses menggagalkan artikel", async () => {
+  const store = fakeStore();
+  const links = [1, 2, 3].map((n) => `https://dailysocial.id/${n}`);
+  const model = fakeModel({
+    search: links.map((link) => JSON.stringify({ link })),
+    article: [BLOCKED, BLOCKED, BLOCKED],
+  });
+  await expect(labArticle(store, 7, 41, work, model)).rejects.toThrow(
+    "3 berita berturut-turut tidak bisa diakses",
+  );
+  expect(store.release).toHaveBeenCalledTimes(3);
+  expect(store.finish).toHaveBeenLastCalledWith(
+    7,
+    expect.stringContaining("tidak bisa diakses"),
+  );
+});
+
+it("link yang dipegang tapi tidak bisa diakses diganti berita baru", async () => {
+  const held = "https://dailysocial.id/lama";
+  const fresh = "https://dailysocial.id/baru";
+  const store = fakeStore(lab, held);
+  const model = fakeModel({
+    article: [
+      BLOCKED,
+      JSON.stringify({ accessible: true, article: ARTICLE(fresh) }),
+    ],
+    search: JSON.stringify({ link: fresh }),
+  });
+  expect((await labArticle(store, 7, 41, work, model)).link).toBe(fresh);
+  expect(store.release).toHaveBeenCalledWith(41, held);
+  expect(store.use).toHaveBeenCalledWith(7, fresh, 41);
 });
 
 it("percobaan ulang artikel memakai link yang sudah dipegang tanpa mencari lagi", async () => {
@@ -236,6 +300,30 @@ it("lab nonaktif atau berita di luar sumber digagalkan", async () => {
     ),
   ).rejects.toThrow("tidak menemukan berita baru");
   expect(store.use).not.toHaveBeenCalled();
+});
+
+it("Tes mencari berita lain bila link tidak bisa diakses, tanpa mencatat", async () => {
+  const store = fakeStore();
+  const [a, b] = ["https://dailysocial.id/a", "https://dailysocial.id/b"];
+  await runJurnalisTest(
+    store,
+    lab,
+    fakeModel({
+      search: [JSON.stringify({ link: a }), JSON.stringify({ link: b })],
+      article: [
+        BLOCKED,
+        JSON.stringify({ accessible: true, article: ARTICLE(b) }),
+      ],
+    }),
+    127,
+  );
+  expect(store.use).not.toHaveBeenCalled();
+  expect(store.release).not.toHaveBeenCalled();
+  expect(store.finishTest).toHaveBeenCalledWith(7, {
+    links: [b],
+    article: ARTICLE(b),
+    error: null,
+  });
 });
 
 it("Tes menampilkan satu berita terbaru dan artikelnya tanpa mencatat", async () => {

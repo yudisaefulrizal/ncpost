@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS news_lab_links (
  url_hash CHAR(64) NOT NULL,
  used_at BIGINT NOT NULL,
  news_id INT NULL,
+ inaccessible TINYINT NOT NULL DEFAULT 0,
  UNIQUE KEY news_lab_url (url_hash),
  KEY news_lab_pending (lab_id,news_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

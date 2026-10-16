@@ -133,7 +133,7 @@ export function NewsLabPage() {
                 rows={10}
                 required
                 maxLength={100000}
-                placeholder="Instruksi penulisan artikel final, termasuk jumlah paragraf. Bisa memakai {{link_berita}} dan {{konteks}} (tema)."
+                placeholder="Tulis gaya dan aturan penulisan artikel: jumlah paragraf, jumlah kalimat per paragraf, gaya bahasa, dan larangan. Link berita, tema, format Markdown, Sumber, dan Tag sudah ditambahkan otomatis."
                 value={draft.prompt}
                 onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
               />
@@ -367,6 +367,14 @@ export function NewsLabPage() {
                     <a href={link.url} target="_blank" rel="noreferrer">
                       {link.url}
                     </a>
+                    {link.inaccessible && (
+                      <>
+                        {" "}
+                        <span className="chip chip-xs t-act">
+                          tidak bisa diakses
+                        </span>
+                      </>
+                    )}
                   </td>
                   <td>{when(link.usedAt)}</td>
                 </tr>

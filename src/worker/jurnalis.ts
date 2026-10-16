@@ -1,5 +1,5 @@
 // Jurnalis Lab Berita, mengikuti pola berita Hermes yang terbukti andal: prompt
-// lab dikirim utuh, aturan aplikasi lewat developer_instructions, dan jawaban
+// lab dikirim apa adanya, aturan aplikasi lewat developer_instructions, dan jawaban
 // akhir dipaksa JSON lewat --output-schema sehingga artikel tidak tertukar
 // dengan pesan proses. Format yang masih rusak diperbaiki sekali tanpa web,
 // seperti alur artikel buku.
@@ -15,18 +15,11 @@ import {
 } from "../server/news-lab";
 import { newsSourceKey } from "../server/news";
 import {
-  fillVariables,
   LAB_NEWS_FORMAT,
   validateUnifiedArticle,
 } from "../server/content-contract";
 import { cliArgs, parseEvents, runCli } from "../server/providers";
 import { citesLink } from "./configured-article";
-
-/** Variabel yang boleh dipakai prompt lab. */
-export const LAB_VARIABLES = {
-  link_berita: "Link berita pilihan Jurnalis",
-  konteks: "Tema global lab",
-};
 
 export type JurnalisCall = {
   prompt: string;
@@ -109,17 +102,33 @@ const object = (props: Record<string, string>) => ({
 export const SEARCH_SCHEMA = object({
   link: "Link lengkap halaman artikel berita terpilih (HTTPS).",
 });
-export const ARTICLE_SCHEMA = object({
-  article:
-    "Artikel Markdown final lengkap sesuai format wajib, bukan ringkasan atau pesan proses.",
-});
+export const ARTICLE_SCHEMA = {
+  type: "object",
+  properties: {
+    accessible: {
+      type: "boolean",
+      description:
+        "true bila berita pilihan Jurnalis berhasil dibuka dan dibaca; false bila tidak bisa diakses.",
+    },
+    article: {
+      type: "string",
+      description:
+        "Artikel Markdown final lengkap sesuai format wajib, bukan ringkasan atau pesan proses; string kosong bila accessible false.",
+    },
+  },
+  required: ["accessible", "article"],
+  additionalProperties: false,
+};
+/** Berapa kali Jurnalis mencari berita lain bila link tidak bisa diakses. */
+export const JURNALIS_ATTEMPTS = 3;
+class Inaccessible extends Error {}
 const JSON_ONLY =
   "Integrasi runtime ncpost: keluaran akhir wajib berupa objek JSON sesuai output schema.";
 
 /** Instruksi runtime penulisan; prompt lab sendiri dikirim utuh. */
 export function articleInstructions(lab: NewsLab, link: string) {
   return `${JSON_ONLY} Field article berisi artikel Markdown final lengkap, bukan ringkasan atau pesan proses.
-Tulis artikel berdasarkan berita pilihan Jurnalis berikut (tema lab: ${lab.theme}). Buka dan baca berita itu dengan pencarian web; jangan memakai berita lain sebagai bahan utama. Cantumkan URL ini pada baris Sumber:
+Tulis artikel berdasarkan berita pilihan Jurnalis berikut (tema lab: ${lab.theme}). Buka dan baca berita itu dengan pencarian web; jangan memakai berita lain sebagai bahan utama. Bila berita itu tidak bisa dibuka atau dibaca (misalnya paywall, 404, atau diblokir), isi accessible dengan false dan article dengan string kosong; jangan menulis dari berita lain dan jangan mengarang isi. Bila berhasil, isi accessible dengan true. Cantumkan URL ini pada baris Sumber:
 ${link}
 
 ${LAB_NEWS_FORMAT}`;
@@ -157,9 +166,12 @@ async function search(
   lab: NewsLab,
   work: string,
   model: JurnalisModel,
+  exclude: string[] = [],
 ) {
   mkdirSync(work, { recursive: true, mode: 0o700 });
-  const prompt = jurnalisPrompt(lab, await store.usedUrls());
+  const prompt = jurnalisPrompt(lab, [
+    ...new Set([...exclude, ...(await store.usedUrls())]),
+  ]);
   writeFileSync(path.join(work, "search-prompt.md"), prompt, { mode: 0o600 });
   const answer = await model({
     prompt,
@@ -177,12 +189,9 @@ async function search(
   try {
     hash = [linkHash(newsSourceKey(String(raw)).url)];
   } catch {}
-  const [link] = acceptLinks(
-    [raw],
-    lab.sources,
-    await store.usedHashes(hash),
-    1,
-  );
+  const used = await store.usedHashes(hash);
+  for (const url of exclude) used.add(linkHash(url));
+  const [link] = acceptLinks([raw], lab.sources, used, 1);
   if (!link) throw Error(NO_NEWS);
   return link;
 }
@@ -195,10 +204,8 @@ async function write(
   model: JurnalisModel,
 ) {
   if (!lab.prompt) throw Error(`Prompt artikel Lab ${lab.theme} belum diisi`);
-  const prompt = fillVariables(lab.prompt, {
-    link_berita: link,
-    konteks: lab.theme,
-  });
+  // Prompt lab dikirim apa adanya; link dan tema ada di instruksi runtime.
+  const prompt = lab.prompt;
   const instructions = articleInstructions(lab, link);
   writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
   writeFileSync(path.join(work, "instructions.md"), instructions, {
@@ -213,7 +220,10 @@ async function write(
     schema: ARTICLE_SCHEMA,
   });
   writeFileSync(path.join(work, "response.json"), answer, { mode: 0o600 });
-  let article = String(JSON.parse(answer).article ?? "").trim();
+  const result = JSON.parse(answer);
+  if (result.accessible === false)
+    throw new Inaccessible(`Berita tidak bisa diakses: ${link}`);
+  let article = String(result.article ?? "").trim();
   writeFileSync(path.join(work, "article.md"), article, { mode: 0o600 });
   let check = articleErrors(article, link);
   if (check.errors.length) {
@@ -239,8 +249,10 @@ async function write(
 
 /**
  * Dipanggil produksi: pilih satu berita paling baru saat ini, catat sebagai
- * terpakai untuk artikel ini, lalu tulis artikel finalnya. Percobaan ulang
- * memakai link yang sama.
+ * terpakai untuk artikel ini, lalu tulis artikel finalnya. Bila link tidak bisa
+ * diakses, link itu dilepas (tetap tercatat terpakai) dan Jurnalis mencari
+ * berita lain, maksimal JURNALIS_ATTEMPTS kali. Percobaan ulang karena sebab
+ * lain memakai link yang sama.
  */
 export async function labArticle(
   store: NewsLabStore,
@@ -250,17 +262,32 @@ export async function labArticle(
   model = runJurnalisModel,
 ) {
   const lab = await store.get(labId);
-  const held = await store.held(newsId);
+  let held = await store.held(newsId);
   if (!held && !lab.enabled)
     throw Error(`Lab Berita ${lab.theme} sedang nonaktif`);
   await store.working(lab.id);
+  const tried: string[] = [];
   try {
-    mkdirSync(work, { recursive: true, mode: 0o700 });
-    const link = held ?? (await search(store, lab, work, model));
-    if (!held) await store.use(lab.id, link, newsId);
-    const result = await write(lab, link, work, model);
-    await store.finish(lab.id, null);
-    return { ...result, link };
+    for (let attempt = 1; ; attempt++) {
+      const dir = path.join(work, `percobaan-${attempt}`);
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      const link = held ?? (await search(store, lab, dir, model, tried));
+      if (!held) await store.use(lab.id, link, newsId);
+      try {
+        const result = await write(lab, link, dir, model);
+        await store.finish(lab.id, null);
+        return { ...result, link };
+      } catch (e) {
+        if (!(e instanceof Inaccessible)) throw e;
+        await store.release(newsId, link);
+        tried.push(link);
+        held = null;
+        if (attempt >= JURNALIS_ATTEMPTS)
+          throw Error(
+            `${JURNALIS_ATTEMPTS} berita berturut-turut tidak bisa diakses: ${tried.join(", ")}`,
+          );
+      }
+    }
   } catch (e) {
     await store.finish(lab.id, (e as Error)?.message || "Jurnalis gagal");
     throw e;
@@ -281,10 +308,21 @@ export async function runJurnalisTest(
     `tes-${now}`,
   );
   let link: string | null = null;
+  const tried: string[] = [];
   try {
-    link = await search(store, lab, work, model);
-    const { article } = await write(lab, link, work, model);
-    await store.finishTest(lab.id, { links: [link], article, error: null });
+    for (let attempt = 1; ; attempt++) {
+      const dir = path.join(work, `percobaan-${attempt}`);
+      link = await search(store, lab, dir, model, tried);
+      try {
+        const { article } = await write(lab, link, dir, model);
+        await store.finishTest(lab.id, { links: [link], article, error: null });
+        return;
+      } catch (e) {
+        if (!(e instanceof Inaccessible) || attempt >= JURNALIS_ATTEMPTS)
+          throw e;
+        tried.push(link);
+      }
+    }
   } catch (e) {
     const message = (e as Error)?.message || "Tes Jurnalis gagal";
     mkdirSync(work, { recursive: true, mode: 0o700 });

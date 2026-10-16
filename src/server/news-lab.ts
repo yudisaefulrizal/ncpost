@@ -36,6 +36,7 @@ export type NewsLabLink = {
   url: string;
   usedAt: number;
   newsId: number | null;
+  inaccessible: boolean;
 };
 // Tes "running" yang tidak selesai dalam batas ini dianggap terhenti.
 export const JURNALIS_STALE_MS = 20 * 60000;
@@ -68,12 +69,9 @@ export function normalizeNewsLab(value: any): NewsLabInput {
   const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
   if (!prompt || prompt.length > 100000)
     throw Error("Prompt artikel wajib diisi, maksimal 100.000 karakter");
-  const unknown = [...prompt.matchAll(/\{\{(\w+)\}\}/g)]
-    .map((m) => m[1])
-    .filter((key) => !["link_berita", "konteks"].includes(key));
-  if (unknown.length)
+  if (/\{\{\w+\}\}/.test(prompt))
     throw Error(
-      `Placeholder {{${unknown[0]}}} tidak dikenal; gunakan {{link_berita}} atau {{konteks}}`,
+      "Prompt artikel tidak memakai placeholder {{…}}; link berita dan tema sudah dikirim otomatis",
     );
   return { theme, sources, prompt };
 }
@@ -243,7 +241,7 @@ export class NewsLabStore {
   }
   async links(limit = 200): Promise<NewsLabLink[]> {
     const [rows]: any = await this.db.query(
-      "SELECT id,lab_id,url,used_at,news_id FROM news_lab_links ORDER BY id DESC LIMIT ?",
+      "SELECT id,lab_id,url,used_at,news_id,inaccessible FROM news_lab_links ORDER BY id DESC LIMIT ?",
       [limit],
     );
     return rows.map((r: any) => ({
@@ -252,6 +250,7 @@ export class NewsLabStore {
       url: r.url,
       usedAt: Number(r.used_at),
       newsId: r.news_id ?? null,
+      inaccessible: !!r.inaccessible,
     }));
   }
   async usedUrls(limit = 150): Promise<string[]> {
@@ -276,6 +275,13 @@ export class NewsLabStore {
       [newsId],
     );
     return (rows[0]?.url as string) ?? null;
+  }
+  /** Link tidak bisa diakses: tetap tercatat terpakai, dilepas dari artikel. */
+  async release(newsId: number, url: string) {
+    await this.db.query(
+      "UPDATE news_lab_links SET news_id=NULL,inaccessible=1 WHERE news_id=? AND url_hash=?",
+      [newsId, linkHash(url)],
+    );
   }
   /** Catat link yang dipakai artikel; gagal bila link sudah pernah dipakai. */
   async use(labId: number, url: string, newsId: number, now = Date.now()) {
