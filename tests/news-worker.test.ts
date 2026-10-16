@@ -9,6 +9,17 @@ vi.mock("../src/server/providers", async (original) => ({
   ...(await original<typeof import("../src/server/providers")>()),
   runCli: vi.fn(),
 }));
+// Isi berita diunduh aplikasi; test tidak boleh mengakses internet.
+vi.mock("../src/server/news-fetch", async (original) => ({
+  ...(await original<typeof import("../src/server/news-fetch")>()),
+  fetchNewsText: vi.fn(async (url: string) => ({
+    url,
+    title: "Judul asli",
+    siteName: "Example",
+    published: "",
+    text: "Isi lengkap berita.",
+  })),
+}));
 const job = { id: -901, attempts: 1, state: "running" } as NewsArticle;
 const root = path.join(ROOT, "output/berita", String(job.id));
 const dir = path.join(root, "1");
@@ -126,7 +137,9 @@ it("sumber Lab Berita menulis dari link pilihan Jurnalis", async () => {
   await runNewsJob(s, job);
   expect(s.fail).not.toHaveBeenCalled();
   const [, args, prompt] = vi.mocked(runCli).mock.calls[0];
-  expect(args).toContain("--search");
+  // Menulis tanpa web; bahan berita diunduh aplikasi dan ikut di instruksi.
+  expect(args).not.toContain("--search");
+  expect(args.join(" ")).toContain("Isi lengkap berita.");
   expect(prompt).toBe("Tulis berita dengan gaya lab.");
   expect(args.join(" ")).toContain(LINK);
   expect(s.complete).toHaveBeenCalledWith(

@@ -1,8 +1,9 @@
-// Jurnalis Lab Berita, mengikuti pola berita Hermes yang terbukti andal: prompt
-// lab dikirim apa adanya, aturan aplikasi lewat developer_instructions, dan jawaban
-// akhir dipaksa JSON lewat --output-schema sehingga artikel tidak tertukar
-// dengan pesan proses. Format yang masih rusak diperbaiki sekali tanpa web,
-// seperti alur artikel buku.
+// Jurnalis Lab Berita. Pencarian web hanya untuk memilih link; isi berita diunduh
+// aplikasi sendiri (news-fetch) karena pencarian web Codex bukan browser. Penulisan
+// tanpa web seperti alur artikel buku: prompt lab dikirim apa adanya, bahan dan
+// aturan aplikasi lewat developer_instructions, dan jawaban akhir dipaksa JSON
+// lewat --output-schema seperti berita Hermes. Format yang masih rusak diperbaiki
+// sekali tanpa web.
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { outputRoot } from "../server/output-paths";
@@ -20,6 +21,11 @@ import {
 } from "../server/content-contract";
 import { cliArgs, parseEvents, runCli } from "../server/providers";
 import { citesLink } from "./configured-article";
+import {
+  fetchNewsText,
+  NewsUnreachable,
+  type NewsText,
+} from "../server/news-fetch";
 
 export type JurnalisCall = {
   prompt: string;
@@ -102,34 +108,27 @@ const object = (props: Record<string, string>) => ({
 export const SEARCH_SCHEMA = object({
   link: "Link lengkap halaman artikel berita terpilih (HTTPS).",
 });
-export const ARTICLE_SCHEMA = {
-  type: "object",
-  properties: {
-    accessible: {
-      type: "boolean",
-      description:
-        "true bila berita pilihan Jurnalis berhasil dibuka dan dibaca; false bila tidak bisa diakses.",
-    },
-    article: {
-      type: "string",
-      description:
-        "Artikel Markdown final lengkap sesuai format wajib, bukan ringkasan atau pesan proses; string kosong bila accessible false.",
-    },
-  },
-  required: ["accessible", "article"],
-  additionalProperties: false,
-};
+export const ARTICLE_SCHEMA = object({
+  article:
+    "Artikel Markdown final lengkap sesuai format wajib, bukan ringkasan atau pesan proses.",
+});
 /** Berapa kali Jurnalis mencari berita lain bila link tidak bisa diakses. */
 export const JURNALIS_ATTEMPTS = 3;
-class Inaccessible extends Error {}
 const JSON_ONLY =
   "Integrasi runtime ncpost: keluaran akhir wajib berupa objek JSON sesuai output schema.";
 
 /** Instruksi runtime penulisan; prompt lab sendiri dikirim utuh. */
-export function articleInstructions(lab: NewsLab, link: string) {
+export function articleInstructions(lab: NewsLab, news: NewsText) {
   return `${JSON_ONLY} Field article berisi artikel Markdown final lengkap, bukan ringkasan atau pesan proses.
-Tulis artikel berdasarkan berita pilihan Jurnalis berikut (tema lab: ${lab.theme}). Buka dan baca berita itu dengan pencarian web; jangan memakai berita lain sebagai bahan utama. Bila berita itu tidak bisa dibuka atau dibaca (misalnya paywall, 404, atau diblokir), isi accessible dengan false dan article dengan string kosong; jangan menulis dari berita lain dan jangan mengarang isi. Bila berhasil, isi accessible dengan true. Cantumkan URL ini pada baris Sumber:
-${link}
+Jangan menggunakan tool, shell, file, atau web. Tulis artikel hanya berdasarkan bahan berita pilihan Jurnalis di bawah (tema lab: ${lab.theme}); jangan menambah fakta, angka, nama, atau kutipan yang tidak ada di bahan. Cantumkan URL ini pada baris Sumber:
+${news.url}
+
+Bahan berita (diunduh aplikasi dari URL di atas):
+Judul asli: ${news.title || "-"}
+Media: ${news.siteName || new URL(news.url).hostname}
+Terbit: ${news.published || "-"}
+
+${news.text}
 
 ${LAB_NEWS_FORMAT}`;
 }
@@ -202,11 +201,17 @@ async function write(
   link: string,
   work: string,
   model: JurnalisModel,
+  fetchText: typeof fetchNewsText,
 ) {
   if (!lab.prompt) throw Error(`Prompt artikel Lab ${lab.theme} belum diisi`);
-  // Prompt lab dikirim apa adanya; link dan tema ada di instruksi runtime.
+  // Isi berita diunduh aplikasi; gagal unduh = berita tidak bisa diakses.
+  const news = await fetchText(link);
+  writeFileSync(path.join(work, "source.md"), `${news.title}\n\n${news.text}`, {
+    mode: 0o600,
+  });
+  // Prompt lab dikirim apa adanya; bahan, link, dan tema ada di instruksi runtime.
   const prompt = lab.prompt;
-  const instructions = articleInstructions(lab, link);
+  const instructions = articleInstructions(lab, news);
   writeFileSync(path.join(work, "prompt.md"), prompt, { mode: 0o600 });
   writeFileSync(path.join(work, "instructions.md"), instructions, {
     mode: 0o600,
@@ -215,17 +220,20 @@ async function write(
     prompt,
     work,
     name: "article",
-    search: true,
+    search: false,
     instructions,
     schema: ARTICLE_SCHEMA,
   });
   writeFileSync(path.join(work, "response.json"), answer, { mode: 0o600 });
-  const result = JSON.parse(answer);
-  if (result.accessible === false)
-    throw new Inaccessible(`Berita tidak bisa diakses: ${link}`);
-  let article = String(result.article ?? "").trim();
+  let article = String(JSON.parse(answer).article ?? "").trim();
   writeFileSync(path.join(work, "article.md"), article, { mode: 0o600 });
   let check = articleErrors(article, link);
+  // Perbaikan format hanya merapikan isi yang sudah ada. Jawaban tanpa paragraf
+  // bukan artikel; memperbaikinya tanpa sumber hanya membuat model mengarang.
+  if (check.errors.length && !check.parsed.paragraphs.length)
+    throw Error(
+      "Jawaban model bukan artikel (tanpa paragraf isi); tidak diperbaiki agar isi tidak dikarang",
+    );
   if (check.errors.length) {
     // Perbaikan format sekali tanpa web; isi kalimat tidak diubah.
     writeFileSync(path.join(work, "article.pre-format.md"), article, {
@@ -260,6 +268,7 @@ export async function labArticle(
   newsId: number,
   work: string,
   model = runJurnalisModel,
+  fetchText = fetchNewsText,
 ) {
   const lab = await store.get(labId);
   let held = await store.held(newsId);
@@ -274,11 +283,11 @@ export async function labArticle(
       const link = held ?? (await search(store, lab, dir, model, tried));
       if (!held) await store.use(lab.id, link, newsId);
       try {
-        const result = await write(lab, link, dir, model);
+        const result = await write(lab, link, dir, model, fetchText);
         await store.finish(lab.id, null);
         return { ...result, link };
       } catch (e) {
-        if (!(e instanceof Inaccessible)) throw e;
+        if (!(e instanceof NewsUnreachable)) throw e;
         await store.release(newsId, link);
         tried.push(link);
         held = null;
@@ -300,6 +309,7 @@ export async function runJurnalisTest(
   lab: NewsLab,
   model = runJurnalisModel,
   now = Date.now(),
+  fetchText = fetchNewsText,
 ) {
   const work = path.join(
     outputRoot(),
@@ -314,11 +324,11 @@ export async function runJurnalisTest(
       const dir = path.join(work, `percobaan-${attempt}`);
       link = await search(store, lab, dir, model, tried);
       try {
-        const { article } = await write(lab, link, dir, model);
+        const { article } = await write(lab, link, dir, model, fetchText);
         await store.finishTest(lab.id, { links: [link], article, error: null });
         return;
       } catch (e) {
-        if (!(e instanceof Inaccessible) || attempt >= JURNALIS_ATTEMPTS)
+        if (!(e instanceof NewsUnreachable) || attempt >= JURNALIS_ATTEMPTS)
           throw e;
         tried.push(link);
       }

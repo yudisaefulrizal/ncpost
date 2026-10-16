@@ -162,23 +162,29 @@ terbit saat itu sesuai tema, hanya dari domain sumber rujukan dan belum pernah
 dipakai, mencatat link-nya di tabel berita terpakai (`news_lab_links`), lalu
 menulis artikel final dengan prompt lab.
 
-Pola pemanggilannya mengikuti berita Hermes yang terbukti andal: prompt lab
-dikirim apa adanya tanpa placeholder (prompt berisi `{{…}}` ditolak saat disimpan), aturan
-aplikasi, link berita, dan tema dikirim terpisah lewat `developer_instructions`, dan jawaban akhir
-dipaksa berupa JSON lewat `--output-schema` (`{link}` saat memilih berita,
-`{article}` saat menulis) sehingga artikel tidak tertukar dengan pesan proses.
-Instruksi runtime selalu memuat format Markdown wajib (`LAB_NEWS_FORMAT`:
-`# Judul`, satu `## Heading` di paragraf 1, paragraf, `Sumber: [Nama media],
-[link berita]`, `Tag:` paling akhir); jumlah paragraf mengikuti prompt lab.
-Kedua langkah wajib memiliki bukti pencarian web. Bila struktur artikel atau
-link di baris Sumber masih salah, format diperbaiki sekali tanpa web (seperti
-alur artikel buku) lalu dicek ulang. Artikel final dipakai apa adanya oleh tahap
-produksi berikutnya. Bila berita terpilih tidak bisa dibuka (paywall, 404,
-diblokir), model mengisi `accessible: false` tanpa menulis artikel; link itu
-tetap tercatat terpakai dengan tanda "tidak bisa diakses", dilepas dari
-artikel, dan Jurnalis mencari berita lain, maksimal tiga kali per job (Tes juga).
-Percobaan ulang artikel karena sebab lain memakai link yang sama. Artefak
-Jurnalis (prompt, instruksi, schema, events, jawaban) tersimpan per percobaan di
+Pencarian web Codex hanya dipakai untuk **memilih** link (jawaban dipaksa JSON
+`{link}` lewat `--output-schema`, wajib ada bukti pencarian web). Isi berita
+**diunduh aplikasi sendiri** (`src/server/news-fetch.ts`: HTTP biasa dengan
+header browser, teks utama diambil dengan Readability), karena pencarian web
+Codex bukan browser dan sering terblokir atau hanya mendapat potongan teks.
+Gagal unduh, bukan HTML, atau teks kurang dari 500 karakter berarti berita tidak
+bisa diakses: link tetap tercatat terpakai dengan tanda "tidak bisa diakses",
+dilepas dari artikel, dan Jurnalis mencari berita lain, maksimal tiga kali per
+job (Tes juga).
+
+Penulisan berjalan **tanpa web** seperti alur artikel buku: prompt lab dikirim
+apa adanya tanpa placeholder (prompt berisi `{{…}}` ditolak saat disimpan),
+sedangkan bahan berita (judul asli, media, waktu terbit, teks maks. 20.000
+karakter), link, tema, dan format Markdown wajib (`LAB_NEWS_FORMAT`: `# Judul`,
+satu `## Heading` di paragraf 1, paragraf, `Sumber: [Nama media], [link
+berita]`, `Tag:` paling akhir) dikirim lewat `developer_instructions`. Jawaban
+akhir dipaksa JSON `{article}` seperti berita Hermes. Jumlah paragraf mengikuti
+prompt lab. Bila struktur atau link di baris Sumber masih salah, format
+diperbaiki sekali tanpa web lalu dicek ulang; jawaban tanpa paragraf isi tidak
+diperbaiki (agar isi tidak dikarang) dan langsung gagal. Artikel final dipakai
+apa adanya oleh tahap produksi berikutnya. Percobaan ulang artikel karena sebab
+lain memakai link yang sama. Artefak Jurnalis (prompt, instruksi, schema,
+events, teks sumber `source.md`, jawaban) tersimpan per percobaan di
 `output/berita/<id>/<percobaan>/jurnalis/percobaan-<n>/`.
 
 Lab bisa dinonaktifkan (tidak bisa dipilih dan pemanggilannya gagal). Tombol

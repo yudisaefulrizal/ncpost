@@ -14,7 +14,6 @@ import {
   normalizeArticleConfig,
 } from "../src/server/content-contract";
 import {
-  articleInstructions,
   jurnalisCliArgs,
   labArticle,
   runJurnalisTest,
@@ -22,6 +21,12 @@ import {
 } from "../src/worker/jurnalis";
 import { citesLink } from "../src/worker/configured-article";
 import { outputRoot } from "../src/server/output-paths";
+import {
+  extractNewsText,
+  fetchNewsText,
+  NewsUnreachable,
+  type NewsText,
+} from "../src/server/news-fetch";
 
 const lab: NewsLab = {
   id: 7,
@@ -98,6 +103,7 @@ it("link Jurnalis hanya dari domain sumber, bukan halaman depan, belum dipakai, 
 
 const ARTICLE = (link: string) =>
   `# Judul\n\n## Judul\n\nIsi berita.\n\nSumber: Media, ${link}\n\nTag: tekno`;
+const OK = (link: string) => JSON.stringify({ article: ARTICLE(link) });
 const fakeStore = (current: NewsLab = lab, held: string | null = null) =>
   ({
     get: vi.fn().mockResolvedValue(current),
@@ -118,7 +124,46 @@ const fakeModel = (answers: Partial<Record<string, string | string[]>>) =>
     if (answer === undefined) throw Error(`tak terduga: ${call.name}`);
     return answer;
   });
-const BLOCKED = JSON.stringify({ accessible: false, article: "" });
+/** Unduhan palsu: link di `blocked` gagal, lainnya mengembalikan isi berita. */
+const fakeFetch = (...blocked: string[]) =>
+  vi.fn(async (url: string): Promise<NewsText> => {
+    if (blocked.includes(url)) throw new NewsUnreachable(`HTTP 403: ${url}`);
+    return {
+      url,
+      title: "Judul asli",
+      siteName: "Media",
+      published: "2026-10-16",
+      text: "Isi lengkap berita dari media sumber.",
+    };
+  });
+
+it("teks utama berita diambil dari HTML; halaman tanpa isi dianggap tidak bisa diakses", async () => {
+  const body = "Paragraf berita yang cukup panjang untuk dibaca. ".repeat(20);
+  const html = `<html><head><title>Judul</title><meta property="article:published_time" content="2026-10-16"></head><body><nav>Menu</nav><article><h1>Judul Berita</h1><p>${body}</p><p>${body}</p></article></body></html>`;
+  const news = extractNewsText(html, "https://a.com/x");
+  expect(news.text).toContain("Paragraf berita yang cukup panjang");
+  expect(news.published).toBe("2026-10-16");
+  expect(() =>
+    extractNewsText(
+      "<html><body><p>Berlangganan</p></body></html>",
+      "https://a.com/y",
+    ),
+  ).toThrow(NewsUnreachable);
+  const res = (status: number, text = html, type = "text/html") =>
+    vi.fn(
+      async () =>
+        new Response(text, { status, headers: { "content-type": type } }),
+    ) as unknown as typeof fetch;
+  expect((await fetchNewsText("https://a.com/x", res(200))).text).toContain(
+    "Paragraf berita",
+  );
+  await expect(fetchNewsText("https://a.com/x", res(403))).rejects.toThrow(
+    "HTTP 403",
+  );
+  await expect(
+    fetchNewsText("https://a.com/x", res(200, "%PDF", "application/pdf")),
+  ).rejects.toThrow("bukan HTML");
+});
 
 it("prompt Jurnalis meminta satu berita paling baru saat ini dari sumber lab", () => {
   const prompt = jurnalisPrompt(lab, ["https://theverge.com/lama"]);
@@ -134,7 +179,7 @@ it("argumen Codex memakai web search, output schema, dan instruksi runtime seper
     {
       prompt: "",
       work: "",
-      name: "article",
+      name: "search",
       search: true,
       instructions: "ATURAN",
     },
@@ -161,32 +206,36 @@ it("argumen Codex memakai web search, output schema, dan instruksi runtime seper
   });
   expect(plain).not.toContain("--search");
   expect(plain).not.toContain("--output-schema");
-  const rules = articleInstructions(lab, "https://dailysocial.id/a");
-  expect(rules).toContain("objek JSON sesuai output schema");
-  expect(rules).toContain("https://dailysocial.id/a");
-  expect(rules).toContain(LAB_NEWS_FORMAT);
 });
 
-it("dipanggil produksi: satu berita dicatat, prompt lab dikirim utuh, artikel dari JSON", async () => {
+it("dipanggil produksi: link dicatat, isi diunduh aplikasi, artikel ditulis tanpa web dari bahan itu", async () => {
   const store = fakeStore();
   const link = "https://dailysocial.id/b";
   const model = fakeModel({
     search: JSON.stringify({ link }),
-    article: JSON.stringify({ article: ARTICLE(link) }),
+    article: OK(link),
   });
-  const result = await labArticle(store, 7, 41, work, model);
+  const fetchText = fakeFetch();
+  const result = await labArticle(store, 7, 41, work, model, fetchText);
   expect(result.link).toBe(link);
   expect(result.article).toBe(ARTICLE(link));
+  expect(fetchText).toHaveBeenCalledWith(link);
   const [searchCall, articleCall] = model.mock.calls.map((c) => c[0]);
   expect(searchCall).toMatchObject({ name: "search", search: true });
-  // Prompt lab dikirim apa adanya; link dan tema lewat instruksi runtime.
+  // Prompt lab dikirim apa adanya; bahan, link, dan tema lewat instruksi runtime.
   expect(articleCall.prompt).toBe(lab.prompt);
-  expect(articleCall.instructions).toContain(link);
-  expect(articleCall.instructions).toContain("tema lab: Teknologi");
   expect(articleCall).toMatchObject({
-    search: true,
+    search: false,
     schema: expect.any(Object),
   });
+  expect(articleCall.instructions).toContain(
+    "Jangan menggunakan tool, shell, file, atau web",
+  );
+  expect(articleCall.instructions).toContain(
+    "Isi lengkap berita dari media sumber.",
+  );
+  expect(articleCall.instructions).toContain(link);
+  expect(articleCall.instructions).toContain("tema lab: Teknologi");
   expect(articleCall.instructions).toContain(LAB_NEWS_FORMAT);
   expect(store.use).toHaveBeenCalledWith(7, link, 41);
   expect(store.finish).toHaveBeenCalledWith(7, null);
@@ -194,12 +243,15 @@ it("dipanggil produksi: satu berita dicatat, prompt lab dikirim utuh, artikel da
 
 it("format rusak diperbaiki sekali tanpa web lalu dicek ulang", async () => {
   const link = "https://dailysocial.id/f";
+  // Isi ada, tetapi judul tanpa # dan Sumber tanpa link.
   const model = fakeModel({
     search: JSON.stringify({ link }),
-    article: JSON.stringify({ article: "Saya sudah membaca beritanya." }),
+    article: JSON.stringify({
+      article: "Judul\n\nIsi berita.\n\nSumber: Media\n\nTag: tekno",
+    }),
     format: ARTICLE(link),
   });
-  const result = await labArticle(fakeStore(), 7, 41, work, model);
+  const result = await labArticle(fakeStore(), 7, 41, work, model, fakeFetch());
   expect(result.article).toBe(ARTICLE(link));
   const fix = model.mock.calls[2][0];
   expect(fix).toMatchObject({ name: "format", search: false });
@@ -207,44 +259,45 @@ it("format rusak diperbaiki sekali tanpa web lalu dicek ulang", async () => {
   expect(fix.prompt).toContain("Judul wajib di awal");
   const broken = fakeModel({
     search: JSON.stringify({ link }),
-    article: JSON.stringify({ article: "bukan artikel" }),
+    article: JSON.stringify({ article: "Judul\n\nIsi berita." }),
     format: "masih bukan artikel",
   });
-  await expect(labArticle(fakeStore(), 7, 41, work, broken)).rejects.toThrow(
-    "Format artikel tetap rusak",
-  );
+  await expect(
+    labArticle(fakeStore(), 7, 41, work, broken, fakeFetch()),
+  ).rejects.toThrow("Format artikel tetap rusak");
 });
 
-it("link tidak bisa diakses dilepas lalu Jurnalis mencari berita lain", async () => {
+it("link yang gagal diunduh dilepas lalu Jurnalis mencari berita lain", async () => {
   const store = fakeStore();
   const [a, b] = ["https://dailysocial.id/a", "https://dailysocial.id/b"];
   const model = fakeModel({
     search: [JSON.stringify({ link: a }), JSON.stringify({ link: b })],
-    article: [
-      BLOCKED,
-      JSON.stringify({ accessible: true, article: ARTICLE(b) }),
-    ],
+    article: OK(b),
   });
-  const result = await labArticle(store, 7, 41, work, model);
+  const result = await labArticle(store, 7, 41, work, model, fakeFetch(a));
   expect(result.link).toBe(b);
   expect(store.release).toHaveBeenCalledWith(41, a);
   expect(store.use).toHaveBeenNthCalledWith(1, 7, a, 41);
   expect(store.use).toHaveBeenNthCalledWith(2, 7, b, 41);
-  // Pencarian kedua diminta menghindari link yang gagal.
-  expect(model.mock.calls[2][0].prompt).toContain(`- ${a}`);
-  expect(model.mock.calls[2][0].work).toBe(path.join(work, "percobaan-2"));
+  // Pencarian kedua diminta menghindari link yang gagal; penulis tak dipanggil untuk a.
+  expect(model.mock.calls.map((c) => c[0].name)).toEqual([
+    "search",
+    "search",
+    "article",
+  ]);
+  expect(model.mock.calls[1][0].prompt).toContain(`- ${a}`);
+  expect(model.mock.calls[1][0].work).toBe(path.join(work, "percobaan-2"));
 });
 
-it("tiga berita berturut-turut tidak bisa diakses menggagalkan artikel", async () => {
+it("tiga berita berturut-turut gagal diunduh menggagalkan artikel", async () => {
   const store = fakeStore();
   const links = [1, 2, 3].map((n) => `https://dailysocial.id/${n}`);
   const model = fakeModel({
     search: links.map((link) => JSON.stringify({ link })),
-    article: [BLOCKED, BLOCKED, BLOCKED],
   });
-  await expect(labArticle(store, 7, 41, work, model)).rejects.toThrow(
-    "3 berita berturut-turut tidak bisa diakses",
-  );
+  await expect(
+    labArticle(store, 7, 41, work, model, fakeFetch(...links)),
+  ).rejects.toThrow("3 berita berturut-turut tidak bisa diakses");
   expect(store.release).toHaveBeenCalledTimes(3);
   expect(store.finish).toHaveBeenLastCalledWith(
     7,
@@ -252,29 +305,40 @@ it("tiga berita berturut-turut tidak bisa diakses menggagalkan artikel", async (
   );
 });
 
-it("link yang dipegang tapi tidak bisa diakses diganti berita baru", async () => {
+it("link yang dipegang tapi gagal diunduh diganti berita baru", async () => {
   const held = "https://dailysocial.id/lama";
   const fresh = "https://dailysocial.id/baru";
   const store = fakeStore(lab, held);
   const model = fakeModel({
-    article: [
-      BLOCKED,
-      JSON.stringify({ accessible: true, article: ARTICLE(fresh) }),
-    ],
     search: JSON.stringify({ link: fresh }),
+    article: OK(fresh),
   });
-  expect((await labArticle(store, 7, 41, work, model)).link).toBe(fresh);
+  expect(
+    (await labArticle(store, 7, 41, work, model, fakeFetch(held))).link,
+  ).toBe(fresh);
   expect(store.release).toHaveBeenCalledWith(41, held);
   expect(store.use).toHaveBeenCalledWith(7, fresh, 41);
+});
+
+it("jawaban tanpa paragraf isi tidak diperbaiki agar isi tidak dikarang", async () => {
+  const link = "https://dailysocial.id/n";
+  const model = fakeModel({
+    search: JSON.stringify({ link }),
+    article: JSON.stringify({ article: "Saya sudah membaca beritanya." }),
+  });
+  await expect(
+    labArticle(fakeStore(), 7, 41, work, model, fakeFetch()),
+  ).rejects.toThrow("bukan artikel");
+  expect(model.mock.calls.map((c) => c[0].name)).toEqual(["search", "article"]);
 });
 
 it("percobaan ulang artikel memakai link yang sudah dipegang tanpa mencari lagi", async () => {
   const link = "https://dailysocial.id/lama";
   const store = fakeStore(lab, link);
-  const model = fakeModel({
-    article: JSON.stringify({ article: ARTICLE(link) }),
-  });
-  expect((await labArticle(store, 7, 41, work, model)).link).toBe(link);
+  const model = fakeModel({ article: OK(link) });
+  expect((await labArticle(store, 7, 41, work, model, fakeFetch())).link).toBe(
+    link,
+  );
   expect(model).toHaveBeenCalledTimes(1);
   expect(store.use).not.toHaveBeenCalled();
 });
@@ -297,12 +361,13 @@ it("lab nonaktif atau berita di luar sumber digagalkan", async () => {
       41,
       work,
       fakeModel({ search: '{"link":"https://lain.com/x"}' }),
+      fakeFetch(),
     ),
   ).rejects.toThrow("tidak menemukan berita baru");
   expect(store.use).not.toHaveBeenCalled();
 });
 
-it("Tes mencari berita lain bila link tidak bisa diakses, tanpa mencatat", async () => {
+it("Tes mencari berita lain bila link gagal diunduh, tanpa mencatat", async () => {
   const store = fakeStore();
   const [a, b] = ["https://dailysocial.id/a", "https://dailysocial.id/b"];
   await runJurnalisTest(
@@ -310,12 +375,10 @@ it("Tes mencari berita lain bila link tidak bisa diakses, tanpa mencatat", async
     lab,
     fakeModel({
       search: [JSON.stringify({ link: a }), JSON.stringify({ link: b })],
-      article: [
-        BLOCKED,
-        JSON.stringify({ accessible: true, article: ARTICLE(b) }),
-      ],
+      article: OK(b),
     }),
     127,
+    fakeFetch(a),
   );
   expect(store.use).not.toHaveBeenCalled();
   expect(store.release).not.toHaveBeenCalled();
@@ -332,11 +395,9 @@ it("Tes menampilkan satu berita terbaru dan artikelnya tanpa mencatat", async ()
   await runJurnalisTest(
     store,
     lab,
-    fakeModel({
-      search: JSON.stringify({ link }),
-      article: JSON.stringify({ article: ARTICLE(link) }),
-    }),
+    fakeModel({ search: JSON.stringify({ link }), article: OK(link) }),
     125,
+    fakeFetch(),
   );
   expect(store.use).not.toHaveBeenCalled();
   expect(store.finishTest).toHaveBeenCalledWith(7, {
