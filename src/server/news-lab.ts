@@ -1,6 +1,7 @@
-// Lab Berita: tiap lab punya tema global dan daftar link sumber rujukan. Jurnalis
-// tidak menimbun stok: ia baru mencari berita terbaru saat produksi jenis konten
-// yang memakai lab ini memanggilnya (jadwal milik jenis konten), atau saat Tes.
+// Lab Berita: tiap lab mandiri menghasilkan artikel final. Isinya tema global,
+// link sumber rujukan, dan prompt artikel. Jurnalis tidak menimbun stok: saat
+// produksi jenis konten yang memakai lab ini memanggilnya (jadwal milik jenis
+// konten), atau saat Tes, ia memilih satu berita terbaru lalu menulis artikelnya.
 // Link yang dipakai dicatat di news_lab_links dan tidak pernah dipakai dua kali.
 import { createHash } from "node:crypto";
 import type mysql from "mysql2/promise";
@@ -10,11 +11,13 @@ import { newsSourceKey } from "./news";
 export type NewsLabInput = {
   theme: string;
   sources: string[];
+  prompt: string;
 };
-/** Hasil Tes: link yang ditemukan hanya ditampilkan, tidak dicatat. */
+/** Hasil Tes: berita dan artikelnya hanya ditampilkan, tidak dicatat. */
 export type NewsLabTest = {
   state: "queued" | "running" | "done" | "failed";
   links: string[];
+  article: string | null;
   error: string | null;
   at: number | null;
 };
@@ -36,8 +39,6 @@ export type NewsLabLink = {
 };
 // Tes "running" yang tidak selesai dalam batas ini dianggap terhenti.
 export const JURNALIS_STALE_MS = 20 * 60000;
-// Jumlah kandidat terbaru yang diminta; yang pertama valid dipakai produksi.
-export const JURNALIS_CANDIDATES = 3;
 
 export function normalizeNewsLab(value: any): NewsLabInput {
   const theme = typeof value?.theme === "string" ? value.theme.trim() : "";
@@ -64,7 +65,10 @@ export function normalizeNewsLab(value: any): NewsLabInput {
     if (!sources.includes(href)) sources.push(href);
   }
   if (!sources.length) throw Error("Isi minimal satu link sumber rujukan");
-  return { theme, sources };
+  const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
+  if (!prompt || prompt.length > 100000)
+    throw Error("Prompt artikel wajib diisi, maksimal 100.000 karakter");
+  return { theme, sources, prompt };
 }
 
 /** Domain sumber rujukan; link berita wajib berasal dari salah satunya. */
@@ -111,27 +115,27 @@ export function acceptLinks(
 export function jurnalisPrompt(
   lab: Pick<NewsLab, "theme" | "sources">,
   used: string[],
-  count = JURNALIS_CANDIDATES,
 ) {
   return `Kamu adalah Jurnalis NC Post. Tema liputan: ${lab.theme}.
 
 Cari berita yang paling baru terbit saat ini dan sesuai tema, hanya dari sumber rujukan berikut:
 ${lab.sources.map((s) => `- ${s}`).join("\n")}
 
-Pilih ${count} berita berbeda, urutkan dari yang paling baru terbit. Setiap pilihan wajib berupa link lengkap halaman artikel berita (HTTPS, bukan halaman depan, kategori, atau pencarian) dari domain sumber di atas, dan sudah kamu buka untuk memastikan isinya sesuai tema serta waktu terbitnya.
+Pilih satu berita yang paling baru terbit. Pilihan wajib berupa link lengkap halaman artikel berita (HTTPS, bukan halaman depan, kategori, atau pencarian) dari domain sumber di atas, dan sudah kamu buka untuk memastikan isinya sesuai tema serta waktu terbitnya.
 ${used.length ? `\nJangan memilih link berikut karena sudah pernah dipakai:\n${used.map((u) => `- ${u}`).join("\n")}\n` : ""}
-Kembalikan hanya JSON: {"links": ["https://..."]}`;
+Kembalikan hanya JSON: {"link": "https://..."}`;
 }
 
 const toLab = (r: any): NewsLab => ({
   id: r.id,
   theme: r.theme,
   sources: JSON.parse(r.sources || "[]"),
+  prompt: r.prompt ?? "",
   enabled: !!r.enabled,
   test: r.test_state
     ? {
         state: r.test_state,
-        ...{ links: [], error: null },
+        ...{ links: [], article: null, error: null },
         ...(r.test_result ? JSON.parse(r.test_result) : {}),
         at: r.test_at === null ? null : Number(r.test_at),
       }
@@ -160,16 +164,16 @@ export class NewsLabStore {
   async create(input: unknown) {
     const lab = normalizeNewsLab(input);
     const [r]: any = await this.db.query(
-      "INSERT INTO news_labs(theme,sources) VALUES(?,?)",
-      [lab.theme, JSON.stringify(lab.sources)],
+      "INSERT INTO news_labs(theme,sources,prompt) VALUES(?,?,?)",
+      [lab.theme, JSON.stringify(lab.sources), lab.prompt],
     );
     return r.insertId as number;
   }
   async update(id: number, input: unknown) {
     const lab = normalizeNewsLab(input);
     const [r]: any = await this.db.query(
-      "UPDATE news_labs SET theme=?,sources=? WHERE id=?",
-      [lab.theme, JSON.stringify(lab.sources), id],
+      "UPDATE news_labs SET theme=?,sources=?,prompt=? WHERE id=?",
+      [lab.theme, JSON.stringify(lab.sources), lab.prompt, id],
     );
     if (!r.affectedRows) throw Error("Lab Berita tidak ditemukan");
   }
@@ -221,10 +225,13 @@ export class NewsLabStore {
     );
     return r.affectedRows ? lab : null;
   }
-  async finishTest(id: number, links: string[], error: string | null) {
+  async finishTest(
+    id: number,
+    result: { links: string[]; article: string | null; error: string | null },
+  ) {
     await this.db.query(
       "UPDATE news_labs SET test_state=?,test_result=? WHERE id=?",
-      [error ? "failed" : "done", JSON.stringify({ links, error }), id],
+      [result.error ? "failed" : "done", JSON.stringify(result), id],
     );
   }
   async links(limit = 200): Promise<NewsLabLink[]> {

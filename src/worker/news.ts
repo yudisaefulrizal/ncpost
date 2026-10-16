@@ -2,7 +2,7 @@ import { generateConfiguredArticle } from "./configured-article";
 import { finishProcessTiming } from "../server/process-timing";
 import { NewsMediaStore } from "../server/news-media-store";
 import { NewsLabStore } from "../server/news-lab";
-import { newsForArticle } from "./jurnalis";
+import { labArticle } from "./jurnalis";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../server/config";
@@ -81,34 +81,36 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
       j.content_type_id ?? 2,
     );
     // Berita kini selalu lewat Konfigurasi artikel; sumber Lab Berita memanggil
-    // Jurnalis untuk berita terbaru saat ini (bukan lagi daftar situs tetap).
+    // Jurnalis yang memilih berita terbaru dan menulis artikel final dengan
+    // prompt lab (bukan lagi daftar situs tetap).
     if (!settings.articleConfig)
       throw Error(
         "Aktifkan Konfigurasi artikel dan pilih Lab Berita di Pengaturan Berita",
       );
     const config = settings.articleConfig;
-    const link =
+    const lab =
       config.source === "lab"
-        ? await newsForArticle(
+        ? await labArticle(
             new NewsLabStore(store.db),
             config.labId!,
             j.id,
             path.join(dir, "jurnalis"),
           )
-        : "";
-    const generated = await generateConfiguredArticle(
-      store.db,
-      settings,
-      "news",
-      dir,
-      "",
-      "",
-      undefined,
-      j.content_type_id ?? 2,
-      link || "",
-    );
+        : null;
+    const generated =
+      lab ??
+      (await generateConfiguredArticle(
+        store.db,
+        settings,
+        "news",
+        dir,
+        "",
+        "",
+        undefined,
+        j.content_type_id ?? 2,
+      ));
     const sourceUrl =
-      link || /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";
+      lab?.link || /https:\/\/[^\s)]+/.exec(generated.parsed.source)?.[0] || "";
     const result: NewsResult = {
       article: generated.article,
       article_config: settings.articleConfig,

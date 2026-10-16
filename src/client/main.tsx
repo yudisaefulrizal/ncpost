@@ -1833,7 +1833,7 @@ function App() {
         />
       );
     } else if (page === "Lab Berita") {
-      sub = "Tema dan sumber rujukan Jurnalis untuk jenis konten Berita.";
+      sub = "Tiap lab menghasilkan artikel berita final dari berita terbaru.";
       content = (
         <React.Suspense fallback={<div className="card empty">Memuat…</div>}>
           <NewsLabPage />

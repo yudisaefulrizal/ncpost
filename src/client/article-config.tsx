@@ -47,10 +47,16 @@ export function ArticleConfigFields({
           value={value.source}
           onChange={(e) => {
             const source = e.target.value as ArticleConfig["source"];
-            // Lab Berita: topik datang dari berita pilihan Jurnalis.
+            // Lab Berita: artikel final ditulis Jurnalis dengan prompt lab.
             set(
               source === "lab"
-                ? { source, topicMode: "ai", topic: "", context: "" }
+                ? {
+                    source,
+                    topicMode: "ai",
+                    topic: "",
+                    context: "",
+                    paragraphCount: null,
+                  }
                 : { source },
             );
           }}
@@ -123,7 +129,7 @@ export function ArticleConfigFields({
           )}
         </>
       )}
-      {!quote && (
+      {!quote && value.source !== "lab" && (
         <label className="field article-paragraphs">
           Jumlah paragraf
           <input

@@ -42,6 +42,7 @@ const labRow = (enabled = 1) => ({
   id: 5,
   theme: "Teknologi",
   sources: '["https://example.com"]',
+  prompt: "Tulis berita {{link_berita}}.",
   enabled,
   test_state: null,
   state: "idle",
@@ -50,7 +51,7 @@ const labRow = (enabled = 1) => ({
 });
 const labType = (
   links: { url: string }[],
-  prompt = "Tulis berita {{link_berita}}.",
+  prompt = "Prompt jenis konten tidak dipakai.",
   lab = labRow(),
 ) => {
   const s = store();
@@ -151,7 +152,7 @@ it("artikel lab yang tidak mengutip link Jurnalis ditolak", async () => {
 it("produksi memanggil Jurnalis untuk berita terbaru saat itu lalu menulisnya", async () => {
   const article = `# Judul\n\nIsi berita.\n\nSumber: ${LINK}\n\nTag: tekno`;
   vi.mocked(runCli)
-    .mockResolvedValueOnce(searched(JSON.stringify({ links: [LINK] })))
+    .mockResolvedValueOnce(searched(JSON.stringify({ link: LINK })))
     .mockResolvedValueOnce(searched(article));
   const s = labType([]);
   await runNewsJob(s, job);

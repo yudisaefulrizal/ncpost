@@ -5,8 +5,8 @@ import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import type { NewsLab, NewsLabLink } from "../server/news-lab";
 
-type Draft = { theme: string; sources: string };
-const empty: Draft = { theme: "", sources: "" };
+type Draft = { theme: string; sources: string; prompt: string };
+const empty: Draft = { theme: "", sources: "", prompt: "" };
 const when = (ts: number) =>
   new Date(ts).toLocaleString("id-ID", {
     dateStyle: "medium",
@@ -77,12 +77,13 @@ export function NewsLabPage() {
           )}
         </div>
         <p className="muted">
-          Saat produksi jenis konten yang memakai lab ini membuat artikel,
-          Jurnalis mencari berita paling baru saat itu sesuai tema, hanya dari
-          link sumber rujukan. Jadwal dan jumlah produksi diatur di jenis
-          kontennya (Pengaturan Berita, Sumber bahan: Lab Berita). Lab nonaktif
-          tidak bisa dipakai; Tes menampilkan berita terbaru yang ditemukan
-          tanpa mencatatnya.
+          Tiap lab menghasilkan artikel final sendiri. Saat produksi jenis
+          konten yang memakai lab ini membuat artikel, Jurnalis memilih satu
+          berita paling baru saat itu sesuai tema, hanya dari link sumber
+          rujukan, lalu menulis artikelnya dengan prompt lab. Jadwal dan jumlah
+          produksi diatur di jenis kontennya (Pengaturan Berita, Sumber bahan:
+          Lab Berita). Lab nonaktif tidak bisa dipakai; Tes menampilkan berita
+          dan artikel hasilnya tanpa mencatatnya.
         </p>
         {error && (
           <p className="warn" role="alert">
@@ -100,6 +101,7 @@ export function NewsLabPage() {
                 {
                   theme: draft.theme,
                   sources: draft.sources.split(/[\s,]+/).filter(Boolean),
+                  prompt: draft.prompt,
                 },
                 null,
               );
@@ -131,6 +133,17 @@ export function NewsLabPage() {
               }
               value={draft.sources}
               onChange={(e) => setDraft({ ...draft, sources: e.target.value })}
+            />
+          </label>
+          <label className="field">
+            Prompt artikel
+            <textarea
+              rows={10}
+              required
+              maxLength={100000}
+              placeholder="Instruksi penulisan artikel final. Bisa memakai {{link_berita}} dan {{konteks}} (tema)."
+              value={draft.prompt}
+              onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
             />
           </label>
           <div>
@@ -188,6 +201,7 @@ export function NewsLabPage() {
                               setDraft({
                                 theme: lab.theme,
                                 sources: lab.sources.join("\n"),
+                                prompt: lab.prompt,
                               });
                             }}
                           >
@@ -258,10 +272,10 @@ export function NewsLabPage() {
                               {test.state === "queued"
                                 ? "menunggu Jurnalis"
                                 : test.state === "running"
-                                  ? "Jurnalis mencari berita…"
+                                  ? "Jurnalis mencari berita dan menulis artikel…"
                                   : test.state === "failed"
                                     ? "gagal"
-                                    : `${test.links.length} berita ditemukan (tidak dicatat)`}
+                                    : "berita dan artikel tidak dicatat"}
                             </small>
                             {test.error && (
                               <small className="warn">{test.error}</small>
@@ -280,6 +294,14 @@ export function NewsLabPage() {
                                   </li>
                                 ))}
                               </ol>
+                            )}
+                            {test.article && (
+                              <details>
+                                <summary>Lihat artikel hasil Tes</summary>
+                                <pre className="news-lab-article">
+                                  {test.article}
+                                </pre>
+                              </details>
                             )}
                           </div>
                         </td>

@@ -201,11 +201,12 @@ CREATE TABLE IF NOT EXISTS news_stock (
  KEY news_stock_asset(asset_id),
  CONSTRAINT news_stock_asset_fk FOREIGN KEY(asset_id) REFERENCES assets(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
--- Lab Berita: tema global dan link sumber rujukan untuk Jurnalis.
+-- Lab Berita: tema global, link sumber rujukan, dan prompt artikel Jurnalis.
 CREATE TABLE IF NOT EXISTS news_labs (
  id INT AUTO_INCREMENT PRIMARY KEY,
  theme VARCHAR(190) NOT NULL,
  sources MEDIUMTEXT NOT NULL,
+ prompt MEDIUMTEXT NULL,
  enabled TINYINT NOT NULL DEFAULT 1,
  test_state VARCHAR(16) NULL,
  test_result MEDIUMTEXT NULL,

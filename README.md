@@ -148,26 +148,28 @@ Pilihan otomatis hanya berlaku jika NC-WA menyediakan satu akun. Jika beberapa a
 
 ## Konten Berita
 
-Bahan berita berasal dari **Lab Berita** (menu Lab). Tiap lab berisi tema
-global dan link sumber rujukan; jumlah lab bebas. Lab tidak menimbun stok dan
-tidak punya jadwal sendiri: jadwal dan jumlah produksi milik jenis konten yang
-memakai lab itu.
+Artikel berita dihasilkan oleh **Lab Berita** (menu Lab). Tiap lab mandiri:
+berisi tema global, link sumber rujukan, dan prompt artikel sendiri; jumlah lab
+bebas. Lab tidak menimbun stok dan tidak punya jadwal sendiri: jadwal dan jumlah
+produksi milik jenis konten yang memakai lab itu.
 
-Jenis konten Berita wajib memakai **Konfigurasi artikel** dengan Sumber bahan
-**Lab Berita** dan memilih lab-nya di Pengaturan Berita. Saat artikel dibuat
-(Jadwal, Manajer, atau Buat artikel), produksi memanggil karyawan **Jurnalis**:
-ia mencari berita yang paling baru terbit saat itu sesuai tema, hanya dari domain
-sumber rujukan, melewati link yang sudah terpakai, lalu mencatat link itu di
-tabel berita terpakai (`news_lab_links`) agar tidak pernah dipakai dua kali.
-Artikel ditulis dari link tersebut; prompt Lab Artikel bisa memakai
-`{{link_berita}}`, dan baris Sumber artikel wajib memuat link itu. Percobaan
-ulang artikel memakai link yang sama. Artefak Jurnalis tersimpan di
+Jenis konten Berita (Jenis teks **Artikel mandiri**) memakai **Konfigurasi
+artikel** dengan Sumber bahan **Lab Berita** dan cukup memilih lab-nya di
+Pengaturan Berita; prompt artikel dan jumlah paragraf tidak diatur di jenis
+konten. Saat artikel dibuat (Jadwal, Manajer, atau Buat artikel), produksi
+memanggil karyawan **Jurnalis**: ia memilih **satu** berita yang paling baru
+terbit saat itu sesuai tema, hanya dari domain sumber rujukan dan belum pernah
+dipakai, mencatat link-nya di tabel berita terpakai (`news_lab_links`), lalu
+menulis artikel final dengan prompt lab. Prompt lab bisa memakai
+`{{link_berita}}` dan `{{konteks}}` (tema); baris Sumber artikel wajib memuat
+link itu. Artikel final dipakai apa adanya oleh tahap produksi berikutnya.
+Percobaan ulang artikel memakai link yang sama. Artefak Jurnalis tersimpan di
 `output/berita/<id>/<percobaan>/jurnalis/`.
 
 Lab bisa dinonaktifkan (tidak bisa dipilih dan pemanggilannya gagal). Tombol
-**Tes** meminta Jurnalis mencari berita terbaru untuk lab itu secepatnya; link
-yang ditemukan hanya ditampilkan dan tidak dicatat. Daftar media tetap dan jalur
-prompt Hermes lama tidak lagi dipakai untuk produksi.
+**Tes** meminta Jurnalis memilih berita terbaru dan menulis artikelnya
+secepatnya; hasilnya hanya ditampilkan dan tidak dicatat. Daftar media tetap dan
+jalur prompt Hermes lama tidak lagi dipakai untuk produksi.
 
 Tahap produksi berikutnya memakai komponen gambar, audio, render, dan Instagram
 yang sama dengan buku. URL sumber yang sudah digunakan ditolak untuk mencegah

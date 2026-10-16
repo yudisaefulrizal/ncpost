@@ -308,17 +308,20 @@ export function ContentPlanCard({
               }
             />
           )}
-          <details className="content-settings-prompt">
-            <summary>Prompt artikel</summary>
-            <LabPromptSettings
-              engine={type.engine}
-              images={false}
-              selected={settings.labPromptIds || []}
-              onChange={(ids) =>
-                setSettings((s) => ({ ...s, labPromptIds: ids }))
-              }
-            />
-          </details>
+          {/* Lab Berita memakai prompt artikel milik lab-nya sendiri. */}
+          {settings.articleConfig?.source !== "lab" && (
+            <details className="content-settings-prompt">
+              <summary>Prompt artikel</summary>
+              <LabPromptSettings
+                engine={type.engine}
+                images={false}
+                selected={settings.labPromptIds || []}
+                onChange={(ids) =>
+                  setSettings((s) => ({ ...s, labPromptIds: ids }))
+                }
+              />
+            </details>
+          )}
         </section>
         <section className="content-settings-section output-settings">
           <h2>Output & gambar</h2>

@@ -93,6 +93,7 @@ export async function migrateDatabase(connection: Connection) {
     ["lab_runs", "reference_key", "VARCHAR(64) NULL"],
     ["lab_runs", "resolved_prompt", "MEDIUMTEXT NULL"],
     ["news_labs", "enabled", "TINYINT NOT NULL DEFAULT 1"],
+    ["news_labs", "prompt", "MEDIUMTEXT NULL"],
     ["news_labs", "test_state", "VARCHAR(16) NULL"],
     ["news_labs", "test_result", "MEDIUMTEXT NULL"],
     ["news_labs", "test_at", "BIGINT NULL"],

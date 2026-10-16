@@ -275,16 +275,20 @@ export function ContentTypes({
                 }
               />
             )}
-            {settings.articleConfig && (
-              <LabPromptSettings
-                engine={engine}
-                selected={settings.labPromptIds || []}
-                images={false}
-                onChange={(ids) =>
-                  setSettings((current) => ({ ...current, labPromptIds: ids }))
-                }
-              />
-            )}
+            {settings.articleConfig &&
+              settings.articleConfig.source !== "lab" && (
+                <LabPromptSettings
+                  engine={engine}
+                  selected={settings.labPromptIds || []}
+                  images={false}
+                  onChange={(ids) =>
+                    setSettings((current) => ({
+                      ...current,
+                      labPromptIds: ids,
+                    }))
+                  }
+                />
+              )}
             <ContentPlanFields
               quote={engine === "quote"}
               outputs={outputs}
