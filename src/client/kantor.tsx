@@ -72,16 +72,57 @@ const STROLL_PAUSE_MS: [number, number] = [3000, 5000];
 const STROLL_SPEED = 1.1;
 const RUSH_SPEED = 2.6;
 const STAY_PUT = new Set(["manajer", "resepsionis"]);
-const ROOMS = ["konten", "aset", "rnd", "umum", "lobi", "manajer"];
+// Rute aman per ruangan (koordinat x,z dunia; lihat desain/kantor-3d/kantor.py):
+// titik berhenti tamu di area kosong, jalan masuk dari pintu, dan cara staf
+// ruangan itu keluar dari kursinya tanpa menembus meja, kursi, atau lemari.
+type XZ = [number, number];
+const ROOMS: Record<
+  string,
+  { stop: XZ; door?: XZ; entry?: XZ[]; exit: (seat: XZ) => XZ[] }
+> = {
+  // Meja di depan kursi: lewat lorong antar meja dulu.
+  konten: { stop: [-7, -1.85], exit: (s) => aisleExit(s, -7, -1.9) },
+  aset: { stop: [7, -1.85], exit: (s) => aisleExit(s, 7, -1.9) },
+  // Meja di belakang kursi: langsung ke arah pintu.
+  rnd: { stop: [-8, 1.8], exit: ([x]) => [[x, 1.85]] },
+  // Ada lemari tepat di balik pintu Umum: masuk lewat sisi kanan ambang pintu
+  // dan staf memutarinya dari belakang.
+  umum: {
+    stop: [7.8, 1.9],
+    door: [7.5, 1.2],
+    exit: ([x]) => [
+      [x, 2.15],
+      [7.5, 2.15],
+    ],
+  },
+  // Tamu berhenti di samping meja resepsionis, bukan menembusnya.
+  lobi: { stop: [-2.0, 1.8], exit: () => [] },
+  // Di luar kursi rapat.
+  manajer: { stop: [1.8, -1.8], exit: () => [] },
+};
+function aisleExit([x, z]: XZ, center: number, front: number): XZ[] {
+  const aisle = x + (x < center - 0.3 ? 1 : -1);
+  return [
+    [aisle, z],
+    [aisle, front],
+  ];
+}
+// Lajur koridor berbeda untuk pergi dan pulang supaya jarang berpapasan.
+const LANE = 0.25;
+// Jarak minimum antar pejalan; yang kalah prioritas menunggu sebentar.
+const PERSONAL = 0.7;
+const WAIT_MAX_MS = 5000;
 const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
 type Stroll = {
   path: THREE.Vector3[];
+  back: THREE.Vector3[]; // rute pulang (lajur koridor yang lain)
   seg: number;
   mode: "out" | "pause" | "back";
   speed: number;
   until: number; // akhir jeda di ruangan tujuan
   standUntil: number; // berdiri dulu sebelum melangkah
+  waitSince: number; // menunggu pejalan lain lewat (0 = tidak)
 };
 type Actor = {
   id: string;
@@ -339,40 +380,52 @@ export function KantorPage({
       "(prefers-reduced-motion: reduce)",
     ).matches;
     const pt = (name: string) => points.get(name);
-    /** Kursi → pintu → koridor departemen. Ruang atas: menyamping ke lorong dulu. */
-    const exitPath = (a: Actor) => {
-      const inside = pt(a.dept + "_dalam"),
-        door = pt(a.dept + "_pintu"),
-        hall = pt("koridor_" + a.dept);
-      if (!inside || !door || !hall) return null;
-      const out = [a.seat.clone()];
-      if (a.seat.z < inside.z) {
-        // Meja di depan kursi: lewat lorong antar meja.
-        const aisle = a.seat.x + (a.seat.x < inside.x - 0.3 ? 1 : -1);
-        out.push(new THREE.Vector3(aisle, 0, a.seat.z));
-        out.push(new THREE.Vector3(aisle, 0, inside.z));
-      } else out.push(new THREE.Vector3(a.seat.x, 0, inside.z));
-      out.push(inside.clone(), door.clone(), hall.clone());
-      return out;
+    const v = ([x, z]: XZ) => new THREE.Vector3(x, 0, z);
+    const doorOf = (room: string) =>
+      ROOMS[room]?.door ? v(ROOMS[room].door!) : pt(room + "_pintu")!.clone();
+    const lane = (name: string, dz: number) => {
+      const p = pt(name)!;
+      return new THREE.Vector3(p.x, 0, p.z + dz);
     };
     const startStroll = (a: Actor, now: number) => {
-      const out = exitPath(a);
-      const rooms = ROOMS.filter((r) => r !== a.dept && pt("koridor_" + r));
-      const dest = rooms[Math.floor(Math.random() * rooms.length)];
-      if (!out || !dest) return;
+      const home = ROOMS[a.dept];
+      const dests = Object.keys(ROOMS).filter(
+        (r) => r !== a.dept && pt("koridor_" + r) && pt(r + "_pintu"),
+      );
+      const dest = dests[Math.floor(Math.random() * dests.length)];
+      if (!home || !dest || !pt("koridor_" + a.dept) || !pt(a.dept + "_pintu"))
+        return;
+      const room = ROOMS[dest];
+      // Kursi → pintu sendiri, lalu (lajur pergi) → pintu tujuan → titik berhenti.
+      const exit = [
+        a.seat.clone(),
+        ...home.exit([a.seat.x, a.seat.z]).map(v),
+        doorOf(a.dept),
+      ];
+      const inside = [...(room.entry ?? []).map(v), v(room.stop)];
       const path = [
-        ...out,
-        pt("koridor_" + dest)!.clone(),
-        pt(dest + "_pintu")!.clone(),
-        pt(dest + "_dalam")!.clone(),
+        ...exit,
+        lane("koridor_" + a.dept, -LANE),
+        lane("koridor_" + dest, -LANE),
+        doorOf(dest),
+        ...inside,
+      ];
+      const back = [
+        ...[...inside].reverse(),
+        doorOf(dest),
+        lane("koridor_" + dest, LANE),
+        lane("koridor_" + a.dept, LANE),
+        ...[...exit].reverse(),
       ];
       a.stroll = {
         path,
+        back,
         seg: 0,
         mode: "out",
         speed: STROLL_SPEED,
         until: 0,
         standUntil: now + 600,
+        waitSince: 0,
       };
       play(a, "berdiri", true);
     };
@@ -385,11 +438,13 @@ export function KantorPage({
           : w.path.slice(0, w.seg + 1).reverse();
       a.stroll = {
         path: [a.root.position.clone(), ...back],
+        back: [],
         seg: 0,
         mode: "back",
         speed: RUSH_SPEED,
         until: 0,
         standUntil: 0,
+        waitSince: 0,
       };
       play(a, "jalan").timeScale = RUSH_SPEED / STROLL_SPEED;
     };
@@ -403,6 +458,21 @@ export function KantorPage({
       }, 800);
       a.nextStroll = performance.now() + between(STROLL_GAP_MS);
     };
+    /** Pejalan lain menghalangi langkah berikutnya? Yang bergegas didahulukan. */
+    const blocked = (a: Actor, next: THREE.Vector3) => {
+      for (const b of actors.values()) {
+        if (b === a || !b.stroll || b.stroll.mode === "pause") continue;
+        const ahead = next.distanceTo(b.root.position);
+        if (ahead >= PERSONAL) continue;
+        if (ahead >= a.root.position.distanceTo(b.root.position)) continue;
+        const rushA = a.stroll!.speed > STROLL_SPEED,
+          rushB = b.stroll.speed > STROLL_SPEED;
+        if (rushA !== rushB) return rushB;
+        if (b.stroll.waitSince) continue; // yang lain sudah mengalah
+        if (a.id > b.id) return true;
+      }
+      return false;
+    };
     const strollStep = (a: Actor, dt: number, now: number) => {
       const w = a.stroll!;
       if (w.standUntil) {
@@ -412,8 +482,8 @@ export function KantorPage({
       }
       if (w.mode === "pause") {
         if (now < w.until) return;
-        // Selesai mampir: pulang lewat rute yang sama dengan langkah biasa.
-        w.path = [...w.path].reverse();
+        // Selesai mampir: pulang lewat lajur koridor yang lain.
+        w.path = w.back;
         w.seg = 0;
         w.mode = "back";
         play(a, "jalan").timeScale = 1;
@@ -422,8 +492,25 @@ export function KantorPage({
       if (!to) return;
       const delta = to.clone().sub(a.root.position);
       const step = w.speed * dt;
+      const next =
+        delta.length() > step
+          ? a.root.position
+              .clone()
+              .addScaledVector(delta.clone().normalize(), step)
+          : to;
+      if (blocked(a, next)) {
+        if (!w.waitSince) {
+          w.waitSince = now;
+          play(a, "berdiri_diam");
+        }
+        if (now - w.waitSince < WAIT_MAX_MS) return;
+      }
+      if (w.waitSince) {
+        w.waitSince = 0;
+        play(a, "jalan").timeScale = w.speed / STROLL_SPEED;
+      }
       if (delta.length() > step) {
-        a.root.position.addScaledVector(delta.normalize(), step);
+        a.root.position.copy(next);
         a.root.rotation.set(0, Math.atan2(delta.x, delta.z), 0);
         return;
       }
