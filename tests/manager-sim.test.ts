@@ -679,6 +679,35 @@ describe("Manajer menangani jenis konten berita", () => {
     expect(read(file).orders[0].title).toBe("Berita baru");
   });
 
+  it("stok berita siap dibatasi tiga walau target harian tinggi", async () => {
+    const targets = { instagram: 10, tiktok: 0, youtube: 0 };
+    // Siang hari: belum ada jam posting yang jatuh tempo, jadi stok utuh.
+    const MORNING = Date.UTC(2026, 9, 15, 0) - WIB;
+    const two = newsWorld(
+      [article(1), article(2)],
+      {
+        1: panelReady(),
+        2: panelReady(),
+      },
+      targets,
+    );
+    await run(two, stateFile(), MORNING);
+    expect(two.calls.created).toBe(1);
+    const three = newsWorld(
+      [article(1), article(2), article(3)],
+      {
+        1: panelReady(),
+        2: panelReady(),
+        3: panelReady(),
+      },
+      targets,
+    );
+    const file = stateFile();
+    await run(three, file, MORNING);
+    expect(three.calls.created).toBe(0);
+    expect(read(file).orders).toEqual([]);
+  });
+
   it("artikel berita gagal ditulis: pesanan ditandai macet dengan pesan Jurnalis", async () => {
     const articles = [
       article(9, {

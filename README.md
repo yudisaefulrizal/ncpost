@@ -189,8 +189,9 @@ events, teks sumber `source.md`, jawaban) tersimpan per percobaan di
 
 Manajer (Ruang Manajer) juga menangani jenis konten berita dengan aturan yang
 sama seperti jenis lain: target posting harian per sosmed, jam posting acak,
-stok untuk sisa hari ini dan besok, serta coba ulang job gagal empat kali
-sehari. Bila stok kurang, Manajer membuat artikel baru (Jurnalis mencari berita
+serta coba ulang job gagal empat kali sehari. Karena berita cepat basi, stok
+berita siap (ditambah yang sedang diproduksi) dibatasi paling banyak tiga,
+bukan sisa target hari ini dan besok seperti buku/quote. Bila stok kurang, Manajer membuat artikel baru (Jurnalis mencari berita
 terbaru) atau melanjutkan tahap produksi berikutnya, lalu memposting Instagram
 lewat antrean media berita dan TikTok/YouTube dengan sumber `news:<id>`.
 

@@ -5,6 +5,7 @@ import {
   POST_WINDOW,
   scheduleView,
   slotTimes,
+  stockShort,
   wibDayStart,
 } from "../src/server/manager";
 
@@ -136,5 +137,15 @@ describe("ringkasan Manajer", () => {
     ).toMatchObject({ ready: 4 });
     const stale = managerView(state, type, targets, at(10) + STOCK_FRESH + 1);
     expect(stale.instagram).toMatchObject({ ready: null, check: null });
+  });
+});
+
+describe("batas stok berita", () => {
+  it("berita paling banyak tiga siap; buku tetap sisa hari ini + besok", () => {
+    expect(stockShort("news", 12, 0)).toBe(3);
+    expect(stockShort("news", 12, 2)).toBe(1);
+    expect(stockShort("news", 12, 5)).toBe(0);
+    expect(stockShort("news", 1, 0)).toBe(1);
+    expect(stockShort("book", 12, 2)).toBe(12);
   });
 });

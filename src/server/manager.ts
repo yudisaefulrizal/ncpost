@@ -53,6 +53,14 @@ export const POST_QUEUE_LIMIT = 30 * MINUTE;
 // Hitungan stok lebih tua dari ini dianggap basi (Manajer memeriksa tiap menit).
 export const STOCK_FRESH = 5 * MINUTE;
 const MAX_ORDERS = 2; // topik yang diproduksi bersamaan per jenis konten
+// Berita cepat basi: stok siap (ditambah yang sedang diproduksi) paling banyak
+// sebanyak ini, bukan sisa target hari ini + besok seperti buku/quote.
+export const NEWS_READY_MAX = 3;
+/** Kekurangan stok; untuk berita dibatasi NEWS_READY_MAX. */
+export const stockShort = (engine: string, short: number, ready: number) =>
+  engine === "news"
+    ? Math.min(short, Math.max(0, NEWS_READY_MAX - ready))
+    : short;
 // Job produksi gagal dicoba ulang tiap 6 jam WIB (00, 06, 12, 18); yang sudah
 // gagal lebih dari MAX_JOB_FAILS kali berturut-turut dihapus.
 export const RETRY_EVERY = 6 * 3600000;
@@ -857,7 +865,11 @@ async function work(
           : candidates.length;
       state.stock[`${type.id}:${platform}`] = { ready: readyCount, at: now };
       // Persiapan: sisa target hari ini dan target besok harus sudah siap.
-      const { short } = availability(readyCount, target, done, inflight, 0);
+      const short = stockShort(
+        type.engine,
+        availability(readyCount, target, done, inflight, 0).short,
+        readyCount,
+      );
       if (short > 0) {
         shortage = Math.max(shortage, short);
         shortFor.push(PLATFORM_LABEL[platform]);
@@ -1150,7 +1162,7 @@ async function work(
 /** Ringkasan Manajer untuk satu jenis konten (dipakai /api/office). */
 export function managerView(
   state: ManagerState,
-  type: Pick<ContentType, "id" | "settings">,
+  type: Pick<ContentType, "id" | "settings"> & { engine?: string },
   targetMap: TargetMap,
   now: number,
 ) {
@@ -1195,16 +1207,20 @@ export function managerView(
           : (slots.find((s) => s.status === "terjadwal")?.at ??
             (slots.some((s) => s.status === "terlewat") ? now : null)),
       ready: stock?.ready ?? null,
-      check:
-        targets[platform] && stock
-          ? availability(
-              stock.ready,
-              targets[platform],
-              done,
-              mine.filter((p) => p.status === "proses").length,
-              producing,
-            )
-          : null,
+      check: (() => {
+        if (!targets[platform] || !stock) return null;
+        const check = availability(
+          stock.ready,
+          targets[platform],
+          done,
+          mine.filter((p) => p.status === "proses").length,
+          producing,
+        );
+        return {
+          ...check,
+          short: stockShort(type.engine ?? "book", check.short, stock.ready),
+        };
+      })(),
     };
   }
   return view;
