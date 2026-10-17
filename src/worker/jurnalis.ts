@@ -21,6 +21,7 @@ import {
 } from "../server/content-contract";
 import { cliArgs, parseEvents, runCli } from "../server/providers";
 import { citesLink } from "./configured-article";
+import { live } from "../server/live";
 import {
   fetchNewsText,
   NewsUnreachable,
@@ -168,6 +169,7 @@ async function search(
   exclude: string[] = [],
 ) {
   mkdirSync(work, { recursive: true, mode: 0o700 });
+  live(`Mencari berita terbaru · ${lab.theme}`);
   const prompt = jurnalisPrompt(lab, [
     ...new Set([...exclude, ...(await store.usedUrls())]),
   ]);
@@ -205,7 +207,9 @@ async function write(
 ) {
   if (!lab.prompt) throw Error(`Prompt artikel Lab ${lab.theme} belum diisi`);
   // Isi berita diunduh aplikasi; gagal unduh = berita tidak bisa diakses.
+  live(`Membaca berita: ${link}`);
   const news = await fetchText(link);
+  live(`Menulis artikel: ${news.title || link}`);
   writeFileSync(path.join(work, "source.md"), `${news.title}\n\n${news.text}`, {
     mode: 0o600,
   });
@@ -236,6 +240,7 @@ async function write(
     );
   if (check.errors.length) {
     // Perbaikan format sekali tanpa web; isi kalimat tidak diubah.
+    live("Merapikan format artikel…");
     writeFileSync(path.join(work, "article.pre-format.md"), article, {
       mode: 0o600,
     });

@@ -43,6 +43,7 @@ import { generateStock } from "./stock-generator";
 import { NewsStore } from "../server/news-store";
 import { runNewsJob } from "./news";
 import { runJurnalisTest } from "./jurnalis";
+import { live, withLive } from "../server/live";
 import { NewsLabStore } from "../server/news-lab";
 import { selectInstagramAccount } from "../server/instagram-account";
 import {
@@ -257,18 +258,28 @@ function publicVideo(c: Chapter) {
   copyFileSync(resolveMedia(m.file, chapterDir(c)), path.join(dir, name));
   return `${origin}/pub/${name}`;
 }
+// Jenis proses untuk balon di kantor; klien memetakannya ke karyawan.
+const liveKind = (table: string, job: { kind?: string }) =>
+  table === "news_articles"
+    ? "ARTICLE"
+    : table === "lab_runs"
+      ? `LAB_${String(job.kind).toUpperCase()}`
+      : String(job.kind);
 function generation(
   table: string,
-  job: { id: number; cancel_version?: number },
+  job: { id: number; cancel_version?: number; kind?: string },
   run: () => Promise<void>,
 ) {
-  return cancellableGeneration(
-    store.db,
-    table,
-    job.id,
-    run,
-    Number(job.cancel_version || 0),
-  );
+  return withLive(`${table}:${job.id}`, liveKind(table, job), () => {
+    live("Memulai…");
+    return cancellableGeneration(
+      store.db,
+      table,
+      job.id,
+      run,
+      Number(job.cancel_version || 0),
+    );
+  });
 }
 async function runJob(job: Job) {
   const startedAt = Date.now(),
@@ -1188,7 +1199,9 @@ while (!stop) {
         // Jurnalis dipanggil produksi artikel; lajur ini hanya untuk Tes.
         const test = await newsLabStore.claimTest();
         if (test)
-          jurnalis = runJurnalisTest(newsLabStore, test)
+          jurnalis = withLive(`jurnalis-test:${test.id}`, "JURNALIS", () =>
+            runJurnalisTest(newsLabStore, test),
+          )
             .catch((e) =>
               console.error("Tes Jurnalis gagal:", (e as Error).message),
             )

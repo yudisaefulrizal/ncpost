@@ -3,6 +3,7 @@ import { finishProcessTiming } from "../server/process-timing";
 import { NewsMediaStore } from "../server/news-media-store";
 import { NewsLabStore } from "../server/news-lab";
 import { labArticle } from "./jurnalis";
+import { asLive } from "../server/live";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { ROOT } from "../server/config";
@@ -90,11 +91,13 @@ export async function runNewsJob(store: NewsStore, j: NewsArticle) {
     const config = settings.articleConfig;
     const lab =
       config.source === "lab"
-        ? await labArticle(
-            new NewsLabStore(store.db),
-            config.labId!,
-            j.id,
-            path.join(dir, "jurnalis"),
+        ? await asLive("JURNALIS", () =>
+            labArticle(
+              new NewsLabStore(store.db),
+              config.labId!,
+              j.id,
+              path.join(dir, "jurnalis"),
+            ),
           )
         : null;
     const generated =

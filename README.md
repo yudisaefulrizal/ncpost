@@ -359,6 +359,25 @@ npm run reset:media -- --apply --services-stopped
 Reset menolak job yang masih berjalan, mencadangkan data database dan direktori media ke `output/media-backups/<waktu>/`, lalu membersihkan stok dan hasil produksi. Artikel, topik, preset, referensi/logo, pengaturan, akun, kredensial, jadwal, dan riwayat posting eksternal tetap dipertahankan. Cadangan tidak dihapus otomatis. Jika reset berhenti akibat proses/server mati, jangan langsung menjalankan ulang: periksa cadangan dan penanda `data/media-reset.guard` dahulu. Skrip ini terpisah dari migrasi skema agar pembaruan aplikasi tidak otomatis menghapus media.
 
 
+## Proses langsung di kantor
+
+Selama job berjalan, karyawan kantor menampilkan maksimal 80 karakter terakhir
+prosesnya di balon atas kepala: pencarian web, penalaran, dan jawaban Codex,
+serta tahap Jurnalis (mencari, membaca, menulis, merapikan format). Worker
+menulis teks ini ke `data/live.json` (maks. ~3 kali per detik, tanpa perubahan
+skema DB), server membacanya dan meneruskannya lewat WebSocket `/api/live`
+yang hanya terbuka untuk pengguna yang masuk dari origin aplikasi. Balon hilang
+saat job selesai; bila koneksi putus, kantor tersambung ulang otomatis.
+
+Di server cloud, reverse proxy harus meneruskan WebSocket, misalnya di Nginx
+(aaPanel) pada blok `location` yang mem-proxy aplikasi:
+
+```nginx
+proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade;
+proxy_set_header Connection "upgrade";
+```
+
 ## Menghentikan generate
 
 Tombol **Stop** tersedia pada aktivitas worker di Produksi, produksi berita, dan pengujian Lab. List Antrian juga dapat menghentikan job generate yang sedang berjalan. Worker memeriksa pembatalan setiap satu detik, menghentikan proses CLI/render dan permintaan TTS, lalu membersihkan file stok sementara. Stok yang sudah berhasil dibuat tetap tersimpan. Job ditandai **Dibatalkan** dan dapat dicoba ulang; stok lama tetap dipertahankan jika regenerate dibatalkan. Job publikasi yang sedang dikirim tidak memiliki tombol Stop.

@@ -2985,6 +2985,21 @@ dialog.app-dialog::backdrop {
 .b-gagal {
   background: #ff7a59;
 }
+/* Proses langsung: maksimal 80 karakter terakhir, dua baris. */
+.kantor-live {
+  max-width: 220px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(9, 14, 28, 0.88);
+  color: #dbe7ff;
+  font: 500 11px/15px var(--mono);
+  text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
 .kantor-name {
   padding: 1px 7px;
   border-radius: 5px;

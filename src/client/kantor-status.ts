@@ -271,3 +271,22 @@ export function newlyCompleted(prev: Map<number, string>, jobs: OfficeJob[]) {
       ["queued", "running"].includes(prev.get(j.id) ?? ""),
   );
 }
+
+/** Proses langsung (WebSocket /api/live): satu entri per job yang berjalan. */
+export type LiveEntry = { key: string; kind: string; text: string; at: number };
+/** Karyawan yang menampilkan proses jenis ini di atas kepalanya. */
+export function liveStaff(kind: string): string | null {
+  if (kind === JURNALIS_KIND) return "jurnalis";
+  if (kind === "LAB_IMAGE") return "visual";
+  if (kind.startsWith("LAB_")) return "naskah";
+  return STAFF.find((s) => !s.semua && s.handles?.(kind))?.id ?? null;
+}
+/** Teks terbaru per karyawan; bila beberapa job, yang paling baru menang. */
+export function liveByStaff(entries: LiveEntry[]) {
+  const out: Record<string, string> = {};
+  for (const e of [...entries].sort((a, b) => a.at - b.at)) {
+    const id = liveStaff(e.kind);
+    if (id) out[id] = e.text;
+  }
+  return out;
+}

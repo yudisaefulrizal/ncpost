@@ -5,6 +5,7 @@ import {
 } from "./generation-cancel";
 import { spawn } from "node:child_process";
 import { privateEnv } from "./config";
+import { codexLiveText, live } from "./live";
 export function runCli(
   executable: string,
   args: string[],
@@ -24,6 +25,7 @@ export function runCli(
     });
     watchGenerationChild(child);
     let out = "",
+      pending = "",
       settled = false;
     const done = (err?: Error) => {
       if (settled) return;
@@ -36,7 +38,15 @@ export function runCli(
       done(Error("Provider timeout"));
     }, timeout);
     child.stdout.on("data", (b) => {
-      out += b.toString();
+      const chunk = b.toString();
+      out += chunk;
+      // Proses langsung di kantor: teks dari event Codex yang sudah lengkap.
+      const lines = (pending + chunk).split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        const text = codexLiveText(line);
+        if (text) live(text);
+      }
       if (out.length > 2000000) {
         child.kill("SIGKILL");
         done(Error("Output terlalu besar"));

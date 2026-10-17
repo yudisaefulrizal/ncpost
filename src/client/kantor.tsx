@@ -12,6 +12,7 @@ import {
   STATUS_LABEL,
   jobsOf,
   labJobs,
+  liveByStaff,
   type OfficeLab,
   latestJobs,
   newlyCompleted,
@@ -102,6 +103,33 @@ export function KantorPage({
   const [hovered, setHovered] = useState<string | null>(null);
   const [showNames, setShowNames] = useState(false);
   const [jobError, setJobError] = useState("");
+  // Proses langsung di atas kepala karyawan (WebSocket, tersambung ulang otomatis).
+  const [liveText, setLiveText] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let socket: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const connect = () => {
+      socket = new WebSocket(
+        `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/live`,
+      );
+      socket.onmessage = (e) => {
+        try {
+          setLiveText(liveByStaff(JSON.parse(e.data)));
+        } catch {}
+      };
+      socket.onclose = () => {
+        setLiveText({});
+        if (!stopped) retry = setTimeout(connect, 5000);
+      };
+    };
+    connect();
+    return () => {
+      stopped = true;
+      clearTimeout(retry);
+      socket?.close();
+    };
+  }, []);
   const statuses = Object.fromEntries(
     STAFF.map((s) => [s.id, staffStatus(s, jobs, doneUntil[s.id] ?? 0, now)]),
   ) as Record<string, OfficeStatus>;
@@ -607,6 +635,9 @@ export function KantorPage({
                   ref={(n) => void (bubbles.current[s.id] = n)}
                   className="kantor-tag"
                 >
+                  {liveText[s.id] && (
+                    <span className="kantor-live">{liveText[s.id]}</span>
+                  )}
                   {BUBBLE[st] ? (
                     <span className={"kantor-bubble b-" + st}>
                       {BUBBLE[st]}

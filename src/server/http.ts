@@ -51,6 +51,8 @@ import { NewsStore } from "./news-store";
 import { NewsLabStore } from "./news-lab";
 import { selectInstagramAccount } from "./instagram-account";
 import express from "express";
+import { WebSocketServer } from "ws";
+import { readLive, watchLive } from "./live";
 import path from "node:path";
 import { initConfig, ROOT } from "./config";
 import { Store, type Chapter } from "./store";
@@ -1118,6 +1120,35 @@ const server = app.listen(8072, "127.0.0.1", async () => {
     });
   }
   console.log("NC Post: http://127.0.0.1:8072 — worker terpisah");
+});
+// Proses langsung di atas kepala karyawan kantor (lihat live.ts). Hanya untuk
+// pengguna yang masuk; data dikirim saat worker memperbarui berkasnya.
+const liveSockets = new WebSocketServer({ noServer: true });
+server.on("upgrade", (req, socket, head) => {
+  const url = new URL(req.url ?? "/", "http://127.0.0.1");
+  if (url.pathname !== "/api/live") return;
+  const token =
+    (req.headers.cookie ?? "")
+      .split(";")
+      .map((x) => x.trim())
+      .find((x) => x.startsWith("ncpost_session="))
+      ?.slice(15) ?? "";
+  if (
+    !allowedOrigin(req.headers.origin ?? null) ||
+    !validSession(token, cfg.secret)
+  ) {
+    socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  liveSockets.handleUpgrade(req, socket, head, (ws) => {
+    ws.send(JSON.stringify(readLive()));
+  });
+});
+watchLive((entries) => {
+  const message = JSON.stringify(entries);
+  for (const ws of liveSockets.clients)
+    if (ws.readyState === ws.OPEN) ws.send(message);
 });
 server.on("error", () => {
   console.error("Port 8072 tidak tersedia; proses berhenti tanpa worker");
