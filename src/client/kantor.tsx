@@ -63,7 +63,26 @@ const COURIER: Record<string, string[]> = {
 const POLL_MS = 4000;
 const DONE_MS = 4000;
 const WALK_SPEED = 1.6;
+// Jalan-jalan saat menganggur: jarang, paling banyak dua orang sekaligus, dan
+// bergegas pulang (lebih cepat) begitu ada pekerjaan.
+const STROLL_MAX = 2;
+const STROLL_IDLE_MS = 60000; // diam minimal sebelum jalan-jalan pertama
+const STROLL_GAP_MS: [number, number] = [45000, 120000];
+const STROLL_PAUSE_MS: [number, number] = [3000, 5000];
+const STROLL_SPEED = 1.1;
+const RUSH_SPEED = 2.6;
+const STAY_PUT = new Set(["manajer", "resepsionis"]);
+const ROOMS = ["konten", "aset", "rnd", "umum", "lobi", "manajer"];
+const between = ([a, b]: [number, number]) => a + Math.random() * (b - a);
 
+type Stroll = {
+  path: THREE.Vector3[];
+  seg: number;
+  mode: "out" | "pause" | "back";
+  speed: number;
+  until: number; // akhir jeda di ruangan tujuan
+  standUntil: number; // berdiri dulu sebelum melangkah
+};
 type Actor = {
   id: string;
   root: THREE.Object3D;
@@ -71,6 +90,11 @@ type Actor = {
   current?: THREE.AnimationAction;
   status: OfficeStatus;
   waving: boolean;
+  dept: string;
+  seat: THREE.Vector3;
+  seatQuat: THREE.Quaternion;
+  nextStroll: number;
+  stroll?: Stroll;
 };
 type Courier = {
   root: THREE.Object3D;
@@ -297,6 +321,11 @@ export function KantorPage({
             mixer: new THREE.AnimationMixer(root),
             status: "diam",
             waving: false,
+            dept: s.dept,
+            seat: root.position.clone(),
+            seatQuat: root.quaternion.clone(),
+            nextStroll:
+              performance.now() + STROLL_IDLE_MS + between(STROLL_GAP_MS),
           };
           play(a, CLIP.diam).time = Math.random() * 2;
           actors.set(s.id, a);
@@ -305,16 +334,121 @@ export function KantorPage({
       })
       .catch(() => !disposed && setLoading("Aset kantor gagal dimuat."));
 
+    // ---------- jalan-jalan saat menganggur ----------
+    const reduced = window.matchMedia?.(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const pt = (name: string) => points.get(name);
+    /** Kursi → pintu → koridor departemen. Ruang atas: menyamping ke lorong dulu. */
+    const exitPath = (a: Actor) => {
+      const inside = pt(a.dept + "_dalam"),
+        door = pt(a.dept + "_pintu"),
+        hall = pt("koridor_" + a.dept);
+      if (!inside || !door || !hall) return null;
+      const out = [a.seat.clone()];
+      if (a.seat.z < inside.z) {
+        // Meja di depan kursi: lewat lorong antar meja.
+        const aisle = a.seat.x + (a.seat.x < inside.x - 0.3 ? 1 : -1);
+        out.push(new THREE.Vector3(aisle, 0, a.seat.z));
+        out.push(new THREE.Vector3(aisle, 0, inside.z));
+      } else out.push(new THREE.Vector3(a.seat.x, 0, inside.z));
+      out.push(inside.clone(), door.clone(), hall.clone());
+      return out;
+    };
+    const startStroll = (a: Actor, now: number) => {
+      const out = exitPath(a);
+      const rooms = ROOMS.filter((r) => r !== a.dept && pt("koridor_" + r));
+      const dest = rooms[Math.floor(Math.random() * rooms.length)];
+      if (!out || !dest) return;
+      const path = [
+        ...out,
+        pt("koridor_" + dest)!.clone(),
+        pt(dest + "_pintu")!.clone(),
+        pt(dest + "_dalam")!.clone(),
+      ];
+      a.stroll = {
+        path,
+        seg: 0,
+        mode: "out",
+        speed: STROLL_SPEED,
+        until: 0,
+        standUntil: now + 600,
+      };
+      play(a, "berdiri", true);
+    };
+    /** Ada pekerjaan: berbalik dan bergegas ke kursi lewat rute yang sama. */
+    const rushHome = (a: Actor) => {
+      const w = a.stroll!;
+      const back =
+        w.mode === "back"
+          ? w.path.slice(w.seg + 1)
+          : w.path.slice(0, w.seg + 1).reverse();
+      a.stroll = {
+        path: [a.root.position.clone(), ...back],
+        seg: 0,
+        mode: "back",
+        speed: RUSH_SPEED,
+        until: 0,
+        standUntil: 0,
+      };
+      play(a, "jalan").timeScale = RUSH_SPEED / STROLL_SPEED;
+    };
+    const sitDown = (a: Actor) => {
+      a.stroll = undefined;
+      a.root.position.copy(a.seat);
+      a.root.quaternion.copy(a.seatQuat);
+      play(a, "duduk", true);
+      setTimeout(() => {
+        if (!disposed && !a.stroll && !a.waving) play(a, CLIP[a.status]);
+      }, 800);
+      a.nextStroll = performance.now() + between(STROLL_GAP_MS);
+    };
+    const strollStep = (a: Actor, dt: number, now: number) => {
+      const w = a.stroll!;
+      if (w.standUntil) {
+        if (now < w.standUntil) return;
+        w.standUntil = 0;
+        play(a, "jalan").timeScale = 1;
+      }
+      if (w.mode === "pause") {
+        if (now < w.until) return;
+        // Selesai mampir: pulang lewat rute yang sama dengan langkah biasa.
+        w.path = [...w.path].reverse();
+        w.seg = 0;
+        w.mode = "back";
+        play(a, "jalan").timeScale = 1;
+      }
+      const to = w.path[w.seg + 1];
+      if (!to) return;
+      const delta = to.clone().sub(a.root.position);
+      const step = w.speed * dt;
+      if (delta.length() > step) {
+        a.root.position.addScaledVector(delta.normalize(), step);
+        a.root.rotation.set(0, Math.atan2(delta.x, delta.z), 0);
+        return;
+      }
+      a.root.position.copy(to);
+      w.seg++;
+      if (w.seg < w.path.length - 1) return;
+      if (w.mode === "out") {
+        w.mode = "pause";
+        w.until = now + between(STROLL_PAUSE_MS);
+        play(a, "berdiri_diam");
+      } else sitDown(a);
+    };
+
     engine.current = {
       setStatus(id, s) {
         const a = actors.get(id);
         if (!a || a.status === s) return;
         a.status = s;
-        if (!a.waving) play(a, CLIP[s]);
+        if (s !== "diam" && a.stroll) rushHome(a);
+        else if (!a.waving && !a.stroll) play(a, CLIP[s]);
+        if (s === "diam") a.nextStroll = performance.now() + STROLL_IDLE_MS;
       },
       wave(id) {
         const a = actors.get(id);
-        if (!a || a.waving) return;
+        if (!a || a.waving || a.stroll) return;
         a.waving = true;
         play(a, "berdiri", true);
         const steps: [string, number, boolean][] = [
@@ -331,7 +465,13 @@ export function KantorPage({
       },
       courier(id) {
         const route = COURIER[id];
-        if (!staffModels || !route || couriers.length >= 3) return;
+        if (
+          !staffModels ||
+          !route ||
+          couriers.length >= 3 ||
+          actors.get(id)?.stroll
+        )
+          return;
         const path = route
           .map((p) => points.get(p))
           .filter(Boolean) as THREE.Vector3[];
@@ -426,6 +566,26 @@ export function KantorPage({
       }
       controls.update();
       for (const a of actors.values()) a.mixer.update(dt);
+      const now = performance.now();
+      let strolling = 0;
+      for (const a of actors.values())
+        if (a.stroll) {
+          strollStep(a, dt, now);
+          strolling++;
+        }
+      if (!reduced && !document.hidden && strolling < STROLL_MAX)
+        for (const a of actors.values())
+          if (
+            !a.stroll &&
+            !a.waving &&
+            a.status === "diam" &&
+            !STAY_PUT.has(a.id) &&
+            a.root.visible &&
+            now >= a.nextStroll
+          ) {
+            startStroll(a, now);
+            break;
+          }
       for (const g of globe) g.rotation.y += dt * 0.6;
       for (let i = couriers.length - 1; i >= 0; i--) {
         const c = couriers[i];
