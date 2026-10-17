@@ -22,6 +22,14 @@ import {
 } from "./kantor-status";
 import { useOffice, targetState, postLabel, hhmm } from "./office-pages";
 import { PLATFORM_LABEL } from "../server/social-plan";
+import {
+  AMBIENCE_LABEL,
+  ambienceAt,
+  ambienceName,
+  wibHour,
+  type Ambience,
+  type AmbienceMode,
+} from "./ambience";
 
 const CLIP: Record<OfficeStatus, string> = {
   diam: "duduk_diam",
@@ -167,6 +175,21 @@ export function KantorPage({
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [showNames, setShowNames] = useState(false);
+  // Suasana pagi/siang/sore/malam; pilihan manual diingat per browser.
+  const [mood, setMood] = useState<AmbienceMode>(() => {
+    try {
+      const saved = localStorage.getItem("kantor-suasana");
+      if (saved && saved in AMBIENCE_LABEL) return saved as AmbienceMode;
+    } catch {}
+    return "otomatis";
+  });
+  const moodRef = useRef(mood);
+  useEffect(() => {
+    moodRef.current = mood;
+    try {
+      localStorage.setItem("kantor-suasana", mood);
+    } catch {}
+  }, [mood]);
   const [jobError, setJobError] = useState("");
   // Proses langsung di atas kepala karyawan (WebSocket, tersambung ulang otomatis).
   const [liveText, setLiveText] = useState<Record<string, string>>({});
@@ -213,9 +236,61 @@ export function KantorPage({
     el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#0b1220");
-    scene.add(new THREE.HemisphereLight("#cfdcff", "#4a3a28", 1.7));
+    const hemi = new THREE.HemisphereLight("#cfdcff", "#4a3a28", 1.7);
+    scene.add(hemi);
     const sun = new THREE.DirectionalLight("#fff1dc", 2.4);
     sun.position.set(9, 16, 7);
+    // Lampu ruangan dan koridor (posisi sama dengan render Blender); menyala
+    // sore dan malam.
+    const lamps = (
+      [
+        [-7, 2.8, -4.3, "#ffd9a6"],
+        [0, 2.8, -4.3, "#ffd9a6"],
+        [7, 2.8, -4.3, "#ffd9a6"],
+        [-7, 2.8, 4.3, "#cfe0ff"],
+        [0, 2.8, 4.3, "#ffd9a6"],
+        [7, 2.8, 4.3, "#ffd9a6"],
+        [-5, 2.4, 0, "#ffd9a6"],
+        [5, 2.4, 0, "#ffd9a6"],
+      ] as const
+    ).map(([x, y, z, color]) => {
+      const lamp = new THREE.PointLight(color, 0, 9, 1.4);
+      lamp.position.set(x, y, z);
+      lamp.visible = false;
+      scene.add(lamp);
+      return lamp;
+    });
+    // Material model yang ikut berubah: jendela dan benda yang berpendar.
+    const windows: THREE.MeshStandardMaterial[] = [];
+    const glows: { m: THREE.MeshStandardMaterial; base: number }[] = [];
+    const GLOW = new Set([
+      "layar",
+      "layar_hijau",
+      "layar_ungu",
+      "teks_terang",
+      "hologram",
+      "led_biru",
+      "led_hijau",
+    ]);
+    let moodApplied = "";
+    const applyMood = (a: Ambience) => {
+      (scene.background as THREE.Color).set(a.background);
+      hemi.color.set(a.sky);
+      hemi.groundColor.set(a.ground);
+      hemi.intensity = a.hemi;
+      sun.color.set(a.sun);
+      sun.intensity = a.sunIntensity;
+      sun.position.set(...a.sunDir);
+      for (const lamp of lamps) {
+        lamp.intensity = a.lamps * 6;
+        lamp.visible = a.lamps > 0.02;
+      }
+      for (const m of windows) {
+        m.emissive.set(a.window);
+        m.emissiveIntensity = a.windowGlow;
+      }
+      for (const g of glows) g.m.emissiveIntensity = g.base * a.screenGlow;
+    };
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, {
@@ -371,6 +446,20 @@ export function KantorPage({
           play(a, CLIP.diam).time = Math.random() * 2;
           actors.set(s.id, a);
         }
+        office.scene.traverse((o) => {
+          const mats = (o as THREE.Mesh).material;
+          for (const m of (Array.isArray(mats)
+            ? mats
+            : mats
+              ? [mats]
+              : []) as THREE.MeshStandardMaterial[]) {
+            if (!m.emissive) continue;
+            if (m.name === "jendela" && !windows.includes(m)) windows.push(m);
+            else if (GLOW.has(m.name) && !glows.some((g) => g.m === m))
+              glows.push({ m, base: m.emissiveIntensity || 1 });
+          }
+        });
+        moodApplied = "";
         setLoading("");
       })
       .catch(() => !disposed && setLoading("Aset kantor gagal dimuat."));
@@ -641,6 +730,12 @@ export function KantorPage({
     const loop = () => {
       raf = requestAnimationFrame(loop);
       timer.update();
+      // Suasana: diperbarui tiap detik (otomatis) atau saat pilihan berubah.
+      const moodKey = `${moodRef.current}:${Math.floor(Date.now() / 1000)}`;
+      if (moodKey !== moodApplied) {
+        moodApplied = moodKey;
+        applyMood(ambienceAt(moodRef.current, wibHour(Date.now())));
+      }
       const dt = Math.min(timer.getDelta(), 0.1);
       if (focusGoal) {
         const step = focusGoal.clone().sub(controls.target);
@@ -848,6 +943,21 @@ export function KantorPage({
           {jobError && <span className="chip t-block">{jobError}</span>}
         </div>
         <div className="row-gap">
+          <label className="kantor-mood">
+            <span className="muted">Suasana</span>
+            <select
+              value={mood}
+              onChange={(e) => setMood(e.target.value as AmbienceMode)}
+            >
+              {(Object.keys(AMBIENCE_LABEL) as AmbienceMode[]).map((m) => (
+                <option key={m} value={m}>
+                  {m === "otomatis"
+                    ? `Otomatis (${AMBIENCE_LABEL[ambienceName(wibHour(now))]})`
+                    : AMBIENCE_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </label>
           <button
             className="btn btn-sec btn-sm"
             onClick={() => pick("resepsionis")}
