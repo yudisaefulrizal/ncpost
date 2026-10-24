@@ -65,6 +65,7 @@ import {
   isHorizontalKind,
   VERTICAL_KINDS,
   panelSources,
+  isAnimation,
   type BookSettings,
 } from "../server/book-settings";
 import { CRON_TYPES, type BookCron } from "../server/cron";
@@ -731,6 +732,13 @@ function App() {
           view: () => setWatching({ c }),
           viewTitle: "Tonton video kalimat",
         };
+      if (isAnimation(settingsFor(c.book), false))
+        return c.article_status !== "siap"
+          ? { title: "Butuh artikel lolos editor" }
+          : {
+              title: "Render video animasi 2D",
+              run: () => runStage(c, ["VIDEO_KALIMAT"], "Video animasi 2D"),
+            };
       if (!source)
         return {
           title: "Pilih sumber gambar Video Kalimat di Pengaturan Konten",
@@ -763,6 +771,13 @@ function App() {
           view: () => setWatching({ c, horizontal: true }),
           viewTitle: "Tonton video kalimat horizontal",
         };
+      if (isAnimation(settingsFor(c.book), true))
+        return c.article_status !== "siap"
+          ? { title: "Butuh artikel lolos editor" }
+          : {
+              title: "Render video animasi 2D horizontal",
+              run: () => runStage(c, ["VIDEO_KALIMAT_H"], "Video animasi 2D H"),
+            };
       if (!source)
         return {
           title: "Pilih sumber gambar Video Kalimat H di Pengaturan Konten",

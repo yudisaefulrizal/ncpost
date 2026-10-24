@@ -22,6 +22,7 @@ Semua prompt yang dikirim ke Codex ada di sini, satu file per prompt. File dibac
 | `stok/papercut-horizontal.md` | Stok layered paper cut horizontal | `{{teks}}` |
 | `gambar/pembungkus-codex.md` | Pembungkus setiap prompt gambar untuk tool image_generation Codex | `{{prompt}}` |
 | `editor/*.json` | Lexicon lint editor (kata dihindari, istilah asing dipertahankan) | — |
+| `video-2d/naskah.md` | Naskah Video Animasi 2D (gaya Video V/H "Animasi 2D") dari artikel | `{{judul}}`, `{{artikel}}`, `{{template}}`, `{{prop}}` |
 
 Isi `{{teks}}` pada prompt stok:
 

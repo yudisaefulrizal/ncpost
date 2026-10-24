@@ -37,14 +37,17 @@ import { validateNewsArticle } from "../server/news";
 import {
   type BookSettings,
   baseKind,
+  isAnimation,
   sentenceJob,
 } from "../server/book-settings";
+import { ANIMATION_PRESET, buildAnimationVideo } from "../server/anim2d";
 import { bestAsset, panelTokens, tokenize } from "../server/stock-match";
 import { stripMarkdownEmphasis } from "../server/stock-prompts";
 import { generateStock } from "./stock-generator";
 import { generateCodexImage } from "../server/codex-image";
 import {
   accounts,
+  codex,
   publish,
   publishCarousel,
   postStatus,
@@ -380,6 +383,46 @@ export async function runNewsMediaJob(
     }
     if (j.kind === "VIDEO_KALIMAT" || j.kind === "VIDEO_KALIMAT_H") {
       const horizontal = j.kind === "VIDEO_KALIMAT_H";
+      if (isAnimation(settings, horizontal)) {
+        // Video Animasi 2D: naskah, narasi, dan gambar dibuat sendiri dari artikel.
+        const voice = await resolveVoice(
+          store.db,
+          settings.audioVoiceId,
+          "edge-tts",
+        );
+        const text = content.paragraphs.join("\n\n");
+        const result = await sharedVideo({
+          preset: ANIMATION_PRESET,
+          horizontal,
+          text,
+          recipe: {
+            mode: "anim2d",
+            format: horizontal ? LANDSCAPE : VERTICAL,
+            voice: [voice.provider, voice.voice_id],
+          },
+          sources: [],
+          force: !!j.force_new,
+          generate: (temporary) =>
+            buildAnimationVideo(
+              {
+                title: stripMarkdownEmphasis(v.title || n.title),
+                article: text,
+                voice,
+                horizontal,
+                work,
+                force: !!j.force_new,
+                ask: (prompt) => codex(prompt, work),
+              },
+              temporary,
+            ),
+        });
+        await store.complete(j, {
+          ...result,
+          source: ANIMATION_PRESET,
+          renderedAt,
+        });
+        return;
+      }
       const spec = horizontal ? SUBTITLE_LANDSCAPE : SUBTITLE_VERTICAL;
       const source = horizontal
         ? settings.sentenceVideoHKind!

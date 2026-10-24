@@ -30,6 +30,7 @@ import {
   DEFAULT_BOOK_SETTINGS,
   normalizeBookSettings,
   panelSources,
+  isAnimation,
   type BookSettings,
 } from "./book-settings";
 import { dbConfig } from "./config";
@@ -917,7 +918,15 @@ export class Store {
         kind === "VIDEO_KALIMAT"
           ? settings.sentenceVideoKind
           : settings.sentenceVideoHKind;
-      if (!source)
+      const animation = isAnimation(settings, kind === "VIDEO_KALIMAT_H");
+      if (
+        animation &&
+        (c.article_status !== "siap" ||
+          !validateContentText(c.article, c.content_engine, c.article_config)
+            .ok)
+      )
+        throw Error("Video animasi 2D butuh artikel lolos editor");
+      if (!animation && !source)
         throw Error(
           `Pilih sumber gambar Video Kalimat${kind === "VIDEO_KALIMAT_H" ? " H" : ""} di Pengaturan Konten`,
         );
@@ -926,9 +935,12 @@ export class Store {
         settings.imageUnit || "sentence",
         c.content_engine === "quote",
       ).length;
-      if ((await this.stock(id, "S_" + source, connection)).length < n)
+      if (
+        !animation &&
+        (await this.stock(id, "S_" + source, connection)).length < n
+      )
         throw Error("Video kalimat butuh gambar untuk setiap kalimat");
-      if (!c.sentence_audio)
+      if (!animation && !c.sentence_audio)
         throw Error("Video kalimat butuh audio per kalimat");
     }
     if (kind === "REELS_IG") {

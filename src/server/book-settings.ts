@@ -100,6 +100,7 @@ export function normalizeYouTubeSettings(value: any): YouTubeSettings {
     synthetic: value.synthetic,
   };
 }
+export type VideoMode = "template" | "direct" | "anim2d";
 export interface BookSettings {
   audioVoiceId?: number | null;
   youtube?: YouTubeSettings;
@@ -115,8 +116,9 @@ export interface BookSettings {
   wholeTextImageKind?: string | null;
   singleImageMode?: "template" | "direct";
   carouselMode?: "template" | "direct";
-  sentenceVideoMode?: "template" | "direct";
-  sentenceVideoHMode?: "template" | "direct";
+  // anim2d = Video Animasi 2D (tanpa gambar dan audio per kalimat).
+  sentenceVideoMode?: VideoMode;
+  sentenceVideoHMode?: VideoMode;
   instagramAccountId: string | null;
   youtubeAccountId: string | null;
   tiktokAccountId: string | null;
@@ -231,13 +233,15 @@ export function normalizeBookSettings(input: any): BookSettings {
     VERTICAL_KINDS,
     "Sumber video kalimat vertikal",
   );
-  if (sentenceVideoKind) sentence.push(sentenceVideoKind);
+  if (sentenceVideoKind && input?.sentenceVideoMode !== "anim2d")
+    sentence.push(sentenceVideoKind);
   const sentenceVideoHKind = pick(
     input?.sentenceVideoHKind,
     HORIZONTAL_KINDS,
     "Sumber video kalimat horizontal",
   );
-  if (sentenceVideoHKind) sentence.push(sentenceVideoHKind);
+  if (sentenceVideoHKind && input?.sentenceVideoHMode !== "anim2d")
+    sentence.push(sentenceVideoHKind);
   const quoteImageStyle = input?.quoteImageStyle ?? DEFAULT_QUOTE_IMAGE_STYLE;
   if (
     !(quoteImageStyle in QUOTE_IMAGE_STYLES) &&
@@ -274,7 +278,11 @@ export function normalizeBookSettings(input: any): BookSettings {
   ]) {
     if (
       input?.[key] !== undefined &&
-      !["template", "direct"].includes(input[key])
+      ![
+        "template",
+        "direct",
+        ...(key.startsWith("sentenceVideo") ? ["anim2d"] : []),
+      ].includes(input[key])
     )
       throw Error("Cara pembuatan gambar tidak dikenal");
   }
@@ -346,3 +354,11 @@ export function normalizeBookSettings(input: any): BookSettings {
 export function panelSources(s: BookSettings) {
   return [s.panelHorizontal, s.panelVertical].filter((k): k is string => !!k);
 }
+/** Video V/H dibuat sebagai Video Animasi 2D. */
+export const isAnimation = (
+  s:
+    | Pick<BookSettings, "sentenceVideoMode" | "sentenceVideoHMode">
+    | null
+    | undefined,
+  horizontal: boolean,
+) => (horizontal ? s?.sentenceVideoHMode : s?.sentenceVideoMode) === "anim2d";

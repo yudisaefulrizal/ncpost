@@ -1,5 +1,5 @@
 import type mysql from "mysql2/promise";
-import { tts } from "./providers";
+import { tts, ttsTimed } from "./providers";
 import { edgeTts, newsTtsConfig } from "./edge-tts";
 import { writeFileSync } from "node:fs";
 export type Voice = {
@@ -95,6 +95,33 @@ export async function generateVoiceAudio(
       voice: voice.voice_id,
     }),
   );
+}
+// Seperti generateVoiceAudio, ditambah waktu tiap huruf bila layanan suara
+// menyediakannya (ElevenLabs). Edge TTS: null.
+export async function generateTimedVoiceAudio(
+  voice: Voice,
+  text: string,
+  file: string,
+) {
+  if (voice.provider === "edge-tts") {
+    await generateVoiceAudio(voice, text, file);
+    return null;
+  }
+  const config = {
+    live: process.env.LIVE_TTS === "true",
+    key: process.env.ELEVENLABS_API_KEY || "",
+    voice: voice.voice_id,
+  };
+  try {
+    const { audio, alignment } = await ttsTimed(text, config);
+    writeFileSync(file, audio);
+    return alignment;
+  } catch (error) {
+    if (!config.live || !config.key) throw error;
+    // Bila endpoint bertiming menolak, audio biasa tetap dipakai.
+    writeFileSync(file, await tts(text, config));
+    return null;
+  }
 }
 export function voiceRecipe(voice: Voice) {
   return voice.provider === "elevenlabs"

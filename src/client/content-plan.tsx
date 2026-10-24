@@ -9,6 +9,7 @@ import {
 } from "../server/content-type-domain";
 import {
   DEFAULT_BOOK_SETTINGS,
+  isAnimation,
   isHorizontalKind,
   type BookSettings,
 } from "../server/book-settings";
@@ -139,6 +140,33 @@ export function ContentPlanFields({
       </label>
     );
   };
+  const videoStyle = (horizontal: boolean) => {
+    const animation = isAnimation(settings, horizontal);
+    const label = `Gaya video ${horizontal ? "horizontal" : "vertikal"}`;
+    return (
+      <label className="field">
+        {label}
+        <select
+          aria-label={label}
+          value={animation ? "anim2d" : "gambar"}
+          onChange={(e) => {
+            const mode = e.target.value === "anim2d" ? "anim2d" : "template";
+            set(
+              horizontal
+                ? { sentenceVideoHMode: mode }
+                : { sentenceVideoMode: mode },
+            );
+          }}
+        >
+          <option value="gambar">Gambar per kalimat</option>
+          <option value="anim2d">Animasi 2D</option>
+        </select>
+      </label>
+    );
+  };
+  const imageVideo = (output: string) =>
+    outputs.includes(output) &&
+    !isAnimation(settings, output === "VIDEO_KALIMAT_H");
   return (
     <div className="stack">
       {outputs.some((output) => output.startsWith("VIDEO_")) && (
@@ -174,9 +202,7 @@ export function ContentPlanFields({
       </fieldset>
       <div className="settings-grid">
         {!quote &&
-          outputs.some(
-            (key) => key === "PANEL" || key.startsWith("VIDEO_"),
-          ) && (
+          outputs.some((key) => key === "PANEL" || imageVideo(key)) && (
             <label className="field">
               Unit gambar
               <select
@@ -197,22 +223,24 @@ export function ContentPlanFields({
             </label>
           )}
 
-        {outputs.includes("VIDEO_KALIMAT") &&
+        {outputs.includes("VIDEO_KALIMAT") && videoStyle(false)}
+        {outputs.includes("VIDEO_KALIMAT_H") && videoStyle(true)}
+        {imageVideo("VIDEO_KALIMAT") &&
           select(
             "Gaya gambar video vertikal",
             settings.sentenceVideoKind,
             verticalKinds,
             (kind) => set({ sentenceVideoKind: kind }),
           )}
-        {outputs.includes("VIDEO_KALIMAT_H") &&
+        {imageVideo("VIDEO_KALIMAT_H") &&
           select(
             "Gaya gambar video horizontal",
             settings.sentenceVideoHKind,
             horizontalKinds,
             (kind) => set({ sentenceVideoHKind: kind }),
           )}
-        {outputs.includes("VIDEO_KALIMAT") && videoText(false)}
-        {outputs.includes("VIDEO_KALIMAT_H") && videoText(true)}
+        {imageVideo("VIDEO_KALIMAT") && videoText(false)}
+        {imageVideo("VIDEO_KALIMAT_H") && videoText(true)}
         {outputs.includes("PANEL") &&
           select(
             "Gaya gambar carousel",

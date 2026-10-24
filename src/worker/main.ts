@@ -97,7 +97,8 @@ import {
   hookPrompt,
   quoteImagePrompt,
 } from "../server/prompts";
-import { baseKind, sentenceJob } from "../server/book-settings";
+import { baseKind, isAnimation, sentenceJob } from "../server/book-settings";
+import { ANIMATION_PRESET, buildAnimationVideo } from "../server/anim2d";
 import { SOURCE } from "../server/templates";
 import {
   audioDir,
@@ -481,6 +482,59 @@ async function runJob(job: Job) {
         store.db,
         c.content_type_id ?? 1,
       );
+      if (isAnimation(settings, horizontal)) {
+        // Video Animasi 2D: naskah, narasi, dan gambar dibuat sendiri dari artikel.
+        const v = validateContentText(
+          c.article,
+          c.content_engine,
+          c.article_config,
+        );
+        if (c.article_status !== "siap" || !v.ok)
+          throw Error("Video animasi 2D butuh artikel lolos editor");
+        const voice = await resolveVoice(
+          store.db,
+          mediaSettings.audioVoiceId,
+          "elevenlabs",
+        );
+        const text = v.paragraphs.join("\n\n");
+        const result = await sharedVideo({
+          preset: ANIMATION_PRESET,
+          horizontal,
+          text,
+          recipe: {
+            mode: "anim2d",
+            format: horizontal ? LANDSCAPE : VERTICAL,
+            voice: [voice.provider, voice.voice_id],
+          },
+          sources: [],
+          force: !!job.force_new,
+          generate: (temporary) =>
+            buildAnimationVideo(
+              {
+                title: stripMarkdownEmphasis(v.title || c.title),
+                article: text,
+                voice,
+                horizontal,
+                work,
+                force: !!job.force_new,
+                ask: (prompt) => codex(prompt, work),
+              },
+              temporary,
+            ),
+        });
+        const manifest = JSON.stringify({
+          ...result,
+          source: ANIMATION_PRESET,
+          renderedAt: new Date().toISOString(),
+        });
+        await store.complete(
+          job.id,
+          horizontal
+            ? { sentenceVideoH: manifest }
+            : { sentenceVideo: manifest },
+        );
+        return;
+      }
       const sentenceVideoKind = horizontal
         ? settings.sentenceVideoHKind
         : settings.sentenceVideoKind;

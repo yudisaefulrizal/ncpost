@@ -4,6 +4,7 @@ import { Modal } from "./modal";
 import type { ContentType } from "../server/content-type-domain";
 import type { Chapter } from "../server/store";
 import { articleSentences } from "../server/domain";
+import { isAnimation } from "../server/book-settings";
 
 export function QuoteProduction({
   type,
@@ -94,6 +95,7 @@ export function QuoteProduction({
     if (kind === "ARTICLE") return true;
     if (row.article_status !== "siap") return false;
     if (kind.startsWith("VIDEO_")) {
+      if (isAnimation(type.settings, kind.endsWith("_H"))) return true;
       const source = kind.endsWith("_H")
         ? type.settings?.sentenceVideoHKind
         : type.settings?.sentenceVideoKind;

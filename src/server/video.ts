@@ -65,7 +65,7 @@ export function run(cmd: string, args: string[], input?: Buffer) {
   });
 }
 // Frame mentah ditulis bertahap ke stdin ffmpeg (tidak ditampung di memori).
-async function pipeFrames(args: string[], frames: Iterable<Buffer>) {
+export async function pipeFrames(args: string[], frames: Iterable<Buffer>) {
   checkGeneration();
   const child = spawn("ffmpeg", args, {
     detached: true,

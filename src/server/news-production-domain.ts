@@ -6,6 +6,7 @@ import {
   sentenceJob,
   isStockKind,
   baseKind,
+  isAnimation,
 } from "./book-settings";
 export const NEWS_MEDIA_STAGES = [
   ["POST_IMAGE", "Gambar per seluruh teks"],
@@ -116,6 +117,7 @@ export function newsPrerequisite(
       ? null
       : "Lengkapi gambar sumber panel";
   if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
+    if (isAnimation(s, kind === "VIDEO_KALIMAT_H")) return null;
     const source =
       kind === "VIDEO_KALIMAT" ? s.sentenceVideoKind : s.sentenceVideoHKind;
     if (!source) return "Pilih sumber gambar video di Pengaturan Konten";
@@ -164,12 +166,18 @@ export function newsStageDone(
       p.outputs.PANEL.sources?.panelHorizontal === s.panelHorizontal &&
       p.outputs.PANEL.sources?.panelVertical === s.panelVertical
     );
-  if (stage === "VIDEO_KALIMAT" || stage === "VIDEO_KALIMAT_H")
+  if (stage === "VIDEO_KALIMAT" || stage === "VIDEO_KALIMAT_H") {
+    const animation = isAnimation(s, stage === "VIDEO_KALIMAT_H");
     return (
       !!p.outputs[stage] &&
-      p.outputs[stage].source ===
-        (stage === "VIDEO_KALIMAT" ? s.sentenceVideoKind : s.sentenceVideoHKind)
+      (p.outputs[stage].mode === "anim2d") === animation &&
+      (animation ||
+        p.outputs[stage].source ===
+          (stage === "VIDEO_KALIMAT"
+            ? s.sentenceVideoKind
+            : s.sentenceVideoHKind))
     );
+  }
   return !!p.outputs[stage];
 }
 export function newsCaption(article: string) {

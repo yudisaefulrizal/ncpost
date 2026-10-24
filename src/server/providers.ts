@@ -181,6 +181,38 @@ export async function tts(
   if (buf.length < 100) throw Error("Audio kosong");
   return buf;
 }
+// Sama dengan tts(), ditambah waktu tiap huruf (untuk caption per kata).
+export async function ttsTimed(
+  text: string,
+  config: { live: boolean; key: string; voice: string },
+  request: typeof fetch = fetch,
+) {
+  if (!config.live) throw Error("LIVE_TTS=false; langganan belum aktif");
+  if (!config.key || !config.voice)
+    throw Error("ElevenLabs belum dikonfigurasi");
+  const res = await request(
+    `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(config.voice)}/with-timestamps?output_format=mp3_44100_128`,
+    {
+      method: "POST",
+      headers: { "xi-api-key": config.key, "Content-Type": "application/json" },
+      body: JSON.stringify({ text, model_id: "eleven_v3" }),
+      signal: generationSignal(),
+    },
+  );
+  if (!res.ok) throw Error("ElevenLabs gagal");
+  const data: any = await res.json();
+  const audio = Buffer.from(String(data?.audio_base64 || ""), "base64");
+  if (audio.length < 100) throw Error("Audio kosong");
+  const alignment = data?.alignment;
+  return {
+    audio,
+    alignment:
+      Array.isArray(alignment?.character_start_times_seconds) &&
+      Array.isArray(alignment?.character_end_times_seconds)
+        ? alignment
+        : null,
+  };
+}
 const NCWA = "https://ncwa.nuscode.id/api/v1/instagram";
 export type ReelInput = {
   requestId: string;

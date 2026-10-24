@@ -1,5 +1,6 @@
 import {
   DEFAULT_BOOK_SETTINGS,
+  isAnimation,
   normalizeBookSettings,
   type BookSettings,
 } from "./book-settings";
@@ -37,7 +38,11 @@ export function contentStages(
   if (stages.has("QUOTE_IMAGE")) stages.add("QUOTE");
   if (stages.has("PANEL") && type.settings?.carouselMode !== "direct")
     stages.add("IMAGES_PANEL");
-  if (stages.has("VIDEO_KALIMAT") || stages.has("VIDEO_KALIMAT_H")) {
+  // Video Animasi 2D membuat narasi dan gambarnya sendiri.
+  if (
+    (stages.has("VIDEO_KALIMAT") && !isAnimation(type.settings, false)) ||
+    (stages.has("VIDEO_KALIMAT_H") && !isAnimation(type.settings, true))
+  ) {
     stages.add("IMAGES_VIDEO");
     stages.add("TTS_KALIMAT");
   }
@@ -151,8 +156,8 @@ export function normalizeContentType(input: any) {
     (stages.has("VIDEO_KALIMAT") || stages.has("VIDEO_KALIMAT_H"))
   )
     settings.sentenceKinds = [
-      settings.sentenceVideoKind,
-      settings.sentenceVideoHKind,
+      isAnimation(settings, false) ? null : settings.sentenceVideoKind,
+      isAnimation(settings, true) ? null : settings.sentenceVideoHKind,
     ].filter((k): k is string => !!k);
   if (!stages.has("IMAGES_VIDEO")) settings.sentenceKinds = [];
   return {

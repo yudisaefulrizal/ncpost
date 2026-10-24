@@ -269,12 +269,18 @@ export async function sharedVideo(options: {
     },
     details: () => metadata,
   });
-  if (!metadata && catalog) {
-    const [rows]: any = await catalog.query(
-      "SELECT metadata FROM media_stock WHERE category='video' AND file=?",
-      [path.relative(ROOT, file)],
-    );
-    metadata = rows[0]?.metadata ? JSON.parse(rows[0].metadata) : {};
-  }
+  if (!metadata) metadata = (await stockMetadata("video", file)) ?? {};
   return { ...metadata, file: path.relative(ROOT, file) };
+}
+/** Metadata yang disimpan bersama berkas stok (null bila tidak ada). */
+export async function stockMetadata(
+  category: "image" | "audio" | "video",
+  file: string,
+) {
+  if (!catalog) return null;
+  const [rows]: any = await catalog.query(
+    "SELECT metadata FROM media_stock WHERE file=? AND category=?",
+    [path.relative(ROOT, file), category],
+  );
+  return rows[0]?.metadata ? JSON.parse(rows[0].metadata) : null;
 }

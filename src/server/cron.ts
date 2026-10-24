@@ -1,7 +1,12 @@
 import { mediaUnits } from "./content-contract";
 import type { Chapter } from "./store";
 import { validateContentText } from "./domain";
-import { panelSources, sentenceJob, type BookSettings } from "./book-settings";
+import {
+  isAnimation,
+  panelSources,
+  sentenceJob,
+  type BookSettings,
+} from "./book-settings";
 
 export const CONTENT_CRON_KEY = "@content-type";
 export const CRON_TYPES = [
@@ -123,6 +128,8 @@ export function cronJobs(
         kind === "VIDEO_KALIMAT" ? s.sentenceVideoKind : s.sentenceVideoHKind;
       const output =
         kind === "VIDEO_KALIMAT" ? c.sentence_video : c.sentence_video_h;
+      if (isAnimation(s, kind === "VIDEO_KALIMAT_H"))
+        return output ? [] : [kind];
       return !output &&
         c.sentence_audio &&
         source &&

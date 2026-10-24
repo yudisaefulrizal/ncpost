@@ -1,6 +1,6 @@
 import { labConfig } from "./lab-config";
 import type mysql from "mysql2/promise";
-import type { BookSettings } from "./book-settings";
+import type { BookSettings, VideoMode } from "./book-settings";
 import { labImageKind } from "./lab-image-types";
 
 export function imageSettingsFromLabels(
@@ -22,8 +22,10 @@ export function imageSettingsFromLabels(
     labConfig(rows.find((row) => row.id === labImageKind(kind)?.id)?.config);
   const videoMode = (
     kind: string | null | undefined,
-    configured: "template" | "direct" | undefined,
+    configured: VideoMode | undefined,
   ) => {
+    // Animasi 2D tidak memakai gambar, jadi jenis gambar tidak berpengaruh.
+    if (configured === "anim2d") return configured;
     const type = rows.find(
       (row) => row.id === labImageKind(kind)?.id,
     )?.image_type;
