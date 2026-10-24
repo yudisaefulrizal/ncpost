@@ -17,6 +17,7 @@ import { Router } from "express";
 import path from "node:path";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { isGone } from "./cleanup-domain";
 import type { Store } from "./store";
 import { ROOT } from "./config";
 import { chapterDir, outputRoot, panelDir } from "./output-paths";
@@ -48,7 +49,7 @@ async function mediaLibrary(store: Store) {
       ["sentence_video", "v"],
       ["sentence_video_h", "h"],
     ] as const) {
-      if (!c[field]) continue;
+      if (!c[field] || isGone(c[field])) continue;
       const m = JSON.parse(c[field]!);
       if (typeof m.file !== "string") continue;
       videos.push({
@@ -65,7 +66,7 @@ async function mediaLibrary(store: Store) {
         version: `${c.revision}:${m.renderedAt}:${m.file}`,
       });
     }
-    if (c.panels) {
+    if (c.panels && !isGone(c.panels)) {
       const m = JSON.parse(c.panels);
       const files = [
         ...(m.panels || []).map((p: any) => p.file),
@@ -92,6 +93,7 @@ async function mediaLibrary(store: Store) {
   );
   for (const n of news) {
     const m = JSON.parse(n.data);
+    if (m.deleted) continue;
     if (n.kind === "PANEL") {
       const files = [
         ...(m.panels || []).map((p: any) => p.file),

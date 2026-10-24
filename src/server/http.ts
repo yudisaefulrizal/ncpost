@@ -92,6 +92,7 @@ import {
 import { accountStats, snapshotInstagram } from "./account-stats";
 import { credentialStatus, setCredential } from "./credentials";
 import { officeSummary } from "./office";
+import { cleanPublished } from "./cleanup";
 import { saveTargets } from "./manager-targets";
 const cfg = initConfig(),
   app = express(),
@@ -224,6 +225,13 @@ app.get("/api/audio-stock/download/file", (_, res) => {
   res.set("Cache-Control", "private, no-store");
   res.download(audioZipFile(job.id), "stok-audio.zip");
 });
+// Bersihkan video dan gambar siap posting yang sudah terbit di semua sosmed.
+app.get("/api/cleanup", async (_, res) =>
+  res.json(await cleanPublished(store, { act: false })),
+);
+app.post("/api/cleanup", async (_, res) =>
+  res.json(await cleanPublished(store)),
+);
 app.get("/api/voices", async (_, res) => res.json(await listVoices(store.db)));
 app.post("/api/voices", async (req, res) =>
   res.status(201).json({ id: await saveVoice(store.db, req.body) }),

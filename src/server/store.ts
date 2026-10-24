@@ -1,3 +1,4 @@
+import { isGone } from "./cleanup-domain";
 import { youtubePublishInput } from "./youtube-publish";
 import { CONTENT_CRON_KEY } from "./cron";
 import { cronNextRun } from "./cron-schedule";
@@ -709,7 +710,7 @@ export class Store {
             : options.media === "h"
               ? c.sentence_video_h
               : c.sentence_video;
-        if (!ready) continue;
+        if (!ready || (typeof ready === "string" && isGone(ready))) continue;
         if (options.media === "photo") {
           const manifest = JSON.parse(c.panels!);
           const files = [

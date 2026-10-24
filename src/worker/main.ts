@@ -98,6 +98,7 @@ import {
   quoteImagePrompt,
 } from "../server/prompts";
 import { baseKind, isAnimation, sentenceJob } from "../server/book-settings";
+import { cleanPublished } from "../server/cleanup";
 import { ANIMATION_PRESET, buildAnimationVideo } from "../server/anim2d";
 import { SOURCE } from "../server/templates";
 import {
@@ -1193,6 +1194,7 @@ let lastCronMinute = -1;
 let lastManagerMinute = -1;
 let lastStatsHour = -1;
 let newsRunning = false;
+let lastCleanup = 0;
 // Tes Lab Berita punya lajur sendiri, dicek tiap menit.
 let jurnalis: Promise<void> | null = null;
 let lastJurnalisMinute = -1;
@@ -1208,6 +1210,14 @@ while (!stop) {
     }
     await store.recover();
     await pollPosts();
+    // Sesudah posting selesai: hapus video dan gambar siap posting milik konten
+    // yang sudah terbit di semua sosmed yang dituju.
+    if (Date.now() - lastCleanup >= 60000) {
+      lastCleanup = Date.now();
+      cleanPublished(store).catch((e) =>
+        console.error("Pembersihan gagal:", (e as Error)?.message ?? e),
+      );
+    }
     const minute = Math.floor(Date.now() / 60000);
     if (minute !== lastCronMinute) {
       try {

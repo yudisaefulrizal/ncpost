@@ -1,3 +1,4 @@
+import { isGone } from "./cleanup-domain";
 // Manajer: menjalankan target posting harian per jenis konten (diatur di
 // Pengaturan Konten). Ia menyusun jam posting sendiri, memposting konten siap
 // sesuai Rencana konten sosmed, mengevaluasi hasilnya, dan memerintahkan tim
@@ -239,10 +240,12 @@ export function igReady(c: Chapter, format: "carousel" | "reels") {
   if (c.article_status !== "siap") return false;
   return format === "carousel"
     ? !!c.panels &&
+        !isGone(c.panels) &&
         c.panel_status === "tersedia" &&
         c.post_status === "belum" &&
         !activeJob(c, "POST_IG")
     : !!c.sentence_video &&
+        !isGone(c.sentence_video) &&
         c.reels_status === "belum" &&
         !activeJob(c, "REELS_IG");
 }
@@ -271,7 +274,7 @@ export function zernioInput(
       const ready = input.mediaKey.endsWith(":h")
         ? c.sentence_video_h
         : c.sentence_video;
-      return ready
+      return ready && !isGone(ready)
         ? { source, mediaKey: input.mediaKey, accountId: input.accountId }
         : null;
     }
@@ -280,13 +283,14 @@ export function zernioInput(
     const ready =
       options.media === "photo"
         ? c.panels &&
+          !isGone(c.panels) &&
           c.panel_status === "tersedia" &&
           panelFiles(c) >= 2 &&
           panelFiles(c) <= 35
         : options.media === "h"
           ? c.sentence_video_h
           : c.sentence_video;
-    if (!ready) return null;
+    if (!ready || (typeof ready === "string" && isGone(ready))) return null;
     const input = tiktokPublishInput(
       source,
       c.article,
@@ -423,8 +427,12 @@ function newsUnit(
     producible: completed && nextNewsJob(type, n.article, settings, p) !== null,
     igReady: (format) =>
       format === "carousel"
-        ? done("PANEL") && !p.outputs.POST_IG?.status && !active("POST_IG")
+        ? done("PANEL") &&
+          !p.outputs.PANEL?.deleted &&
+          !p.outputs.POST_IG?.status &&
+          !active("POST_IG")
         : done("VIDEO_KALIMAT") &&
+          !p.outputs.VIDEO_KALIMAT?.deleted &&
           !p.outputs.REELS_IG?.status &&
           !active("REELS_IG"),
     zernio: async (platform) => {
@@ -436,7 +444,7 @@ function newsUnit(
           const ready = input.mediaKey.endsWith(":h")
             ? p.outputs.VIDEO_KALIMAT_H
             : p.outputs.VIDEO_KALIMAT;
-          return ready
+          return ready && !ready.deleted
             ? { source, mediaKey: input.mediaKey, accountId: input.accountId }
             : null;
         }
@@ -451,7 +459,7 @@ function newsUnit(
             : options.media === "h"
               ? p.outputs.VIDEO_KALIMAT_H
               : p.outputs.VIDEO_KALIMAT;
-        if (!ready) return null;
+        if (!ready || (ready as any).deleted) return null;
         const input = tiktokPublishInput(source, n.article, n.title, settings);
         return { source, mediaKey: input.mediaKey, accountId: input.accountId };
       } catch {
