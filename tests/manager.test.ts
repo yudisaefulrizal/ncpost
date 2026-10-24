@@ -170,3 +170,45 @@ describe("stok berita", () => {
     ).not.toBeNull();
   });
 });
+
+describe("jeda produksi", () => {
+  it("limit atau kunci habis menjeda 1 jam; gagal biasa dijeda bertahap setelah dua kali", async () => {
+    const m = await import("../src/server/manager");
+    const t0 = at(10);
+    const limit = m.emptyState();
+    expect(
+      m.recordFailure(
+        limit,
+        "You've hit your usage limit. Try again at 9:15 PM.",
+        t0,
+      ),
+    ).toMatchObject({ until: t0 + m.LIMIT_PAUSE });
+    expect(m.productionPaused(limit, t0 + 1)).toBe(true);
+    expect(m.productionPaused(limit, t0 + m.LIMIT_PAUSE)).toBe(false);
+    expect(
+      m.recordFailure(m.emptyState(), "ElevenLabs gagal (HTTP 429)", t0),
+    ).not.toBeNull();
+    expect(
+      m.recordFailure(m.emptyState(), "Invalid API key", t0),
+    ).not.toBeNull();
+
+    const state = m.emptyState();
+    expect(
+      m.recordFailure(state, "Jurnalis tidak menemukan berita", t0),
+    ).toBeNull();
+    const waits = [2, 3, 4, 5, 6].map((n) => {
+      const pause = m.recordFailure(state, "gagal", t0)!;
+      return [n, (pause.until - t0) / 60000];
+    });
+    expect(waits).toEqual([
+      [2, 5],
+      [3, 10],
+      [4, 20],
+      [5, 40],
+      [6, 60],
+    ]);
+    m.recordSuccess(state);
+    expect(state).toMatchObject({ streak: 0, pause: null });
+    expect(m.productionPaused(state, t0)).toBe(false);
+  });
+});

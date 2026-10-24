@@ -56,6 +56,11 @@ function Checklist({ office }: { office: OfficeSummary }) {
           Manajer sendiri yang menentukan berapa stok yang perlu disiapkan
         </span>
       </div>
+      {office.manager.pause && (
+        <p className="warn">
+          {`Produksi dijeda sampai ${clock(office.manager.pause.until)}: ${office.manager.pause.reason}. Manajer tidak mencoba lagi sebelum itu. Terakhir: ${office.manager.pause.detail}`}
+        </p>
+      )}
       {!office.manager.checking && (
         <p className="warn">
           {office.manager.lastTickAt
@@ -131,6 +136,7 @@ export type OfficeSummary = {
     lastActionAt: number;
     lastTickAt: number;
     checking: boolean;
+    pause: { until: number; reason: string; detail: string } | null;
     orders: {
       at: number;
       updated: number;

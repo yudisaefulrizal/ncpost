@@ -723,6 +723,42 @@ describe("Manajer menangani jenis konten berita", () => {
     expect(ready.calls.enqueued).toContainEqual([7, "POST_IG"]);
   });
 
+  it("limit habis: produksi dijeda dan Manajer tidak membuat artikel baru tiap menit", async () => {
+    const AFTERNOON = Date.UTC(2026, 9, 15, 16) - WIB;
+    const articles = [
+      article(9, {
+        state: "failed",
+        error: "You've hit your usage limit. Try again at 9:15 PM.",
+      }),
+    ];
+    const w = newsWorld(articles, {}, { instagram: 1, tiktok: 0, youtube: 0 });
+    const file = stateFile();
+    writeState(file, {
+      ...emptyManager(),
+      orders: [
+        {
+          at: AFTERNOON,
+          updated: AFTERNOON,
+          typeId: 1,
+          chapterId: 9,
+          title: "",
+          reason: "x",
+          status: "berjalan",
+        },
+      ],
+    });
+    await run(w, file, AFTERNOON);
+    expect(read(file).pause).toMatchObject({ until: AFTERNOON + 60 * MIN });
+    expect(w.calls.created).toBe(0);
+    // Selama dijeda, waktu posting tiba tanpa artikel siap pun tidak membuat artikel.
+    for (let i = 1; i <= 5; i++) await run(w, file, AFTERNOON + i * MIN);
+    expect(w.calls.created).toBe(0);
+    expect(read(file).log.some((l) => l.text.includes("ditunda"))).toBe(true);
+    // Setelah jeda berakhir Manajer mencoba lagi.
+    await run(w, file, AFTERNOON + 61 * MIN);
+    expect(w.calls.created).toBe(1);
+  });
+
   it("artikel berita gagal ditulis: pesanan ditandai macet dengan pesan Jurnalis", async () => {
     const articles = [
       article(9, {

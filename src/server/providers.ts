@@ -176,7 +176,7 @@ export async function tts(
       signal: generationSignal(),
     },
   );
-  if (!res.ok) throw Error("ElevenLabs gagal");
+  if (!res.ok) throw Error(`ElevenLabs gagal (HTTP ${res.status})`);
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length < 100) throw Error("Audio kosong");
   return buf;
@@ -199,7 +199,7 @@ export async function ttsTimed(
       signal: generationSignal(),
     },
   );
-  if (!res.ok) throw Error("ElevenLabs gagal");
+  if (!res.ok) throw Error(`ElevenLabs gagal (HTTP ${res.status})`);
   const data: any = await res.json();
   const audio = Buffer.from(String(data?.audio_base64 || ""), "base64");
   if (audio.length < 100) throw Error("Audio kosong");

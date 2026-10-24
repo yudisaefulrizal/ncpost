@@ -110,6 +110,10 @@ export type ManagerState = {
   // Stok konten siap per "jenis:sosmed" pada evaluasi terakhir.
   stock: Record<string, { ready: number; at: number }>;
   noted: Record<string, number>;
+  // Produksi dijeda setelah kegagalan berturut-turut atau limit/kunci habis.
+  pause: { until: number; reason: string; detail: string } | null;
+  // Jumlah pesanan produksi macet berturut-turut sejak yang terakhir berhasil.
+  streak: number;
 };
 export const emptyState = (): ManagerState => ({
   posts: [],
@@ -120,7 +124,53 @@ export const emptyState = (): ManagerState => ({
   retryBlock: 0,
   stock: {},
   noted: {},
+  pause: null,
+  streak: 0,
 });
+
+// ---------- jeda produksi ----------
+// Limit pemakaian (mis. 5 jam) atau kunci API habis tidak hilang dalam
+// semenit; mengulang tiap menit hanya menumpuk job gagal. Error seperti ini
+// menjeda produksi 1 jam. Kegagalan lain dijeda bertahap setelah dua kali
+// berturut-turut: 5, 10, 20, 40, lalu paling lama 60 menit.
+export const LIMIT_ERROR =
+  /usage limit|rate.?limit|quota|insufficient|credit|billing|exceeded|too many requests|try again (at|in)|\b(401|402|429)\b|unauthorized|invalid.{0,20}(api|key)|api.?key/i;
+export const LIMIT_PAUSE = 60 * MINUTE;
+export const BACKOFF_BASE = 5 * MINUTE;
+export const BACKOFF_MAX = 60 * MINUTE;
+/** Jam WIB "HH.MM". */
+const wibClock = (at: number) =>
+  new Date(at + WIB).toISOString().slice(11, 16).replace(":", ".");
+export const productionPaused = (state: ManagerState, now: number) =>
+  !!state.pause && now < state.pause.until;
+/** Catat satu pesanan macet; mengembalikan jeda baru bila produksi perlu berhenti. */
+export function recordFailure(
+  state: ManagerState,
+  detail: string,
+  now: number,
+) {
+  state.streak = (state.streak ?? 0) + 1;
+  const limit = LIMIT_ERROR.test(detail);
+  const wait = limit
+    ? LIMIT_PAUSE
+    : state.streak >= 2
+      ? Math.min(BACKOFF_MAX, BACKOFF_BASE * 2 ** (state.streak - 2))
+      : 0;
+  if (!wait) return null;
+  state.pause = {
+    until: now + wait,
+    reason: limit
+      ? "limit pemakaian atau kunci API habis"
+      : `${state.streak} produksi gagal berturut-turut`,
+    detail: detail.slice(0, 200),
+  };
+  return state.pause;
+}
+/** Satu pesanan produksi selesai: hitungan gagal dan jeda dihapus. */
+export function recordSuccess(state: ManagerState) {
+  state.streak = 0;
+  state.pause = null;
+}
 
 // ---------- penyimpanan ----------
 const stateFile = () => path.join(ROOT, "data", "manager.json");
@@ -1014,7 +1064,16 @@ async function work(
       (o) => o.typeId === type.id && o.status === "berjalan",
     );
     const want = Math.min(MAX_ORDERS, shortage);
-    if (want > active.length) {
+    const paused = productionPaused(state, now);
+    if (paused && want > active.length)
+      note(
+        `paused:${type.id}`,
+        `${type.name}: produksi baru ditunda sampai ${wibClock(state.pause!.until)} (${state.pause!.reason}).`,
+        "warn",
+        type.id,
+        30 * MINUTE,
+      );
+    if (want > active.length && !paused) {
       const taken = new Set(
         state.orders
           .filter((o) => o.typeId === type.id && o.status !== "selesai")
@@ -1092,11 +1151,22 @@ async function work(
         order.updated = now;
         continue;
       }
+      // Pesanan macet: dicatat, dan produksi dijeda bila gagal berulang.
+      const jam = (reason: string) => {
+        const pause = recordFailure(state, reason, now);
+        if (pause)
+          log(
+            `Produksi dijeda sampai ${wibClock(pause.until)}: ${pause.reason}. Terakhir: ${pause.detail}`,
+            "warn",
+            type.id,
+          );
+      };
       // Judul berita baru diketahui setelah Jurnalis menulis artikelnya.
       order.title = u.title;
       if (u.busy) continue;
       const kind = u.next();
       if (kind) {
+        if (productionPaused(state, now)) continue;
         try {
           await u.enqueue(kind);
           order.updated = now;
@@ -1111,6 +1181,7 @@ async function work(
           order.note = (e as Error).message;
           order.updated = now;
           log(`Produksi ${u.label} macet: ${order.note}`, "warn", type.id);
+          jam(order.note);
         }
         continue;
       }
@@ -1118,6 +1189,7 @@ async function work(
       order.updated = now;
       if (!missing.length) {
         order.status = "selesai";
+        recordSuccess(state);
         log(`Produksi ${u.label} selesai dan siap diposting.`, "ok", type.id);
       } else {
         order.status = "macet";
@@ -1127,6 +1199,7 @@ async function work(
           "warn",
           type.id,
         );
+        jam(order.note);
       }
     }
   };
@@ -1150,7 +1223,7 @@ async function work(
 
   // 4. Tiap 6 jam: coba ulang job produksi yang gagal, hapus yang menumpuk.
   const block = Math.floor((now + WIB) / RETRY_EVERY);
-  if (block !== state.retryBlock) {
+  if (block !== state.retryBlock && !productionPaused(state, now)) {
     state.retryBlock = block;
     try {
       const book = await retryFailed(store, types);

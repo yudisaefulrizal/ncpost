@@ -233,6 +233,8 @@ export async function officeSummary(
     manager: {
       lastActionAt: manager.lastActionAt,
       lastTickAt: manager.lastTickAt,
+      // Produksi dijeda (limit/kunci habis atau gagal berulang); null bila tidak.
+      pause: manager.pause && now < manager.pause.until ? manager.pause : null,
       // Manajer masih memeriksa tiap menit; bila tidak, stok di layar basi.
       checking: now - manager.lastTickAt <= STOCK_FRESH,
       orders: manager.orders
