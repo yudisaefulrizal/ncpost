@@ -38,13 +38,15 @@ export function contentStages(
   if (stages.has("QUOTE_IMAGE")) stages.add("QUOTE");
   if (stages.has("PANEL") && type.settings?.carouselMode !== "direct")
     stages.add("IMAGES_PANEL");
-  // Video Animasi 2D membuat narasi dan gambarnya sendiri.
-  if (
-    (stages.has("VIDEO_KALIMAT") && !isAnimation(type.settings, false)) ||
-    (stages.has("VIDEO_KALIMAT_H") && !isAnimation(type.settings, true))
-  ) {
-    stages.add("IMAGES_VIDEO");
+  // Video Animasi 2D memakai audio kolom Audio, tetapi menggambar sendiri
+  // (tanpa gambar per kalimat).
+  if (stages.has("VIDEO_KALIMAT") || stages.has("VIDEO_KALIMAT_H")) {
     stages.add("TTS_KALIMAT");
+    if (
+      (stages.has("VIDEO_KALIMAT") && !isAnimation(type.settings, false)) ||
+      (stages.has("VIDEO_KALIMAT_H") && !isAnimation(type.settings, true))
+    )
+      stages.add("IMAGES_VIDEO");
   }
   return stages;
 }

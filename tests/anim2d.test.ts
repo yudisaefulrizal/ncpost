@@ -6,6 +6,7 @@ import {
   charsToWords,
   chunkWords,
   evenTimeline,
+  sceneTimeline,
 } from "../src/server/anim2d/timeline";
 import {
   DEFAULT_BOOK_SETTINGS,
@@ -112,7 +113,7 @@ it("label dipotong di batas kata agar muat", () => {
   expect(script.scenes[0].items![1].v).toBe("Label yang terlalu");
 });
 
-it("Animasi 2D tidak membutuhkan gambar dan audio per kalimat", () => {
+it("Animasi 2D tidak membutuhkan gambar per kalimat, tetapi memakai kolom Audio", () => {
   const both = normalizeContentType({
     name: "Animasi",
     engine: "book",
@@ -128,7 +129,7 @@ it("Animasi 2D tidak membutuhkan gambar dan audio per kalimat", () => {
   expect(both.settings.sentenceKinds).toEqual([]);
   const stages = contentStages(both);
   expect(stages.has("IMAGES_VIDEO")).toBe(false);
-  expect(stages.has("TTS_KALIMAT")).toBe(false);
+  expect(stages.has("TTS_KALIMAT")).toBe(true);
   expect(isAnimation(both.settings, true)).toBe(true);
   const mixed = normalizeContentType({
     ...both,
@@ -141,7 +142,7 @@ it("Animasi 2D tidak membutuhkan gambar dan audio per kalimat", () => {
   ).toThrow("Cara pembuatan gambar tidak dikenal");
 });
 
-it("jadwal dan berita: video animasi cukup menunggu artikel siap", () => {
+it("jadwal dan berita: video animasi menunggu audio, bukan gambar per kalimat", () => {
   const s = normalizeBookSettings({
     ...DEFAULT_BOOK_SETTINGS,
     sentenceVideoKind: "IMAGE_VERTICAL",
@@ -154,12 +155,18 @@ it("jadwal dan berita: video animasi cukup menunggu artikel siap", () => {
     article_status: "siap",
     stock_counts: {},
   } as unknown as Chapter;
-  expect(cronJobs("VIDEO_KALIMAT", chapter, s)).toEqual(["VIDEO_KALIMAT"]);
+  expect(cronJobs("VIDEO_KALIMAT", chapter, s)).toEqual([]);
+  const withAudio = { ...chapter, sentence_audio: "{}" } as Chapter;
+  expect(cronJobs("VIDEO_KALIMAT", withAudio, s)).toEqual(["VIDEO_KALIMAT"]);
   expect(
-    cronJobs("VIDEO_KALIMAT", { ...chapter, sentence_video: "{}" }, s),
+    cronJobs("VIDEO_KALIMAT", { ...withAudio, sentence_video: "{}" }, s),
   ).toEqual([]);
   const p = emptyNewsProduction(),
     news = newsFixture().article;
+  expect(newsPrerequisite("VIDEO_KALIMAT", p, s, news)).toBe(
+    "Buat audio terlebih dahulu",
+  );
+  p.outputs.TTS_KALIMAT = { sentences: [] };
   expect(newsPrerequisite("VIDEO_KALIMAT", p, s, news)).toBeNull();
   p.outputs.VIDEO_KALIMAT = { source: "IMAGE_VERTICAL" };
   expect(newsStageDone("VIDEO_KALIMAT", p, s, news)).toBe(false);
@@ -224,4 +231,67 @@ it("frame digambar tanpa browser di kedua format, termasuk saat kamera zoom", ()
       expect([image.width, image.height]).toEqual([W, H]);
     }
   }
+});
+
+it("adegan mengelompokkan bagian narasi: dibacakan apa adanya, semua bagian terpakai sekali", () => {
+  const texts = ["Satu.", "Dua.", "Tiga.", "Empat.", "Lima."];
+  const script = sanitizeScript(
+    {
+      scenes: [
+        { comp: "hero", bagian: 2, hl: ["dua", "lima"], items: [] },
+        { comp: "hero", bagian: 1 },
+        { layout: "outro", bagian: 9, cta: "Komen!" },
+        { comp: "hero", bagian: 1 },
+      ],
+    },
+    "x",
+    texts,
+  );
+  expect(script.scenes.map((s) => [s.from, s.count, s.narration])).toEqual([
+    [0, 2, "Satu. Dua."],
+    [2, 1, "Tiga."],
+    [3, 2, "Empat. Lima."],
+  ]);
+  expect(script.scenes.at(-1)!.layout).toBe("outro");
+  expect(script.scenes[0].hl).toEqual(["dua"]);
+  // bagian yang tidak disebut model tetap terpakai oleh adegan terakhir
+  const few = sanitizeScript(
+    { scenes: [{ comp: "hero", bagian: 1 }] },
+    "x",
+    texts,
+  );
+  expect(few.scenes).toHaveLength(1);
+  expect(few.scenes[0].count).toBe(5);
+});
+
+it("audio tag [pause] tidak tampil, dan waktu adegan menyusun bagian berjeda", () => {
+  const text = "Judul. [pause] Isi dia.";
+  const starts = [...text].map((_, i) => i * 0.1);
+  const words = charsToWords(text, {
+    characters: [...text],
+    character_start_times_seconds: starts,
+    character_end_times_seconds: starts.map((t) => t + 0.1),
+  });
+  expect(words.map((w) => w.w)).toEqual(["Judul", "Isi", "dia"]);
+  const script = sanitizeScript(
+    {
+      scenes: [
+        { comp: "hero", bagian: 2 },
+        { layout: "outro", bagian: 1 },
+      ],
+    },
+    "x",
+    ["Satu dua.", "Tiga empat.", "Lima enam."],
+  );
+  const piece = (text: string) => ({ text, seconds: 2, words: [] });
+  const timeline = sceneTimeline(script, [
+    [piece("Satu dua."), piece("Tiga empat.")],
+    [piece("Lima enam.")],
+  ]);
+  // LEAD + (2 + GAP) + (2 + TAIL), lalu LEAD + (2 + TAIL)
+  expect(timeline.scenes[0].dur).toBeCloseTo(0.08 + 2.3 + 2.22);
+  expect(timeline.scenes[1].start).toBeCloseTo(timeline.scenes[0].dur);
+  // kata bagian kedua mulai setelah bagian pertama + jeda
+  expect(timeline.scenes[0].words[2].s).toBeCloseTo(0.08 + 2.3);
+  expect(timeline.total).toBeCloseTo(timeline.scenes[1].end);
 });

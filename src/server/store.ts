@@ -940,7 +940,7 @@ export class Store {
         (await this.stock(id, "S_" + source, connection)).length < n
       )
         throw Error("Video kalimat butuh gambar untuk setiap kalimat");
-      if (!animation && !c.sentence_audio)
+      if (!c.sentence_audio)
         throw Error("Video kalimat butuh audio per kalimat");
     }
     if (kind === "REELS_IG") {

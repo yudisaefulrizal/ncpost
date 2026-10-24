@@ -735,10 +735,12 @@ function App() {
       if (isAnimation(settingsFor(c.book), false))
         return c.article_status !== "siap"
           ? { title: "Butuh artikel lolos editor" }
-          : {
-              title: "Render video animasi 2D",
-              run: () => runStage(c, ["VIDEO_KALIMAT"], "Video animasi 2D"),
-            };
+          : !c.sentence_audio
+            ? { title: "Butuh audio per kalimat" }
+            : {
+                title: "Render video animasi 2D",
+                run: () => runStage(c, ["VIDEO_KALIMAT"], "Video animasi 2D"),
+              };
       if (!source)
         return {
           title: "Pilih sumber gambar Video Kalimat di Pengaturan Konten",
@@ -774,10 +776,13 @@ function App() {
       if (isAnimation(settingsFor(c.book), true))
         return c.article_status !== "siap"
           ? { title: "Butuh artikel lolos editor" }
-          : {
-              title: "Render video animasi 2D horizontal",
-              run: () => runStage(c, ["VIDEO_KALIMAT_H"], "Video animasi 2D H"),
-            };
+          : !c.sentence_audio
+            ? { title: "Butuh audio per kalimat" }
+            : {
+                title: "Render video animasi 2D horizontal",
+                run: () =>
+                  runStage(c, ["VIDEO_KALIMAT_H"], "Video animasi 2D H"),
+              };
       if (!source)
         return {
           title: "Pilih sumber gambar Video Kalimat H di Pengaturan Konten",

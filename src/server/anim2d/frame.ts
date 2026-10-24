@@ -271,7 +271,10 @@ function leafOpacity(svg: string) {
       const multiply = (name: string) => {
         const found = new RegExp(` ${name}="([^"]*)"`).exec(rest);
         rest = found
-          ? rest.replace(found[0], ` ${name}="${(Number(found[1]) * alpha).toFixed(3)}"`)
+          ? rest.replace(
+              found[0],
+              ` ${name}="${(Number(found[1]) * alpha).toFixed(3)}"`,
+            )
           : `${rest} ${name}="${alpha}"`;
       };
       multiply("fill-opacity");

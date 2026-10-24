@@ -117,7 +117,8 @@ export function newsPrerequisite(
       ? null
       : "Lengkapi gambar sumber panel";
   if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
-    if (isAnimation(s, kind === "VIDEO_KALIMAT_H")) return null;
+    if (isAnimation(s, kind === "VIDEO_KALIMAT_H"))
+      return p.outputs.TTS_KALIMAT ? null : "Buat audio terlebih dahulu";
     const source =
       kind === "VIDEO_KALIMAT" ? s.sentenceVideoKind : s.sentenceVideoHKind;
     if (!source) return "Pilih sumber gambar video di Pengaturan Konten";

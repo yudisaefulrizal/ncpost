@@ -129,7 +129,7 @@ export function cronJobs(
       const output =
         kind === "VIDEO_KALIMAT" ? c.sentence_video : c.sentence_video_h;
       if (isAnimation(s, kind === "VIDEO_KALIMAT_H"))
-        return output ? [] : [kind];
+        return !output && c.sentence_audio ? [kind] : [];
       return !output &&
         c.sentence_audio &&
         source &&

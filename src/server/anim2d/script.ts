@@ -22,7 +22,11 @@ import { norm, type Obj } from "./state";
 export interface ScriptScene {
   layout: "stage" | "outro";
   mood: string;
+  /** Teks yang dibacakan adegan ini. */
   narration: string;
+  /** Bagian narasi (audio) milik adegan: [from, from+count). */
+  from?: number;
+  count?: number;
   title: string;
   hl: string[];
   comp?: string;
@@ -182,48 +186,96 @@ function arrange(sc: ScriptScene) {
   if (sc.focusSlot && !filled.has(sc.focusSlot)) delete sc.focusSlot;
 }
 
-export function sanitizeScript(raw: any, fallbackTitle: string): Script {
-  const arr = (Array.isArray(raw?.scenes) ? raw.scenes : []).filter(
-    (s: any) => s && str(s.narration),
+// Berapa bagian narasi tiap adegan: seluruh bagian terpakai tepat sekali dan
+// berurutan; adegan tanpa bagian tersisa dibuang, sisanya masuk adegan akhir.
+function partCounts(scenes: any[], total: number) {
+  let left = total;
+  const taken: { scene: any; count: number }[] = [];
+  for (const scene of scenes) {
+    const want = Math.max(1, Math.round(num(scene.bagian)) || 1);
+    const count = Math.min(want, left);
+    if (count < 1) break;
+    taken.push({ scene, count });
+    left -= count;
+  }
+  if (left > 0 && taken.length) taken.at(-1)!.count += left;
+  return taken;
+}
+
+/**
+ * texts = teks tiap bagian narasi (audio): adegan mengelompokkan bagian
+ * berurutan dan dibacakan apa adanya. Tanpa texts, narasi dibaca dari naskah
+ * (pratinjau).
+ */
+export function sanitizeScript(
+  raw: any,
+  fallbackTitle: string,
+  texts?: string[],
+): Script {
+  const list = (Array.isArray(raw?.scenes) ? raw.scenes : []).filter(
+    (s: any) => s && (texts || str(s.narration)),
   );
+  if (!list.length) throw Error("Naskah video 2D tidak berisi adegan");
+  let cursor = 0;
+  const arr: { scene: any; from: number; count: number; narration: string }[] =
+    texts
+      ? partCounts(list, texts.length).map(({ scene, count }) => {
+          const from = cursor;
+          cursor += count;
+          return {
+            scene,
+            from,
+            count,
+            narration: texts.slice(from, from + count).join(" "),
+          };
+        })
+      : list.map((scene: any) => ({
+          scene,
+          from: 0,
+          count: 1,
+          narration: str(scene.narration, 2000),
+        }));
   if (!arr.length) throw Error("Naskah video 2D tidak berisi adegan");
-  const scenes: ScriptScene[] = arr.map((s: any, i: number): ScriptScene => {
-    const last = i === arr.length - 1 && arr.length > 1;
-    const narration = str(s.narration, 2000);
-    const o: ScriptScene = {
-      layout: last ? "outro" : "stage",
-      mood: MOODS.includes(s.mood) ? s.mood : "happy",
-      narration,
-      title: str(s.title, 60),
-      hl: (Array.isArray(s.hl) ? s.hl : [])
+  const scenes: ScriptScene[] = arr.map(
+    ({ scene: s, from, count, narration }, i): ScriptScene => {
+      const last = i === arr.length - 1 && arr.length > 1;
+      const o: ScriptScene = {
+        layout: last ? "outro" : "stage",
+        mood: MOODS.includes(s.mood) ? s.mood : "happy",
+        narration,
+        ...(texts ? { from, count } : {}),
+        title: str(s.title, 60),
+        hl: (Array.isArray(s.hl) ? s.hl : [])
+          .slice(0, 3)
+          .map((h: unknown) => str(h, 24))
+          .filter((h: string) => h && norm(narration).includes(norm(h))),
+      };
+      if (last) {
+        o.icon = resolveIcon(s.icon) || "message-circle";
+        o.cta = fit(str(s.cta || "Komen pendapatmu!", 120), 48);
+        o.title ||= "Menurutmu *gimana*?";
+        return o;
+      }
+      o.comp = COMPS[s.comp] ? s.comp : "hero";
+      o.items = sanitizeItems(s.items);
+      o.links = (Array.isArray(s.links) ? s.links : [])
         .slice(0, 3)
-        .map((h: unknown) => str(h, 24))
-        .filter((h: string) => h && norm(narration).includes(norm(h))),
-    };
-    if (last) {
-      o.icon = resolveIcon(s.icon) || "message-circle";
-      o.cta = fit(str(s.cta || "Komen pendapatmu!", 120), 48);
-      o.title ||= "Menurutmu *gimana*?";
+        .map((l: any) => ({
+          from: str(l?.from, 16),
+          to: str(l?.to, 16),
+          cue: str(l?.cue, 24).toLowerCase(),
+          dash: !!l?.dash,
+        }));
+      if (typeof s.focus === "string" && s.focus)
+        o.focusSlot = str(s.focus, 16);
+      if (s.nus && (s.nus.side === "l" || s.nus.side === "r"))
+        (o.nus ||= {}).side = s.nus.side;
+      if (s.nus && NUS_POSES.includes(s.nus.pose))
+        (o.nus ||= {}).pose = s.nus.pose;
+      arrange(o);
       return o;
-    }
-    o.comp = COMPS[s.comp] ? s.comp : "hero";
-    o.items = sanitizeItems(s.items);
-    o.links = (Array.isArray(s.links) ? s.links : [])
-      .slice(0, 3)
-      .map((l: any) => ({
-        from: str(l?.from, 16),
-        to: str(l?.to, 16),
-        cue: str(l?.cue, 24).toLowerCase(),
-        dash: !!l?.dash,
-      }));
-    if (typeof s.focus === "string" && s.focus) o.focusSlot = str(s.focus, 16);
-    if (s.nus && (s.nus.side === "l" || s.nus.side === "r"))
-      (o.nus ||= {}).side = s.nus.side;
-    if (s.nus && NUS_POSES.includes(s.nus.pose))
-      (o.nus ||= {}).pose = s.nus.pose;
-    arrange(o);
-    return o;
-  });
+    },
+  );
   // id yang sama di adegan berikutnya harus benda yang sama.
   for (let i = 1; i < scenes.length; i++) {
     const prev = new Map(
@@ -245,10 +297,10 @@ export function sanitizeScript(raw: any, fallbackTitle: string): Script {
   };
 }
 
-export const scriptPrompt = (title: string, article: string) =>
+export const scriptPrompt = (title: string, texts: string[]) =>
   fillPrompt("video-2d/naskah.md", {
     judul: title,
-    artikel: article,
+    bagian: texts.map((t, i) => `${i + 1}. ${t}`).join("\n"),
     template: compCatalogText(),
     prop: propCatalogText(),
   });
@@ -260,18 +312,19 @@ function extractJson(text: string) {
   return JSON.parse(text.slice(a, b + 1));
 }
 
-/** Tulis naskah dari artikel; diulang bila keluaran model tidak terbaca. */
+/** Susun adegan dari bagian narasi; diulang bila keluaran model tidak terbaca. */
 export async function writeScript(
   title: string,
-  article: string,
+  texts: string[],
   ask: (prompt: string) => Promise<string>,
 ) {
   let last: unknown;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return sanitizeScript(
-        extractJson(await ask(scriptPrompt(title, article))),
+        extractJson(await ask(scriptPrompt(title, texts))),
         title,
+        texts,
       );
     } catch (error) {
       last = error;

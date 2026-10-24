@@ -95,7 +95,8 @@ export function QuoteProduction({
     if (kind === "ARTICLE") return true;
     if (row.article_status !== "siap") return false;
     if (kind.startsWith("VIDEO_")) {
-      if (isAnimation(type.settings, kind.endsWith("_H"))) return true;
+      if (isAnimation(type.settings, kind.endsWith("_H")))
+        return !!row.sentence_audio;
       const source = kind.endsWith("_H")
         ? type.settings?.sentenceVideoHKind
         : type.settings?.sentenceVideoKind;

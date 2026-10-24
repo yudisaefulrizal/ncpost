@@ -25,6 +25,8 @@ export function charsToWords(text: string, al: Alignment): Word[] {
           Math.min(i1, al.character_end_times_seconds.length - 1)
         ];
     if (s === undefined || e === undefined) continue;
+    // Audio tag eleven_v3 seperti [pause] tidak ditampilkan.
+    if (/^\[[^\]]*\]$/.test(m[0])) continue;
     const core = m[0].replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
     if (!core) continue;
     out.push({ w: core, p: (/[.,;:!?…]+$/.exec(m[0]) || [""])[0], s, e });
@@ -107,26 +109,46 @@ export function chunkWords(words: Word[]): Chunk[] {
   chunks.forEach((c, i) => {
     c.s = c.words[0].s;
     c.e =
-      i + 1 < chunks.length ? chunks[i + 1].words[0].s : c.words.at(-1)!.e + 0.4;
+      i + 1 < chunks.length
+        ? chunks[i + 1].words[0].s
+        : c.words.at(-1)!.e + 0.4;
   });
   return chunks;
 }
 
-/** Adegan berwaktu dari narasi tiap adegan (kata + durasi audionya). */
-export function sceneTimeline(
-  script: Script,
-  narration: { words: Word[]; seconds: number }[],
-) {
+/** Satu bagian narasi (satu berkas audio) dengan waktu kata dari audionya. */
+export interface Piece {
+  text: string;
+  seconds: number;
+  words: Word[];
+}
+/** Jeda setelah tiap bagian narasi di dalam adegan yang sama. */
+export const GAP = 0.3;
+/** Teks tanpa audio tag eleven_v3 seperti [pause]. */
+export const spokenText = (text: string) =>
+  text
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Adegan berwaktu. pieces[i] = bagian narasi adegan i, urut. Tiap adegan:
+ * LEAD, lalu bagian-bagiannya berjeda GAP, lalu TAIL.
+ */
+export function sceneTimeline(script: Script, pieces: Piece[][]) {
   const scenes: Scene[] = [];
   let t = 0;
   script.scenes.forEach((sc, i) => {
-    const { seconds } = narration[i];
-    const dur = LEAD + seconds + TAIL;
-    const timed = (
-      narration[i].words.length
-        ? narration[i].words
-        : spreadWords(sc.narration, seconds)
-    ).map((x) => ({ ...x, s: x.s + LEAD, e: x.e + LEAD }));
+    const timed: Word[] = [];
+    let at = LEAD;
+    pieces[i].forEach((piece, j) => {
+      const words = piece.words.length
+        ? piece.words
+        : spreadWords(spokenText(piece.text), piece.seconds);
+      for (const w of words) timed.push({ ...w, s: w.s + at, e: w.e + at });
+      at += piece.seconds + (j === pieces[i].length - 1 ? TAIL : GAP);
+    });
+    const dur = at;
     alignPunct(timed, sc.narration);
     scenes.push({
       ...sc,
@@ -146,9 +168,12 @@ export function sceneTimeline(
 export function evenTimeline(script: Script) {
   return sceneTimeline(
     script,
-    script.scenes.map((sc) => {
-      const n = sc.narration.split(/\s+/).length;
-      return { words: [], seconds: 0.3 + n * 0.38 };
-    }),
+    script.scenes.map((sc) => [
+      {
+        text: sc.narration,
+        seconds: 0.3 + sc.narration.split(/\s+/).length * 0.38,
+        words: [],
+      },
+    ]),
   );
 }

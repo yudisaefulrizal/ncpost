@@ -1,14 +1,14 @@
-// Video Animasi 2D (gaya Nus 2D Studio) sebagai gaya Video V/H: artikel ->
-// naskah adegan (Codex) -> narasi per adegan (suara Daftar Suara, disimpan di
-// stok audio) -> frame SVG digambar resvg satu per satu (tanpa browser, satu
-// core) langsung ke ffmpeg -> cek integritas.
+// Video Animasi 2D (gaya Nus 2D Studio) sebagai gaya Video V/H: narasi =
+// audio kolom Audio (teks artikel apa adanya) -> Codex mengelompokkan bagian
+// narasi menjadi adegan dan memilih ilustrasinya -> frame SVG digambar resvg
+// satu per satu (tanpa browser, satu core) langsung ke ffmpeg -> cek integritas.
 import { Resvg } from "@resvg/resvg-js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkGeneration } from "../generation-cancel";
 import { live } from "../live";
-import { sharedMedia, stockMetadata } from "../media-stock";
+import { stockMetadata } from "../media-stock";
 import { outputRoot } from "../output-paths";
 import {
   FPS,
@@ -20,18 +20,17 @@ import {
   run,
   verify,
 } from "../video";
-import { generateTimedVoiceAudio, voiceRecipe, type Voice } from "../voices";
 import { renderFrame, setVideo } from "./frame";
 import { scriptPrompt, writeScript, type Script } from "./script";
-import { sanitizeForTts } from "../tts-text";
 import {
   LEAD,
+  TAIL,
+  GAP,
   charsToWords,
   sceneTimeline,
-  spreadWords,
-  type Alignment,
+  spokenText,
+  type Piece,
 } from "./timeline";
-import type { Word } from "./state";
 
 /** Nama lajur stok Video Animasi 2D (Stok Konten Video). */
 export const ANIMATION_PRESET = "ANIMASI_2D";
@@ -39,73 +38,65 @@ const BRAND = "nus";
 
 export interface AnimationInput {
   title: string;
-  article: string;
-  voice: Voice;
+  /** Bagian narasi urut: teks yang dibacakan dan berkas audionya. */
+  units: { text: string; file: string }[];
   horizontal: boolean;
   work: string;
   force: boolean;
   ask: (prompt: string) => Promise<string>;
 }
 
-// Naskah dipakai bersama Video V dan H dari artikel yang sama, agar isi
+// Naskah dipakai bersama Video V dan H dari narasi yang sama, agar isi
 // keduanya sama dan Codex cukup dipanggil sekali. Kunci = prompt lengkap,
-// jadi perubahan artikel atau prompts/video-2d/naskah.md membuat naskah baru.
-async function sharedScript(input: AnimationInput): Promise<Script> {
+// jadi perubahan narasi atau prompts/video-2d/naskah.md membuat naskah baru.
+async function sharedScript(input: AnimationInput, texts: string[]) {
   const key = createHash("sha256")
-    .update(scriptPrompt(input.title, input.article))
+    .update(scriptPrompt(input.title, texts))
     .digest("hex")
     .slice(0, 32);
   const file = path.join(outputRoot(), "cache/anim2d", key, "script.json");
   if (!input.force && existsSync(file))
-    return JSON.parse(readFileSync(file, "utf8"));
-  live("Menulis naskah animasi…");
-  const script = await writeScript(input.title, input.article, input.ask);
+    return JSON.parse(readFileSync(file, "utf8")) as Script;
+  live("Menyusun adegan animasi…");
+  const script = await writeScript(input.title, texts, input.ask);
   mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   writeFileSync(file, JSON.stringify(script, null, 2));
   return script;
 }
 
-// Narasi satu adegan: dibuat dan disimpan seperti audio lain di stok audio;
-// waktu tiap kata ikut disimpan sebagai metadata stok.
-async function narrate(voice: Voice, text: string) {
-  const spoken = sanitizeForTts(text);
-  let alignment: Alignment | null = null;
-  const file = await sharedMedia({
-    category: "audio",
-    identity: [voice.provider, voice.voice_id],
-    text: spoken,
-    prompt: JSON.stringify({ ...voiceRecipe(voice), timing: true }),
-    generate: async (temporary) => {
-      alignment = await generateTimedVoiceAudio(voice, spoken, temporary);
-    },
-    details: () => (alignment ? { alignment } : undefined),
-  });
-  const seconds = await duration(file);
-  const saved = alignment ?? (await stockMetadata("audio", file))?.alignment;
-  const words: Word[] = saved
-    ? charsToWords(spoken, saved)
-    : spreadWords(spoken, seconds);
-  return { file, seconds, words };
+// Waktu kata dari audio: timing per huruf yang disimpan saat audio dibuat;
+// audio lama tanpa timing dibagi menurut panjang kata.
+async function piece(unit: { text: string; file: string }): Promise<Piece> {
+  const seconds = await duration(unit.file);
+  const alignment = (await stockMetadata("audio", unit.file))?.alignment;
+  return {
+    text: unit.text,
+    seconds,
+    words: alignment ? charsToWords(unit.text, alignment) : [],
+  };
 }
 
-// Audio akhir: narasi tiap adegan diberi jeda LEAD di depan dan dipotong
-// tepat sepanjang adegannya.
-async function narrationTrack(
-  files: string[],
-  scenes: { dur: number }[],
-  out: string,
-) {
-  const graph = files
-    .map(
-      (_, i) =>
-        `[${i}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono,adelay=${Math.round(LEAD * 1000)}:all=1,apad=whole_dur=${scenes[i].dur.toFixed(6)},atrim=0:${scenes[i].dur.toFixed(6)},asetpts=PTS-STARTPTS[a${i}]`,
-    )
-    .concat(
-      `${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1[a]`,
-    )
-    .join(";\n");
+// Audio akhir: tiap bagian narasi diberi LEAD di awal adegan, GAP antarbagian,
+// TAIL di akhir adegan, dan dipotong tepat sepanjang bagiannya.
+async function narrationTrack(files: string[], pieces: Piece[][], out: string) {
+  const graph: string[] = [];
+  let index = 0;
+  pieces.forEach((list) => {
+    list.forEach((p, j) => {
+      const lead = j === 0 ? LEAD : 0,
+        tail = j === list.length - 1 ? TAIL : GAP;
+      const length = (lead + p.seconds + tail).toFixed(6);
+      graph.push(
+        `[${index}:a]aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=mono,adelay=${Math.round(lead * 1000)}:all=1,apad=whole_dur=${length},atrim=0:${length},asetpts=PTS-STARTPTS[a${index}]`,
+      );
+      index++;
+    });
+  });
+  graph.push(
+    `${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1[a]`,
+  );
   const script = path.join(path.dirname(out), "audio-graph.txt");
-  writeFileSync(script, graph);
+  writeFileSync(script, graph.join(";\n"));
   await run("ffmpeg", [
     "-y",
     "-v",
@@ -129,33 +120,46 @@ async function narrationTrack(
 export async function buildAnimationVideo(input: AnimationInput, out: string) {
   const work = path.join(input.work, "anim2d");
   mkdirSync(work, { recursive: true, mode: 0o700 });
-  const script = await sharedScript(input);
+  const texts = input.units.map((u) => spokenText(u.text));
+  const script = await sharedScript(input, texts);
   writeFileSync(
     path.join(work, "script.json"),
     JSON.stringify(script, null, 2),
   );
-  const narration = [];
-  for (const [i, sc] of script.scenes.entries()) {
-    live(`Suara adegan ${i + 1}/${script.scenes.length}…`);
-    narration.push(await narrate(input.voice, sc.narration));
-  }
-  return renderAnimation(script, narration, input.horizontal, work, out);
+  const pieces = await Promise.all(input.units.map(piece));
+  return renderAnimation(
+    script,
+    input.units,
+    pieces,
+    input.horizontal,
+    work,
+    out,
+  );
 }
 
 /** Gambar naskah bernarasi menjadi video (frame demi frame, satu core). */
 export async function renderAnimation(
   script: Script,
-  narration: { file: string; seconds: number; words: Word[] }[],
+  units: { file: string }[],
+  pieces: Piece[],
   horizontal: boolean,
   work: string,
   out: string,
 ) {
   const format = horizontal ? LANDSCAPE : VERTICAL;
-  const timeline = sceneTimeline(script, narration);
+  // Bagian narasi tiap adegan; naskah tanpa from/count = satu bagian per adegan.
+  const grouped = script.scenes.map((sc, i) =>
+    pieces.slice(sc.from ?? i, (sc.from ?? i) + (sc.count ?? 1)),
+  );
+  const timeline = sceneTimeline(script, grouped);
   const audio = path.join(work, "narasi.m4a");
   await narrationTrack(
-    narration.map((n) => n.file),
-    timeline.scenes,
+    script.scenes.flatMap((sc, i) =>
+      units
+        .slice(sc.from ?? i, (sc.from ?? i) + (sc.count ?? 1))
+        .map((u) => u.file),
+    ),
+    grouped,
     audio,
   );
 

@@ -2,7 +2,7 @@ import { snapshotInstagram } from "../server/account-stats";
 import { managerTick } from "../server/manager";
 import {
   resolveVoice,
-  generateVoiceAudio,
+  generateTimedVoiceAudio,
   voiceRecipe,
 } from "../server/voices";
 import { workerConcurrency } from "../server/domain";
@@ -446,13 +446,17 @@ async function runJob(job: Job) {
         c.content_engine === "quote",
       ).entries()) {
         const text = ttsNarration(heading, s.text, i === 0);
+        let alignment: unknown = null;
         const source = await sharedMedia({
           category: "audio",
           identity: [voice.provider, voice.voice_id],
           text,
           prompt: JSON.stringify(voiceRecipe(voice)),
           force: !!job.force_new,
-          generate: (temporary) => generateVoiceAudio(voice, text, temporary),
+          generate: async (temporary) => {
+            alignment = await generateTimedVoiceAudio(voice, text, temporary);
+          },
+          details: () => (alignment ? { alignment } : undefined),
         });
         const file = path.relative(ROOT, source);
         sentences.push({
@@ -483,7 +487,8 @@ async function runJob(job: Job) {
         c.content_type_id ?? 1,
       );
       if (isAnimation(settings, horizontal)) {
-        // Video Animasi 2D: naskah, narasi, dan gambar dibuat sendiri dari artikel.
+        // Video Animasi 2D: narasi = audio kolom Audio (teks artikel apa
+        // adanya); Codex hanya menyusun adegan dan ilustrasinya.
         const v = validateContentText(
           c.article,
           c.content_engine,
@@ -491,29 +496,39 @@ async function runJob(job: Job) {
         );
         if (c.article_status !== "siap" || !v.ok)
           throw Error("Video animasi 2D butuh artikel lolos editor");
-        const voice = await resolveVoice(
-          store.db,
-          mediaSettings.audioVoiceId,
-          "elevenlabs",
+        if (!c.sentence_audio)
+          throw Error("Video animasi 2D butuh audio per kalimat");
+        const audio = JSON.parse(c.sentence_audio);
+        const units = mediaUnits(
+          c.article,
+          mediaSettings.imageUnit || "sentence",
+          c.content_engine === "quote",
         );
-        const text = v.paragraphs.join("\n\n");
+        if (audio.sentences.length !== units.length)
+          throw Error(
+            "Audio kalimat tidak sesuai artikel; buat ulang audionya",
+          );
+        const files = audio.sentences.map((s: any) =>
+          resolveMedia(s.file, audioDir(c)),
+        );
         const result = await sharedVideo({
           preset: ANIMATION_PRESET,
           horizontal,
-          text,
+          text: units.map((u) => u.text).join("\n\n"),
           recipe: {
             mode: "anim2d",
             format: horizontal ? LANDSCAPE : VERTICAL,
-            voice: [voice.provider, voice.voice_id],
           },
-          sources: [],
+          sources: files,
           force: !!job.force_new,
           generate: (temporary) =>
             buildAnimationVideo(
               {
                 title: stripMarkdownEmphasis(v.title || c.title),
-                article: text,
-                voice,
+                units: audio.sentences.map((s: any, i: number) => ({
+                  text: s.narration_text,
+                  file: files[i],
+                })),
                 horizontal,
                 work,
                 force: !!job.force_new,

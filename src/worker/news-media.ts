@@ -1,6 +1,6 @@
 import {
   resolveVoice,
-  generateVoiceAudio,
+  generateTimedVoiceAudio,
   voiceRecipe,
 } from "../server/voices";
 import { sharedMedia, sharedVideo } from "../server/media-stock";
@@ -256,13 +256,17 @@ export async function runNewsMediaJob(
           `kalimat_${String(i + 1).padStart(2, "0")}.mp3`,
         );
         const text = sanitizeForTts(s.text);
+        let alignment: unknown = null;
         const source = await sharedMedia({
           category: "audio",
           identity: [voice.provider, voice.voice_id],
           text,
           prompt: JSON.stringify(voiceRecipe(voice)),
           force: !!j.force_new,
-          generate: (temporary) => generateVoiceAudio(voice, text, temporary),
+          generate: async (temporary) => {
+            alignment = await generateTimedVoiceAudio(voice, text, temporary);
+          },
+          details: () => (alignment ? { alignment } : undefined),
         });
         sentences.push({
           sentence: i + 1,
@@ -384,30 +388,31 @@ export async function runNewsMediaJob(
     if (j.kind === "VIDEO_KALIMAT" || j.kind === "VIDEO_KALIMAT_H") {
       const horizontal = j.kind === "VIDEO_KALIMAT_H";
       if (isAnimation(settings, horizontal)) {
-        // Video Animasi 2D: naskah, narasi, dan gambar dibuat sendiri dari artikel.
-        const voice = await resolveVoice(
-          store.db,
-          settings.audioVoiceId,
-          "edge-tts",
-        );
-        const text = content.paragraphs.join("\n\n");
+        // Video Animasi 2D: narasi = audio kolom Audio (teks artikel apa
+        // adanya); Codex hanya menyusun adegan dan ilustrasinya.
+        const audio = p.outputs.TTS_KALIMAT;
+        const units = mediaUnits(n.article, settings.imageUnit || "sentence");
+        if (!audio || audio.sentences.length !== units.length)
+          throw Error("Audio tidak sesuai artikel");
+        const files = audio.sentences.map((s: any) => path.join(ROOT, s.file));
         const result = await sharedVideo({
           preset: ANIMATION_PRESET,
           horizontal,
-          text,
+          text: units.map((u) => u.text).join("\n\n"),
           recipe: {
             mode: "anim2d",
             format: horizontal ? LANDSCAPE : VERTICAL,
-            voice: [voice.provider, voice.voice_id],
           },
-          sources: [],
+          sources: files,
           force: !!j.force_new,
           generate: (temporary) =>
             buildAnimationVideo(
               {
                 title: stripMarkdownEmphasis(v.title || n.title),
-                article: text,
-                voice,
+                units: audio.sentences.map((s: any, i: number) => ({
+                  text: s.narration_text,
+                  file: files[i],
+                })),
                 horizontal,
                 work,
                 force: !!j.force_new,
