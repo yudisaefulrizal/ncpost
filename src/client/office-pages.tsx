@@ -87,7 +87,9 @@ function Checklist({ office }: { office: OfficeSummary }) {
                     <td className="num mono">{view.ready ?? "–"}</td>
                     <td className="num mono">{producing(t.id)}</td>
                     <td>
-                      {st ? (
+                      {t.engine === "news" ? (
+                        <span className="muted">Dibuat saat posting</span>
+                      ) : st ? (
                         <span className={"chip chip-xs " + st.tone}>
                           {st.label}
                         </span>

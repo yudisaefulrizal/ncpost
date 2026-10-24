@@ -439,7 +439,12 @@ function App() {
     });
   };
   const removeChapter = (c: any) =>
-    confirm(`Hapus topik "${c.title}"? Artikel dan job-nya ikut terhapus.`) &&
+    confirm(
+      `Hapus topik "${c.title}"? Artikel dan job-nya ikut terhapus.` +
+        (activeJobs.some((j) => j.chapter_id === c.id)
+          ? " Job yang sedang berjalan dihentikan."
+          : ""),
+    ) &&
     action(async () => {
       await api("/chapters/" + c.id, "DELETE");
       if (detail?.id === c.id) setDetail(null);
@@ -1180,10 +1185,7 @@ function App() {
     id: "DELETE",
     label: "Hapus topik",
     destructive: true,
-    prepare: (c) =>
-      activeJobs.some((j) => j.chapter_id === c.id)
-        ? null
-        : () => batchApi(`/chapters/${c.id}`, "DELETE"),
+    prepare: (c) => () => batchApi(`/chapters/${c.id}`, "DELETE"),
   });
 
   const bookTargets = activeType?.settings
@@ -1504,15 +1506,8 @@ function App() {
                       <div className="production-actions">
                         <button
                           className="play redo"
-                          title={
-                            activeJobs.some((j) => j.chapter_id === c.id)
-                              ? "Tidak bisa dihapus: masih ada job aktif"
-                              : "Hapus topik"
-                          }
+                          title="Hapus topik"
                           aria-label={`Hapus topik ${partNumber(rows, c)} ${c.book}`}
-                          disabled={activeJobs.some(
-                            (j) => j.chapter_id === c.id,
-                          )}
                           onClick={() => removeChapter(c)}
                         >
                           <Icon name="trash" size={14} />
@@ -2043,7 +2038,12 @@ function App() {
       content = <FinishedVideos />;
     } else if (page === "Stok Gambar") {
       sub = "Stok gambar berdasarkan preset.";
-      content = <StockGallery />;
+      content = (
+        <div className="stack-lg">
+          <CleanupCard />
+          <StockGallery />
+        </div>
+      );
     } else {
       // Produksi: halaman utama.
       const books = new Set(rows.map((r) => bookKey(r.book))).size;
@@ -3137,17 +3137,13 @@ function NewsProduction({
   const removeNews = (n: NewsArticle) => {
     if (
       !confirm(
-        `Hapus berita "${n.title || `#${n.id}`}" beserta hasil produksinya?`,
+        `Hapus berita "${n.title || `#${n.id}`}" beserta hasil produksinya?` +
+          (locked(n) ? " Proses yang sedang berjalan dihentikan." : ""),
       )
     )
       return;
     return run(async () => {
-      await api(
-        `/news/${n.id}`,
-        "DELETE",
-        { revision: n.attempts },
-        type?.id || null,
-      );
+      await api(`/news/${n.id}`, "DELETE", undefined, type?.id || null);
       if (selected === n.id) setSelected(null);
     });
   };
@@ -3376,10 +3372,7 @@ function NewsProduction({
       id: "DELETE",
       label: "Hapus berita",
       destructive: true,
-      prepare: (n) =>
-        locked(n)
-          ? null
-          : () => batchApi(`/news/${n.id}`, "DELETE", { revision: n.attempts }),
+      prepare: (n) => () => batchApi(`/news/${n.id}`, "DELETE"),
     },
     ...stages
       .filter(
@@ -3642,7 +3635,7 @@ function NewsProduction({
                         className="play redo"
                         title="Hapus berita"
                         aria-label={`Hapus berita #${n.id}`}
-                        disabled={busy || locked(n)}
+                        disabled={busy}
                         onClick={() => removeNews(n)}
                       >
                         <Icon name="trash" size={14} />

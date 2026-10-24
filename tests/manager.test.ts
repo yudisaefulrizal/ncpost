@@ -140,12 +140,33 @@ describe("ringkasan Manajer", () => {
   });
 });
 
-describe("batas stok berita", () => {
-  it("berita paling banyak tiga siap; buku tetap sisa hari ini + besok", () => {
-    expect(stockShort("news", 12, 0)).toBe(3);
-    expect(stockShort("news", 12, 2)).toBe(1);
-    expect(stockShort("news", 12, 5)).toBe(0);
-    expect(stockShort("news", 1, 0)).toBe(1);
-    expect(stockShort("book", 12, 2)).toBe(12);
+describe("stok berita", () => {
+  it("berita tidak disiapkan lebih dulu; buku tetap sisa hari ini + besok", () => {
+    expect(stockShort("news", 12)).toBe(0);
+    expect(stockShort("news", 1)).toBe(0);
+    expect(stockShort("book", 12)).toBe(12);
+  });
+  it("cek ketersediaan tidak ditampilkan untuk berita", async () => {
+    const { emptyState, managerView } = await import("../src/server/manager");
+    const state = emptyState();
+    state.stock["1:instagram"] = { ready: 0, at: at(10) };
+    const targets = { 1: { instagram: 2, tiktok: 0, youtube: 0 } };
+    const settings = { socialTargets: ["instagram"] } as any;
+    expect(
+      managerView(
+        state,
+        { id: 1, settings, engine: "news" },
+        targets,
+        at(10, 1),
+      ).instagram.check,
+    ).toBeNull();
+    expect(
+      managerView(
+        state,
+        { id: 1, settings, engine: "book" },
+        targets,
+        at(10, 1),
+      ).instagram.check,
+    ).not.toBeNull();
   });
 });

@@ -679,33 +679,48 @@ describe("Manajer menangani jenis konten berita", () => {
     expect(read(file).orders[0].title).toBe("Berita baru");
   });
 
-  it("stok berita siap dibatasi tiga walau target harian tinggi", async () => {
+  it("berita tidak disiapkan lebih dulu: sebelum waktu posting tidak ada artikel yang dibuat", async () => {
     const targets = { instagram: 10, tiktok: 0, youtube: 0 };
-    // Siang hari: belum ada jam posting yang jatuh tempo, jadi stok utuh.
+    // Pagi hari: belum ada jam posting yang jatuh tempo.
     const MORNING = Date.UTC(2026, 9, 15, 0) - WIB;
-    const two = newsWorld(
-      [article(1), article(2)],
-      {
-        1: panelReady(),
-        2: panelReady(),
-      },
-      targets,
-    );
-    await run(two, stateFile(), MORNING);
-    expect(two.calls.created).toBe(1);
-    const three = newsWorld(
-      [article(1), article(2), article(3)],
-      {
-        1: panelReady(),
-        2: panelReady(),
-        3: panelReady(),
-      },
-      targets,
-    );
+    const w = newsWorld([], {}, targets);
     const file = stateFile();
-    await run(three, file, MORNING);
-    expect(three.calls.created).toBe(0);
+    await run(w, file, MORNING);
+    expect(w.calls.created).toBe(0);
     expect(read(file).orders).toEqual([]);
+  });
+
+  it("waktu posting tiba tanpa artikel siap: satu artikel dibuat saat itu, tidak dobel selagi diproduksi", async () => {
+    const articles: any[] = [];
+    const w = newsWorld(articles, {}, { instagram: 3, tiktok: 0, youtube: 0 });
+    const file = stateFile();
+    await run(w, file, NIGHT);
+    expect(w.calls.created).toBe(1);
+    const state = read(file);
+    expect(state.orders[0]).toMatchObject({ status: "berjalan" });
+    expect(state.orders[0].reason).toContain("Waktunya posting");
+    await run(w, file, NIGHT + MIN);
+    expect(w.calls.created).toBe(1);
+  });
+
+  it("artikel lama yang setengah jadi tidak dilanjutkan; artikel siap tetap diposting", async () => {
+    const half = article(3, { state: "completed" });
+    const w = newsWorld([half], {}, { instagram: 1, tiktok: 0, youtube: 0 });
+    await run(w, stateFile(), NIGHT);
+    expect(w.calls.created).toBe(1);
+    expect(w.calls.enqueued).toEqual([]);
+    const ready = newsWorld(
+      [article(7)],
+      { 7: panelReady() },
+      {
+        instagram: 1,
+        tiktok: 0,
+        youtube: 0,
+      },
+    );
+    await run(ready, stateFile(), NIGHT);
+    expect(ready.calls.created).toBe(0);
+    expect(ready.calls.enqueued).toContainEqual([7, "POST_IG"]);
   });
 
   it("artikel berita gagal ditulis: pesanan ditandai macet dengan pesan Jurnalis", async () => {

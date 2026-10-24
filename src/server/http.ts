@@ -448,10 +448,7 @@ app.put("/api/news/:id", async (req, res) => {
   res.json({ ok: true });
 });
 app.delete("/api/news/:id", async (req, res) => {
-  await new NewsStore(store.db).remove(
-    Number(req.params.id),
-    req.body?.revision,
-  );
+  await new NewsStore(store.db).remove(Number(req.params.id));
   res.json({ ok: true });
 });
 app.get("/api/news-crons", async (_, res) =>

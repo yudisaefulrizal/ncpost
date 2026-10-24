@@ -54,14 +54,12 @@ export const POST_QUEUE_LIMIT = 30 * MINUTE;
 // Hitungan stok lebih tua dari ini dianggap basi (Manajer memeriksa tiap menit).
 export const STOCK_FRESH = 5 * MINUTE;
 const MAX_ORDERS = 2; // topik yang diproduksi bersamaan per jenis konten
-// Berita cepat basi: stok siap (ditambah yang sedang diproduksi) paling banyak
-// sebanyak ini, bukan sisa target hari ini + besok seperti buku/quote.
-export const NEWS_READY_MAX = 3;
-/** Kekurangan stok; untuk berita dibatasi NEWS_READY_MAX. */
-export const stockShort = (engine: string, short: number, ready: number) =>
-  engine === "news"
-    ? Math.min(short, Math.max(0, NEWS_READY_MAX - ready))
-    : short;
+/**
+ * Kekurangan stok yang disiapkan Manajer. Berita cepat basi, jadi tidak ada
+ * persiapan: artikelnya dibuat saat waktu posting tiba (lihat workType).
+ */
+export const stockShort = (engine: string, short: number) =>
+  engine === "news" ? 0 : short;
 // Job produksi gagal dicoba ulang tiap 6 jam WIB (00, 06, 12, 18); yang sudah
 // gagal lebih dari MAX_JOB_FAILS kali berturut-turut dihapus.
 export const RETRY_EVERY = 6 * 3600000;
@@ -876,7 +874,6 @@ async function work(
       const short = stockShort(
         type.engine,
         availability(readyCount, target, done, inflight, 0).short,
-        readyCount,
       );
       if (short > 0) {
         shortage = Math.max(shortage, short);
@@ -900,7 +897,15 @@ async function work(
       if (done + inflight >= due || now - last < MIN_GAP) continue;
 
       // Waktunya posting: ambil konten siap tertua yang belum gagal hari ini.
-      const empty = () =>
+      // Berita tidak disiapkan lebih dulu: bila belum ada artikel siap, artikel
+      // dibuat saat ini juga (langkah 2) dan diposting setelah jadi.
+      const empty = () => {
+        if (isNews) {
+          shortage = Math.max(shortage, 1);
+          if (!shortFor.includes(PLATFORM_LABEL[platform]))
+            shortFor.push(PLATFORM_LABEL[platform]);
+          return;
+        }
         note(
           `empty:${type.id}:${platform}`,
           `${type.name} · ${PLATFORM_LABEL[platform]}: ${candidates.length ? "konten siap yang ada sudah gagal diposting hari ini, menunggu konten baru" : "tidak ada konten siap untuk diposting"}.`,
@@ -908,6 +913,7 @@ async function work(
           type.id,
           3600000,
         );
+      };
       try {
         if (platform === "instagram") {
           const counts = (f: string) =>
@@ -1014,9 +1020,10 @@ async function work(
           .filter((o) => o.typeId === type.id && o.status !== "selesai")
           .map((o) => o.chapterId),
       );
-      const next = units.filter(
-        (u) => !taken.has(u.id) && !u.busy && u.producible,
-      );
+      // Berita selalu dibuat baru saat dibutuhkan; artikel lama tidak dilanjutkan.
+      const next = isNews
+        ? []
+        : units.filter((u) => !taken.has(u.id) && !u.busy && u.producible);
       const order = (id: number, title: string, label: string) => {
         state.orders.push({
           at: now,
@@ -1024,11 +1031,15 @@ async function work(
           typeId: type.id,
           chapterId: id,
           title,
-          reason: `Persiapan stok ${shortFor.join(", ")}`,
+          reason: isNews
+            ? `Waktunya posting ${shortFor.join(", ")}`
+            : `Persiapan stok ${shortFor.join(", ")}`,
           status: "berjalan",
         });
         log(
-          `Stok ${type.name} kurang untuk ${shortFor.join(", ")}: memerintahkan tim memproduksi ${label}.`,
+          isNews
+            ? `Waktunya posting ${type.name} ke ${shortFor.join(", ")} tetapi belum ada artikel siap: memerintahkan tim memproduksi ${label}.`
+            : `Stok ${type.name} kurang untuk ${shortFor.join(", ")}: memerintahkan tim memproduksi ${label}.`,
           "info",
           type.id,
         );
@@ -1216,7 +1227,8 @@ export function managerView(
             (slots.some((s) => s.status === "terlewat") ? now : null)),
       ready: stock?.ready ?? null,
       check: (() => {
-        if (!targets[platform] || !stock) return null;
+        // Berita tidak disiapkan lebih dulu, jadi tidak ada cek ketersediaan.
+        if (!targets[platform] || !stock || type.engine === "news") return null;
         const check = availability(
           stock.ready,
           targets[platform],
@@ -1226,7 +1238,7 @@ export function managerView(
         );
         return {
           ...check,
-          short: stockShort(type.engine ?? "book", check.short, stock.ready),
+          short: stockShort(type.engine ?? "book", check.short),
         };
       })(),
     };

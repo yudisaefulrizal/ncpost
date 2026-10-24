@@ -3,6 +3,10 @@ import type { NewsProductionData } from "./news-production-domain";
 import type { BookSettings } from "./book-settings";
 import type mysql from "mysql2/promise";
 import { createHash } from "node:crypto";
+import path from "node:path";
+import { ROOT } from "./config";
+import { CLEAN_KINDS, type CleanKind } from "./cleanup-domain";
+import { removeResultFiles } from "./output-files";
 import {
   newsSourceKey,
   type NewsResult,
@@ -94,10 +98,12 @@ export class NewsStore {
       c.release();
     }
   }
+  // Sunting artikel: ditolak selagi ada proses, versi berubah, atau publikasi
+  // belum jelas, agar hasil lama tidak menimpa yang baru.
   private async change(
     id: number,
     revision: number,
-    edit?: { article: string; title: string; sourceUrl: string },
+    edit: { article: string; title: string; sourceUrl: string },
   ) {
     if (
       !Number.isSafeInteger(id) ||
@@ -124,7 +130,7 @@ export class NewsStore {
         throw Error(
           "Berita sudah berubah. Muat ulang sebelum menyimpan atau menghapus",
         );
-      if (news.state === "running" || (edit && news.state !== "completed"))
+      if (news.state !== "completed")
         throw Error("Tunggu proses artikel berita selesai");
       const [active]: any = await c.query(
         "SELECT id FROM news_media_jobs WHERE news_id=? AND state IN ('queued','running')",
@@ -157,29 +163,21 @@ export class NewsStore {
         )
       )
         throw Error("Tunggu publikasi YouTube/TikTok selesai terlebih dahulu");
-      if (edit) {
-        if (news.article !== edit.article) {
-          const hash = createHash("sha256")
-            .update(
-              (news.content_type_id && news.content_type_id !== 2
-                ? `${news.content_type_id}:`
-                : "") +
-                (edit.sourceUrl
-                  ? newsSourceKey(edit.sourceUrl).url
-                  : edit.article),
-            )
-            .digest("hex");
-          await c.query(
-            "UPDATE news_articles SET title=?,article=?,source_url=?,source_hash=?,attempts=attempts+1,candidates=NULL,artifacts=NULL,error=NULL,lease=0 WHERE id=?",
-            [edit.title, edit.article, edit.sourceUrl, hash, id],
-          );
-        }
-      } else {
-        // Keep shared assets and external publication history; remove owned production records.
-        await c.query("DELETE FROM news_stock WHERE news_id=?", [id]);
-        await c.query("DELETE FROM news_media_outputs WHERE news_id=?", [id]);
-        await c.query("DELETE FROM news_media_jobs WHERE news_id=?", [id]);
-        await c.query("DELETE FROM news_articles WHERE id=?", [id]);
+      if (news.article !== edit.article) {
+        const hash = createHash("sha256")
+          .update(
+            (news.content_type_id && news.content_type_id !== 2
+              ? `${news.content_type_id}:`
+              : "") +
+              (edit.sourceUrl
+                ? newsSourceKey(edit.sourceUrl).url
+                : edit.article),
+          )
+          .digest("hex");
+        await c.query(
+          "UPDATE news_articles SET title=?,article=?,source_url=?,source_hash=?,attempts=attempts+1,candidates=NULL,artifacts=NULL,error=NULL,lease=0 WHERE id=?",
+          [edit.title, edit.article, edit.sourceUrl, hash, id],
+        );
       }
       await c.commit();
     } catch (error) {
@@ -207,8 +205,59 @@ export class NewsStore {
       sourceUrl: validation.sourceUrl!,
     });
   }
-  async remove(id: number, revision: number) {
-    await this.change(id, revision);
+  /**
+   * Hapus mutlak: apa pun keadaannya (sedang diproses, sudah terbit, versi
+   * lama) berita dan hasil produksinya dihapus. Proses yang berjalan berhenti
+   * sendiri karena barisnya hilang. Stok gambar bersama dan riwayat
+   * publikasi tetap; berkas hasil renderinya ikut dihapus.
+   */
+  async remove(id: number, _revision?: number) {
+    if (!Number.isSafeInteger(id) || id < 1) throw Error("Berita tidak valid");
+    const c = await this.db.getConnection();
+    let outputs: { kind: string; data: string }[] = [];
+    try {
+      await c.beginTransaction();
+      const [rows]: any = await c.query(
+        "SELECT * FROM news_articles WHERE id=? FOR UPDATE",
+        [id],
+      );
+      const news: NewsArticle | undefined = rows[0];
+      if (
+        !news ||
+        (currentContentType() &&
+          news.content_type_id !== currentContentType()!.id)
+      )
+        throw Error("Berita tidak ditemukan");
+      const [found]: any = await c.query(
+        "SELECT kind,data FROM news_media_outputs WHERE news_id=?",
+        [id],
+      );
+      if (Array.isArray(found)) outputs = found;
+      await c.query("DELETE FROM news_stock WHERE news_id=?", [id]);
+      await c.query("DELETE FROM news_media_outputs WHERE news_id=?", [id]);
+      await c.query("DELETE FROM news_media_jobs WHERE news_id=?", [id]);
+      await c.query("DELETE FROM news_articles WHERE id=?", [id]);
+      await c.commit();
+    } catch (error) {
+      await c.rollback();
+      throw error;
+    } finally {
+      c.release();
+    }
+    await this.removeFiles(outputs);
+  }
+  // Berkas hasil render berita yang dihapus.
+  private removeFiles(outputs: { kind: string; data: string }[]) {
+    return removeResultFiles(
+      this.db,
+      outputs
+        .filter(({ kind }) => kind in CLEAN_KINDS)
+        .map(({ kind, data }) => ({
+          kind: kind as CleanKind,
+          raw: data,
+          locate: (file) => path.join(ROOT, file),
+        })),
+    );
   }
   async claim(now = Date.now()) {
     await this.db.query(

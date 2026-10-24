@@ -1,4 +1,5 @@
 import { isGone } from "./cleanup-domain";
+import { removeResultFiles } from "./output-files";
 import { youtubePublishInput } from "./youtube-publish";
 import { CONTENT_CRON_KEY } from "./cron";
 import { cronNextRun } from "./cron-schedule";
@@ -34,9 +35,12 @@ import {
   isAnimation,
   type BookSettings,
 } from "./book-settings";
-import { dbConfig } from "./config";
+import path from "node:path";
+import { dbConfig, ROOT } from "./config";
 import {
+  chapterDir,
   moveChapterOutputs,
+  panelDir,
   removeChapterOutputs,
   type ChapterRef,
 } from "./output-paths";
@@ -381,6 +385,27 @@ export class Store {
     try {
       removeChapterOutputs(gone);
     } catch {}
+    // Video, panel, dan gambar di stok bersama (di luar folder bagian ini).
+    const locate = (dir: string) => (file: string) =>
+      file.startsWith("output/") ? path.join(ROOT, file) : path.join(dir, file);
+    await removeResultFiles(this.db, [
+      {
+        kind: "VIDEO_KALIMAT",
+        raw: gone.sentence_video,
+        locate: locate(chapterDir(gone)),
+      },
+      {
+        kind: "VIDEO_KALIMAT_H",
+        raw: gone.sentence_video_h,
+        locate: locate(chapterDir(gone)),
+      },
+      { kind: "PANEL", raw: gone.panels, locate: locate(panelDir(gone)) },
+      {
+        kind: "POST_IMAGE",
+        raw: gone.text_image,
+        locate: locate(chapterDir(gone)),
+      },
+    ]);
   }
   // stock_counts: jumlah panel terikat per lajur stok (syarat ✓ Gambar dan Panel).
   async list() {

@@ -64,7 +64,7 @@ it("invalid edits never open a transaction", async () => {
   await expect(store.save(7, "Isi tanpa struktur berita", 2)).rejects.toThrow();
   expect(connection.beginTransaction).not.toHaveBeenCalled();
 });
-it("stale editors and active production cannot overwrite or delete news", async () => {
+it("stale editors and active production cannot overwrite news", async () => {
   for (const options of [
     { revision: 3 },
     { state: "running" },
@@ -76,17 +76,48 @@ it("stale editors and active production cannot overwrite or delete news", async 
     await expect(
       store.save(7, article.replace("baru", "terbaru"), 2),
     ).rejects.toThrow();
-    await expect(store.remove(7, 2)).rejects.toThrow();
     expect(
       connection.query.mock.calls.some(([sql]) => /^(UPDATE|DELETE)/.test(sql)),
     ).toBe(false);
-    expect(connection.rollback).toHaveBeenCalledTimes(2);
-    expect(connection.release).toHaveBeenCalledTimes(2);
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
   }
+});
+it("deleting news is absolute: whatever its state, production or publication", async () => {
+  for (const options of [
+    { revision: 3 },
+    { state: "running" },
+    { state: "failed" },
+    { active: true },
+    { postStatus: "publishing" },
+    { postStatus: "unknown" },
+    { zernioStatus: "pending" },
+  ]) {
+    const { store, connection } = setup(options);
+    await store.remove(7);
+    expect(
+      connection.query.mock.calls
+        .map(([sql]) => sql)
+        .filter((sql) => sql.startsWith("DELETE")),
+    ).toEqual([
+      "DELETE FROM news_stock WHERE news_id=?",
+      "DELETE FROM news_media_outputs WHERE news_id=?",
+      "DELETE FROM news_media_jobs WHERE news_id=?",
+      "DELETE FROM news_articles WHERE id=?",
+    ]);
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+  }
+});
+it("deleting news that does not exist is rejected without touching anything", async () => {
+  const { store, connection } = setup();
+  connection.query.mockImplementation(async () => [[]]);
+  await expect(store.remove(7)).rejects.toThrow("tidak ditemukan");
+  expect(connection.rollback).toHaveBeenCalledOnce();
 });
 it("deleting news removes owned records but preserves shared assets and publication history", async () => {
   const { store, connection } = setup();
-  await store.remove(7, 2);
+  await store.remove(7);
   expect(
     connection.query.mock.calls
       .map(([sql]) => sql)

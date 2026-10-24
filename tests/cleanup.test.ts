@@ -274,3 +274,48 @@ it("konten yang produksinya belum lengkap atau sedang diproses tidak dibersihkan
   expect((await cleanPublished(incomplete.store, { act: true })).items).toBe(0);
   expect(existsSync(video)).toBe(true);
 });
+
+it("hapus konten menghapus berkas hasilnya, tetapi tidak pernah di luar folder output", async () => {
+  const { removeResultFiles } = await import("../src/server/output-files");
+  const video = make("video-9.mp4", 100);
+  const panelA = make("panel/p1.jpg", 100);
+  const closing = make("panel/c.jpg", 100);
+  const outside = path.join(ROOT, "package.json");
+  const queries: unknown[][] = [];
+  const db = {
+    query: async (sql: string, params: unknown[] = []) => {
+      queries.push([sql, ...params]);
+      return [{}];
+    },
+  };
+  await removeResultFiles(db, [
+    {
+      kind: "VIDEO_KALIMAT",
+      raw: JSON.stringify({ file: rel("video-9.mp4") }),
+      locate: (f) => path.join(ROOT, f),
+    },
+    {
+      kind: "PANEL",
+      raw: JSON.stringify({
+        panels: [{ file: "panel/p1.jpg" }],
+        closing: "panel/c.jpg",
+      }),
+      locate: (f) => path.join(dir(), f),
+    },
+    // manifest rusak atau menunjuk ke luar output: diabaikan
+    {
+      kind: "POST_IMAGE",
+      raw: JSON.stringify({ file: "package.json" }),
+      locate: () => outside,
+    },
+    { kind: "POST_IMAGE", raw: "bukan json", locate: () => outside },
+    { kind: "POST_IMAGE", raw: null, locate: () => outside },
+  ]);
+  expect([video, panelA, closing].some(existsSync)).toBe(false);
+  expect(existsSync(outside)).toBe(true);
+  expect(queries).toHaveLength(3);
+  expect(queries[0]).toEqual([
+    "DELETE FROM media_stock WHERE file=?",
+    rel("video-9.mp4"),
+  ]);
+});
