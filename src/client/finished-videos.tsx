@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
+import { CleanupCard } from "./cleanup-card";
 import type { ContentType } from "../server/content-type-domain";
 
 type Video = {
@@ -52,39 +53,6 @@ export function FinishedVideos() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [cleaning, setCleaning] = useState(false);
-  const [cleaned, setCleaned] = useState("");
-  const size = (bytes: number) =>
-    bytes >= 1e9
-      ? `${(bytes / 1e9).toFixed(1)} GB`
-      : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
-  // Hapus video dan gambar siap posting konten yang sudah terbit di semua
-  // sosmed yang dituju. Artikel, audio, dan gambar ilustrasi tetap.
-  const clean = async () => {
-    setCleaning(true);
-    setCleaned("");
-    try {
-      const plan = await api("/cleanup");
-      if (!plan.files) {
-        setCleaned("Tidak ada yang perlu dibersihkan.");
-        return;
-      }
-      if (
-        !window.confirm(
-          `${plan.items} konten yang sudah terbit: ${plan.files} berkas (${size(plan.bytes)}) akan dihapus. Lanjutkan?`,
-        )
-      )
-        return;
-      const done = await api("/cleanup", "POST");
-      setCleaned(
-        `${done.files} berkas dihapus, ${size(done.bytes)} dibebaskan.`,
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setCleaning(false);
-    }
-  };
   useEffect(() => {
     let active = true;
     let pending = false;
@@ -113,23 +81,7 @@ export function FinishedVideos() {
   }, []);
   return (
     <div className="stack-lg">
-      <section
-        className="card pad row-gap"
-        style={{ justifyContent: "space-between" }}
-      >
-        <div>
-          <strong>Bersihkan penyimpanan</strong>
-          <small className="muted block">
-            Video dan gambar siap posting yang sudah terbit di semua sosmed
-            dihapus otomatis tiap selesai posting. Artikel, audio, dan gambar
-            ilustrasi tidak dihapus.
-          </small>
-          {cleaned && <small role="status">{cleaned}</small>}
-        </div>
-        <button className="btn btn-sec" disabled={cleaning} onClick={clean}>
-          {cleaning ? "Memeriksa…" : "Bersihkan yang sudah terbit"}
-        </button>
-      </section>
+      <CleanupCard onError={setError} />
       {error && (
         <p className="warn" role="alert">
           {error}

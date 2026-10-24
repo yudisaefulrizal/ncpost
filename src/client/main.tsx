@@ -7,6 +7,7 @@ import { QueuePage } from "./queue";
 import { mediaUnits } from "../server/content-contract";
 import { QuoteProduction } from "./quote-production";
 import { FinishedVideos } from "./finished-videos";
+import { CleanupCard } from "./cleanup-card";
 import {
   ProductionBatch,
   useProductionSelection,
@@ -2013,7 +2014,12 @@ function App() {
       );
     } else if (page === "Stok Konten Gambar") {
       sub = "";
-      content = <FinishedImages key={activeType?.id || "images"} rows={rows} />;
+      content = (
+        <div className="stack-lg">
+          <CleanupCard />
+          <FinishedImages key={activeType?.id || "images"} rows={rows} />
+        </div>
+      );
     } else if (page === "Stok Konten Panel") {
       sub =
         "Panel yang sudah dirender, siap dipublikasikan sebagai postingan gambar.";
@@ -2025,6 +2031,7 @@ function App() {
       );
       content = (
         <div className="stack-lg">
+          <CleanupCard />
           {content}
           {activeType?.engine === "news" && (
             <NewsFinishedContent key={activeType.id} kind="PANEL" />
