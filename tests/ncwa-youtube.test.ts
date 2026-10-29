@@ -60,7 +60,7 @@ it("missing YouTube scope does not break Zernio list", async () => {
   expect(result.accounts[0].platform).toBe("tiktok");
   expect(result.reason).toContain("izin key");
 });
-it("keeps unknown/processing outcomes and useful provider errors", async () => {
+it("counts uncertain outcomes as published and preserves provider errors", async () => {
   expect(
     ncwaYouTubeSummary({
       requestId: "a".repeat(24),
@@ -68,7 +68,7 @@ it("keeps unknown/processing outcomes and useful provider errors", async () => {
       error: "Kuota habis",
     }),
   ).toMatchObject({
-    status: "unknown",
+    status: "published",
     connectionId: "ncwa-youtube",
     platforms: [{ error: "Kuota habis" }],
   });

@@ -1,3 +1,4 @@
+import { publicationStatus } from "./publication-status";
 import { isGone } from "./cleanup-domain";
 import { removeResultFiles } from "./output-files";
 import { youtubePublishInput } from "./youtube-publish";
@@ -1093,7 +1094,7 @@ export class Store {
     await run(
       this.db,
       "UPDATE chapters SET post_status=?,post_request_id=?,post_media_id=? WHERE id=?",
-      [post.status, post.requestId, post.mediaId ?? null, id],
+      [publicationStatus(post.status), post.requestId, post.mediaId ?? null, id],
     );
   }
   async setReels(
@@ -1103,7 +1104,7 @@ export class Store {
     await run(
       this.db,
       "UPDATE chapters SET reels_status=?,reels_request_id=?,reels_media_id=? WHERE id=?",
-      [post.status, post.requestId, post.mediaId ?? null, id],
+      [publicationStatus(post.status), post.requestId, post.mediaId ?? null, id],
     );
   }
   pendingReels() {

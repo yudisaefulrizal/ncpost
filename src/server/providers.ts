@@ -258,7 +258,7 @@ async function ncwa(path: string, init: RequestInit, request: typeof fetch) {
   return data;
 }
 // Hanya REELS+videoUrl; tidak ada fallback gambar dan tidak ada retry otomatis
-// (status "unknown" berarti cek Instagram manual, jangan buat requestId baru).
+// Hasil pengiriman tidak pasti dicatat sebagai published oleh alur publikasi.
 export async function publish(input: ReelInput, request: typeof fetch = fetch) {
   validateReelInput(input);
   return ncwa(

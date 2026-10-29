@@ -1,3 +1,4 @@
+import { publicationStatus } from "./publication-status";
 import { zernioConnections, zernioConnection } from "./zernio-connections";
 const BASE = "https://zernio.com/api/v1";
 export const ZERNIO_PLATFORMS = ["youtube", "tiktok"] as const;
@@ -96,12 +97,12 @@ export function zernioPostSummary(data: any) {
     );
   return {
     id: zernioId(post._id),
-    status: String(post.status || "unknown"),
+    status: publicationStatus(post.status),
     platforms: (Array.isArray(post.platforms) ? post.platforms : [])
       .filter((p: any) => ZERNIO_PLATFORMS.includes(p.platform))
       .map((p: any) => ({
         platform: p.platform,
-        status: String(p.status || "unknown"),
+        status: publicationStatus(p.status),
         url:
           typeof p.platformPostUrl === "string" &&
           /^https:\/\//.test(p.platformPostUrl)

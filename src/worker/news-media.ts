@@ -1,3 +1,4 @@
+import { publicationStatus } from "../server/publication-status";
 import {
   resolveVoice,
   generateTimedVoiceAudio,
@@ -87,7 +88,7 @@ export async function pollNewsPublications(store: NewsMediaStore) {
       const r = await postStatus(data.requestId);
       await store.updatePublication(row.news_id, row.kind, data.requestId, {
         ...data,
-        status: String(r.status),
+        status: publicationStatus(r.status),
         mediaId: r.mediaId ?? null,
       });
     } catch {}
@@ -614,17 +615,16 @@ export async function runNewsMediaJob(
               });
         await store.complete(j, {
           ...record,
-          status: String(r.status),
+          status: publicationStatus(r.status),
           mediaId: r.mediaId ?? null,
         });
       } catch (e) {
         // The request may have reached NC-WA. Preserve its ID and stop retries.
-        await store.output(j, {
+        await store.complete(j, {
           ...record,
-          status: "unknown",
+          status: "published",
           error: (e as Error).message,
         });
-        throw e;
       }
       return;
     }

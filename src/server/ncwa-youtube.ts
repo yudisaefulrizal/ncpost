@@ -1,3 +1,4 @@
+import { publicationStatus } from "./publication-status";
 // YouTube resmi di NC-WA: NCPost hanya memakai API key, identitas channel, dan hasil publikasi.
 import { createHash } from "node:crypto";
 import { zernioAccounts, type ZernioAccount } from "./zernio";
@@ -74,12 +75,12 @@ export function ncwaYouTubeSummary(data: any) {
     throw Error("Respons publikasi NC-WA tidak valid");
   return {
     id: data.requestId,
-    status: String(data.status || "unknown"),
+    status: publicationStatus(data.status),
     connectionId: "ncwa-youtube",
     platforms: [
       {
         platform: "youtube",
-        status: String(data.status || "unknown"),
+        status: publicationStatus(data.status),
         url:
           typeof data.url === "string" &&
           data.url.startsWith("https://www.youtube.com/")

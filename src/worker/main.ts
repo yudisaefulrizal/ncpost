@@ -1,3 +1,4 @@
+import { publicationStatus } from "../server/publication-status";
 import { snapshotInstagram } from "../server/account-stats";
 import { managerTick } from "../server/manager";
 import {
@@ -191,7 +192,7 @@ async function fixFormat(
   return codex(articleFormatPrompt(c, article, errors), work);
 }
 // Gambar baru masuk kolam output/stock/<jenis>/<deskripsi>.jpg, tanpa id bab.
-// Status posting dipantau terus sampai NC-WA menyatakan published/failed/unknown.
+// Pantau sampai hasil akhir; unknown dicatat sebagai published.
 let lastPostPoll = 0;
 async function pollPosts() {
   if (Date.now() - lastPostPoll < 15000) return;
@@ -206,7 +207,7 @@ async function pollPosts() {
     try {
       const r = await postStatus(c.reels_request_id!);
       await store.setReels(c.id, {
-        status: String(r.status),
+        status: publicationStatus(r.status),
         requestId: c.reels_request_id!,
         mediaId: r.mediaId,
       });
@@ -216,7 +217,7 @@ async function pollPosts() {
     try {
       const r = await postStatus(c.post_request_id!);
       await store.setPost(c.id, {
-        status: String(r.status),
+        status: publicationStatus(r.status),
         requestId: c.post_request_id!,
         mediaId: r.mediaId,
       });

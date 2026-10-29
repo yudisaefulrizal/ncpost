@@ -175,4 +175,15 @@ export async function migrateDatabase(connection: Connection) {
       `INSERT IGNORE INTO lab_images(id,name,role) SELECT DISTINCT reference_image,'Referensi tersimpan','reference' FROM ${table} WHERE reference_image IS NOT NULL`,
     );
   }
+  // Retire uncertain publication results, including historical submissions.
+  for (const column of ["post_status", "reels_status"])
+    await connection.query(
+      `UPDATE chapters SET ${column}='published' WHERE ${column}='unknown'`,
+    );
+  await connection.query(
+    "UPDATE zernio_publications SET status='published' WHERE status='unknown'",
+  );
+  await connection.query(
+    `UPDATE news_media_outputs SET data=JSON_SET(data,'$.status','published') WHERE kind IN ('POST_IG','REELS_IG') AND JSON_UNQUOTE(JSON_EXTRACT(data,'$.status'))='unknown'`,
+  );
 }

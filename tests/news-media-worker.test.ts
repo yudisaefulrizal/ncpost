@@ -347,7 +347,7 @@ it("video V/H memakai audio yang sama dan sumber stok per orientasi", async () =
     expect(panels.every((panel) => panel.heading === "")).toBe(true);
   expect(h.spies.fail).not.toHaveBeenCalled();
 });
-it("publikasi mencatat request sebelum mengirim; timeout menjadi unknown tanpa retry", async () => {
+it("publikasi mencatat request sebelum mengirim; timeout menjadi published tanpa retry", async () => {
   const h = harness();
   for (let panel = 1; panel <= 4; panel++)
     for (const kind of ["IMAGE_HORIZONTAL", "IMAGE_VERTICAL"])
@@ -366,7 +366,7 @@ it("publikasi mencatat request sebelum mengirim; timeout menjadi unknown tanpa r
   });
   await runNewsMediaJob(h.store, h.assets, job("POST_IG"));
   expect(publishCarousel).toHaveBeenCalledTimes(1);
-  expect(h.p.outputs.POST_IG.status).toBe("unknown");
+  expect(h.p.outputs.POST_IG.status).toBe("published");
   const requestId = h.p.outputs.POST_IG.requestId;
   await runNewsMediaJob(h.store, h.assets, job("POST_IG"));
   expect(publishCarousel).toHaveBeenCalledTimes(1);

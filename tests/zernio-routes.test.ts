@@ -147,16 +147,15 @@ it("does not submit or copy another public video for an existing fingerprint", a
   expect(zernioRequest).not.toHaveBeenCalled();
   expect(new Set(readdirSync(publicDir))).toEqual(beforeFiles);
 });
-it("persists unknown on a network failure without retrying the publication", async () => {
+it("persists published on a network failure without retrying the publication", async () => {
   const query = queryMock();
   vi.mocked(zernioRequest).mockRejectedValue(Error("timeout"));
   const { handler, request, response } = setup(query);
-  await expect(handler(request, response)).rejects.toThrow(
-    "belum dapat dipastikan",
-  );
+  await handler(request, response);
+  expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ status: "published" }));
   expect(zernioRequest).toHaveBeenCalledTimes(1);
   expect(query).toHaveBeenCalledWith(
-    expect.stringContaining("status='unknown'"),
+    expect.stringContaining("status='published'"),
     [7],
   );
 });

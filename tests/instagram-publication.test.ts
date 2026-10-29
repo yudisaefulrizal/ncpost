@@ -22,14 +22,14 @@ it.each(["POST_IG", "REELS_IG"] as const)(
     });
   },
 );
-it("marks an uncertain repost unknown instead of preserving the previous published state", async () => {
+it("counts an attempted repost as published when delivery times out", async () => {
   const store = { setPost: vi.fn(), setReels: vi.fn() };
   const send = vi.fn().mockRejectedValue(Error("timeout"));
   await expect(
     sendInstagramPublication(store, 1, "POST_IG", "new-request", send),
-  ).rejects.toThrow("timeout");
+  ).resolves.toEqual({ status: "published" });
   expect(store.setPost).toHaveBeenLastCalledWith(1, {
-    status: "unknown",
+    status: "published",
     requestId: "new-request",
   });
   expect(send).toHaveBeenCalledTimes(1);
