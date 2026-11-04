@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { preparePython } from "./video-vektor-pip.mjs";
 import {
   existsSync,
   readFileSync,
@@ -32,7 +33,7 @@ const run = (exe, args) =>
     );
   });
 const key = createHash("sha256")
-  .update("setup-v2")
+  .update("setup-v3")
   .update(readFileSync(path.join(root, "package-lock.json")))
   .update(readFileSync(path.join(root, "requirements.txt")))
   .update(process.versions.node.split(".")[0])
@@ -48,7 +49,7 @@ if (
 } else {
   // The renderer also needs the pinned tooling when the service uses NODE_ENV=production.
   await run("npm", ["ci", "--include=dev", "--no-audit", "--no-fund"]);
-  await run("python3", ["-m", "venv", ".venv"]);
+  await preparePython({ root, run });
   await run(path.join(root, ".venv/bin/python"), [
     "-m",
     "pip",

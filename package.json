@@ -8,7 +8,7 @@
     "start": "npm run build && NODE_ENV=production tsx scripts/run.ts",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "node --test scripts/tests/*.test.mjs && vitest run",
     "worker": "tsx src/worker/main.ts",
     "probe": "tsx scripts/probe.ts",
     "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=./data/playwright playwright test",
