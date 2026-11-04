@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import {Config} from '@remotion/cli/config';
 
 Config.setVideoImageFormat('jpeg');
@@ -10,4 +11,5 @@ Config.setConcurrency(2);
 Config.setStudioPort(8078);
 Config.setRendererPort(8078);
 Config.setChromiumOpenGlRenderer('angle');
-Config.setBrowserExecutable('/usr/bin/google-chrome');
+// Keep the original browser when installed; otherwise use Remotion's managed Chrome.
+Config.setBrowserExecutable(existsSync('/usr/bin/google-chrome')?'/usr/bin/google-chrome':null);

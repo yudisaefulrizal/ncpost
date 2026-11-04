@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { preparePython } from "./video-vektor-pip.mjs";
+import { prepareBrowser } from "./video-vektor-browser.mjs";
 import {
   existsSync,
   readFileSync,
@@ -33,7 +34,7 @@ const run = (exe, args) =>
     );
   });
 const key = createHash("sha256")
-  .update("setup-v3")
+  .update("setup-v4")
   .update(readFileSync(path.join(root, "package-lock.json")))
   .update(readFileSync(path.join(root, "requirements.txt")))
   .update(process.versions.node.split(".")[0])
@@ -63,11 +64,7 @@ await run(path.join(root, ".venv/bin/python"), [
   "import edge_tts, numpy",
 ]);
 for (const exe of ["ffmpeg", "ffprobe"]) await run(exe, ["-version"]);
-if (!existsSync("/usr/bin/google-chrome"))
-  throw Error(
-    "Pasang Google Chrome di /usr/bin/google-chrome sesuai renderer Video Vektor.",
-  );
-await run("/usr/bin/google-chrome", ["--version"]);
+await prepareBrowser({ root, run });
 // A cancelled or failed setup never claims the engine is ready.
 const temporary = `${marker}.${randomUUID()}.tmp`;
 try {

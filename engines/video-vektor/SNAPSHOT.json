@@ -13,7 +13,7 @@
     "public/fonts/LICENSE.txt": "1e6ccc54aa0b0aa4188cda121174f17cf1c28bac9734749bbe1128bb6dd89a97",
     "public/fonts/Lato-Heavy.ttf": "4ce7ec20cd9c391b271b4149ad8cf5a71301d98965403f14fc5530d017146dbb",
     "public/fonts/Lato-Regular.ttf": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780",
-    "remotion.config.ts": "2f7e37359d8faf5f691ce0fcca6f2301ebf623d147c6caaa1c1de3898c3df62c",
+    "remotion.config.ts": "b06636cceb740c28fee1d3e3dc70af882810b889d1e53635390bb8300715ee57",
     "requirements.txt": "f4e0703c474e036a0d8b9cf8fea68637420ea8a13bf7b22d42fca031c057e117",
     "scripts/artifacts.mjs": "ad516f17ca55b7c00d2de9694978101e8a64858fc41c771d975e50e9a4cb2a28",
     "scripts/assemble.mjs": "0ac95c0c19848649715dfa0923181087689c4e77cbc9bbb3a9d2faccdf6df2bc",
@@ -63,5 +63,11 @@
     "studio/index.html": "247865f3bf0b5263ee896eb36c73c1635f98df13d275bb5cdba72cb05958f7b5",
     "studio/style.css": "a6a0f331c32f2111f78004d8c87b4901eae6fdd34ea082adf5965ef88d197ac8",
     "tsconfig.json": "73fac46d32425e21fd3f2707d1464fa1247095821973e414ac2bcd5f697b63c7"
+  },
+  "integrationOverrides": {
+    "remotion.config.ts": {
+      "upstreamSha256": "2f7e37359d8faf5f691ce0fcca6f2301ebf623d147c6caaa1c1de3898c3df62c",
+      "reason": "Use the original system Chrome when installed, otherwise the Chrome Headless Shell managed by the pinned Remotion version. No visual/render settings change."
+    }
   }
 }
