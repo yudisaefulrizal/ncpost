@@ -1,0 +1,10 @@
+export type ScriptUnit={audio_text:string;key_text:string|null;motion_description:string};
+export type Word={text:string;start:number;end:number};
+export type Scene=ScriptUnit&{index:number;from:number;durationInFrames:number;audioLead:number;audioDuration:number;audioTrimStart:number;audioTrimEnd:number;captions:{start:number;end:number;words:Word[]}[]};
+export type Timeline={fps:number;durationInFrames:number;scenes:Scene[]};
+export type Pose={at:number;x:number;y:number;scale:number;rotation:number;rotationX:number;rotationY:number;opacity:number};
+export type CameraPose={at:number;x:number;y:number;zoom:number};
+export type Asset={id:string;markup:string};
+export type Entity={id:string;assetId:string;kind:'vector'|'solid';layer:'back'|'front';depth:number;easing:'linear'|'smooth';keyframes:Pose[]};
+export type Shot={id:string;from:number;duration:number;action:string;background:string;camera:CameraPose[];entities:Entity[];keyText:{sceneIndex:number;from:number;to:number;x:number;y:number;size:number;color:string}|null;accent:{at:number;kind:'soft'|'impact'|'chime'|'water'}|null};
+export type ProjectProps={title:string;projectId:string;width:number;height:number;timeline:Timeline;plan:{assets:Asset[];shots:Shot[]}};

@@ -101,7 +101,11 @@ export function normalizeYouTubeSettings(value: any): YouTubeSettings {
   };
 }
 export type VideoMode = "template" | "direct" | "anim2d";
+export const isVideoVektor = (
+  settings: { pipeline?: string } | null | undefined,
+) => settings?.pipeline === "video-vektor";
 export interface BookSettings {
+  pipeline?: "video-vektor";
   audioVoiceId?: number | null;
   youtube?: YouTubeSettings;
   articleConfig?: ArticleConfig;
@@ -146,6 +150,8 @@ export const DEFAULT_BOOK_SETTINGS: BookSettings = {
   panelVertical: "IMAGE_VERTICAL",
 };
 export function normalizeBookSettings(input: any): BookSettings {
+  if (input?.pipeline !== undefined && input.pipeline !== "video-vektor")
+    throw Error("Pipeline konten tidak dikenal");
   if (
     input?.socialTargets !== undefined &&
     (!Array.isArray(input.socialTargets) ||
@@ -293,6 +299,7 @@ export function normalizeBookSettings(input: any): BookSettings {
   )
     throw Error("Pilihan suara tidak valid");
   return {
+    ...(input?.pipeline !== undefined ? { pipeline: input.pipeline } : {}),
     ...(input?.audioVoiceId !== undefined
       ? { audioVoiceId: input.audioVoiceId }
       : {}),

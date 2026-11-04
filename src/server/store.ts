@@ -161,6 +161,11 @@ export class Store {
     book = book.replace(/\s+/g, " ").trim();
     title = title.replace(/\s+/g, " ").trim();
     if (!book || !title) throw Error("Konteks dan topik wajib diisi");
+    if (
+      currentContentType()?.settings?.pipeline === "video-vektor" &&
+      (title.length < 5 || title.length > 200)
+    )
+      throw Error("Judul Video Vektor harus berisi 5–200 karakter");
     if (book.length > 255 || title.length > 500)
       throw Error("Judul terlalu panjang");
     // Nomor bagian berikutnya dalam buku ini (tidak bentrok dengan yang ada).

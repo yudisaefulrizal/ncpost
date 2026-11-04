@@ -10,3 +10,5 @@ test-results/
 .npm-cache/
 dist/
 old/
+
+engines/video-vektor/.setup-version

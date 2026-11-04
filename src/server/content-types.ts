@@ -1,3 +1,4 @@
+import { isVideoVektor } from "./book-settings";
 import { resolveImageSettings } from "./lab-image-settings";
 import { validateLabSettings } from "./lab-production";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -44,7 +45,7 @@ export class ContentTypeStore {
     return this.resolve(decode(rows[0]));
   }
   private async resolve(type: ContentType): Promise<ContentType> {
-    if (!type.settings?.managed) return type;
+    if (!type.settings?.managed || isVideoVektor(type.settings)) return type;
     const settings = await resolveImageSettings(this.db, type.settings);
     return { ...type, ...normalizeContentType({ ...type, settings }) };
   }
@@ -90,12 +91,20 @@ export class ContentTypeStore {
   async save(input: unknown, id?: number) {
     const existing = id ? await this.get(id) : undefined;
     const submitted: any = input;
-    const configured = submitted?.settings?.managed
-      ? {
-          ...submitted,
-          settings: await resolveImageSettings(this.db, submitted.settings),
-        }
-      : input;
+    if (
+      existing &&
+      isVideoVektor(existing.settings) &&
+      submitted?.settings !== undefined &&
+      !isVideoVektor(submitted.settings)
+    )
+      throw Error("Pipeline Video Vektor tidak dapat diubah");
+    const configured =
+      submitted?.settings?.managed && !isVideoVektor(submitted.settings)
+        ? {
+            ...submitted,
+            settings: await resolveImageSettings(this.db, submitted.settings),
+          }
+        : input;
     const value = contentTypeUpdate(configured, existing);
     await validateLabSettings(this.db, value.settings, value.engine);
     if (id && existing) {

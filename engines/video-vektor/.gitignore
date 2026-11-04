@@ -1,0 +1,15 @@
+node_modules/
+.venv/
+.cache/
+.vtmp/
+build/
+__pycache__/
+out/
+hasil/
+public/audio/
+public/timeline.json
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example

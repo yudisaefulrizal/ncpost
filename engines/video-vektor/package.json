@@ -1,0 +1,51 @@
+{
+  "name": "cerita-kucing",
+  "version": "1.0.0",
+  "description": "Film edukasi berbahasa Indonesia dengan Remotion dan Three.js",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node scripts/studio-server.mjs",
+    "start": "node scripts/studio-server.mjs",
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "audio": "node scripts/artifacts.mjs audio",
+    "score": "node scripts/artifacts.mjs score",
+    "video": "node scripts/video.mjs",
+    "render": "node scripts/video.mjs",
+    "render:preview": "node scripts/artifacts.mjs preview",
+    "still": "node scripts/artifacts.mjs still",
+    "check": "node scripts/check.mjs",
+    "storyboard": "node scripts/artifacts.mjs storyboard",
+    "verify": "node scripts/check-output.mjs",
+    "assemble": "node scripts/video.mjs --assemble-only",
+    "review": "node scripts/artifacts.mjs review",
+    "clean": "node scripts/clean.mjs",
+    "clean:dry": "node scripts/clean.mjs --dry-run",
+    "clean:cache": "node scripts/clean.mjs --checkpoints",
+    "test": "node --test scripts/tests/*.test.mjs && python3 -B -m unittest discover -s scripts/tests -p \"*_test.py\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@react-three/fiber": "9.8.2",
+    "@remotion/bundler": "4.0.540",
+    "@remotion/cli": "4.0.540",
+    "@remotion/renderer": "4.0.540",
+    "@remotion/three": "4.0.540",
+    "@remotion/transitions": "4.0.540",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.540",
+    "three": "0.187.0",
+    "ws": "8.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.187.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}

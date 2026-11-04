@@ -18,7 +18,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { ROOT } from "./config";
-import { type BookSettings, type SocialTarget } from "./book-settings";
+import {
+  isVideoVektor,
+  type BookSettings,
+  type SocialTarget,
+} from "./book-settings";
 import {
   activeTargets,
   managerTargets,
@@ -314,7 +318,8 @@ export function zernioInput(
   platform: "tiktok" | "youtube",
   settings: BookSettings,
 ) {
-  if (c.article_status !== "siap" || busy(c)) return null;
+  if ((!isVideoVektor(settings) && c.article_status !== "siap") || busy(c))
+    return null;
   const source = `book:${c.id}`;
   try {
     if (platform === "youtube") {
@@ -398,7 +403,9 @@ function bookUnit(
     title: c.title,
     label: partLabel(c),
     busy: busy(c),
-    producible: !c.article || nextBookJob(type, c, settings, attempts) !== null,
+    producible:
+      (!isVideoVektor(settings) && !c.article) ||
+      nextBookJob(type, c, settings, attempts) !== null,
     igReady: (format) => igReady(c, format),
     zernio: async (platform) => zernioInput(c, platform, await sendSettings(c)),
     postIg: async (format) =>
@@ -406,13 +413,15 @@ function bookUnit(
         await store.enqueue(c.id, format === "reels" ? "REELS_IG" : "POST_IG"),
       ),
     next: () =>
-      c.article ? nextBookJob(type, c, settings, attempts) : "ARTICLE",
+      c.article || isVideoVektor(settings)
+        ? nextBookJob(type, c, settings, attempts)
+        : "ARTICLE",
     enqueue: (kind) => store.enqueue(c.id, kind),
     missing: () =>
       type.outputs.filter((k: string) => k in results && !results[k]),
     stuck: (missing) =>
       attempts.find((j) => j.state === "failed")?.error ||
-      (c.article_status !== "siap"
+      (!isVideoVektor(settings) && c.article_status !== "siap"
         ? `Artikel berstatus ${c.article_status}`
         : `Output belum lengkap: ${missing.join(", ")}`),
   };

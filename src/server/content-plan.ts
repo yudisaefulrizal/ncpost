@@ -6,7 +6,7 @@ import {
 import { cronJobs, type CronKind } from "./cron";
 import { validateContentText } from "./domain";
 import type { Chapter } from "./store";
-import type { BookSettings } from "./book-settings";
+import { isVideoVektor, type BookSettings } from "./book-settings";
 import {
   newsKinds,
   newsPrerequisite,
@@ -34,6 +34,15 @@ export function nextBookJob(
 ) {
   if (attempts.some((j) => ["queued", "running"].includes(j.state)))
     return null;
+  if (isVideoVektor(settings))
+    return !chapter.sentence_video_h &&
+      !attempts.some(
+        (j) =>
+          j.kind === "VIDEO_KALIMAT_H" &&
+          ["failed", "cancelled"].includes(j.state),
+      )
+      ? "VIDEO_KALIMAT_H"
+      : null;
   const results: Record<string, unknown> = {
     POST_IMAGE: chapter.text_image,
     PANEL: chapter.panels,

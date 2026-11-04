@@ -1,3 +1,4 @@
+import { ensureVideoVektorType } from "./video-vektor-type";
 import { CONTENT_CRON_KEY } from "./cron";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -186,4 +187,5 @@ export async function migrateDatabase(connection: Connection) {
   await connection.query(
     `UPDATE news_media_outputs SET data=JSON_SET(data,'$.status','published') WHERE kind IN ('POST_IG','REELS_IG') AND JSON_UNQUOTE(JSON_EXTRACT(data,'$.status'))='unknown'`,
   );
+  await ensureVideoVektorType(connection);
 }

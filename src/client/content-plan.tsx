@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_BOOK_SETTINGS,
   isAnimation,
+  isVideoVektor,
   isHorizontalKind,
   type BookSettings,
 } from "../server/book-settings";
@@ -25,6 +26,13 @@ export function planSettings(
   previous: BookSettings | null,
 ): BookSettings {
   const settings = previous ?? DEFAULT_BOOK_SETTINGS;
+  if (isVideoVektor(settings))
+    return normalizeContentType({
+      name: "Video Vektor",
+      engine: "book",
+      outputs: ["VIDEO_KALIMAT_H"],
+      settings,
+    }).settings;
   return normalizeContentType({
     name: "Konten",
     engine: "book",
@@ -164,6 +172,13 @@ export function ContentPlanFields({
       </label>
     );
   };
+  if (isVideoVektor(settings))
+    return (
+      <p className="muted">
+        Video Vektor · 1920×1080. Naskah, narasi, musik, subtitle, dan animasi
+        mengikuti pipeline Video Vektor.
+      </p>
+    );
   const imageVideo = (output: string) =>
     outputs.includes(output) &&
     !isAnimation(settings, output === "VIDEO_KALIMAT_H");
@@ -306,51 +321,53 @@ export function ContentPlanCard({
     <section className="card content-settings">
       <div className="content-settings-context">{type.name}</div>
       <fieldset disabled={busy} className="content-settings-fields">
-        <section className="content-settings-section article-settings">
-          <div className="content-settings-section-head">
-            <h2>Artikel</h2>
-            <label className="check-row config-switch">
-              <input
-                type="checkbox"
-                checked={!!settings.articleConfig}
-                onChange={(e) =>
-                  setSettings((s) => ({
-                    ...s,
-                    articleConfig: e.target.checked
-                      ? defaultArticleConfig(type.engine)
-                      : undefined,
-                  }))
+        {!isVideoVektor(settings) && (
+          <section className="content-settings-section article-settings">
+            <div className="content-settings-section-head">
+              <h2>Artikel</h2>
+              <label className="check-row config-switch">
+                <input
+                  type="checkbox"
+                  checked={!!settings.articleConfig}
+                  onChange={(e) =>
+                    setSettings((s) => ({
+                      ...s,
+                      articleConfig: e.target.checked
+                        ? defaultArticleConfig(type.engine)
+                        : undefined,
+                    }))
+                  }
+                />
+                Konfigurasi artikel
+              </label>
+            </div>
+            {settings.articleConfig && (
+              <ArticleConfigFields
+                value={settings.articleConfig}
+                book={type.engine === "book"}
+                quote={type.engine === "quote"}
+                news={type.engine === "news"}
+                onChange={(value) =>
+                  setSettings((s) => ({ ...s, articleConfig: value }))
                 }
               />
-              Konfigurasi artikel
-            </label>
-          </div>
-          {settings.articleConfig && (
-            <ArticleConfigFields
-              value={settings.articleConfig}
-              book={type.engine === "book"}
-              quote={type.engine === "quote"}
-              news={type.engine === "news"}
-              onChange={(value) =>
-                setSettings((s) => ({ ...s, articleConfig: value }))
-              }
-            />
-          )}
-          {/* Lab Berita memakai prompt artikel milik lab-nya sendiri. */}
-          {settings.articleConfig?.source !== "lab" && (
-            <details className="content-settings-prompt">
-              <summary>Prompt artikel</summary>
-              <LabPromptSettings
-                engine={type.engine}
-                images={false}
-                selected={settings.labPromptIds || []}
-                onChange={(ids) =>
-                  setSettings((s) => ({ ...s, labPromptIds: ids }))
-                }
-              />
-            </details>
-          )}
-        </section>
+            )}
+            {/* Lab Berita memakai prompt artikel milik lab-nya sendiri. */}
+            {settings.articleConfig?.source !== "lab" && (
+              <details className="content-settings-prompt">
+                <summary>Prompt artikel</summary>
+                <LabPromptSettings
+                  engine={type.engine}
+                  images={false}
+                  selected={settings.labPromptIds || []}
+                  onChange={(ids) =>
+                    setSettings((s) => ({ ...s, labPromptIds: ids }))
+                  }
+                />
+              </details>
+            )}
+          </section>
+        )}
         <section className="content-settings-section output-settings">
           <h2>Output & gambar</h2>
           <ContentPlanFields

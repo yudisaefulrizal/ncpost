@@ -43,7 +43,11 @@ export function upcomingForType(
       contentTypeId: type.id,
       contentType: type.name,
       kind: c.kind,
-      label: labels[c.kind] || c.kind,
+      label:
+        type.settings?.pipeline === "video-vektor" &&
+        c.kind === "VIDEO_KALIMAT_H"
+          ? "Video Vektor · 1920×1080"
+          : labels[c.kind] || c.kind,
       batchSize: 1,
       nextRun:
         c.next_run === null || !Number.isFinite(Number(c.next_run))

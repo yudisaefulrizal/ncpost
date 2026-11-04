@@ -1,3 +1,4 @@
+import { isVideoVektor } from "../server/book-settings";
 import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
 import { LabPromptSettings } from "./lab-prompt-settings";
 import { ContentPlanFields, finalTargets, planSettings } from "./content-plan";
@@ -127,9 +128,13 @@ export function ContentTypes({
                   </button>
                 </td>
                 <td>
-                  {FINAL_OUTPUTS.filter(([key]) => type.outputs.includes(key))
-                    .map(([, label]) => label)
-                    .join(", ") || "Belum diatur"}
+                  {isVideoVektor(type.settings)
+                    ? "Video Vektor · 1920×1080"
+                    : FINAL_OUTPUTS.filter(([key]) =>
+                        type.outputs.includes(key),
+                      )
+                        .map(([, label]) => label)
+                        .join(", ") || "Belum diatur"}
                 </td>
                 <td>
                   <div className="toolbar">
@@ -232,30 +237,38 @@ export function ContentTypes({
               />
             </label>
             <label className="field">
-              Jenis teks
+              Jenis konten / teks
               <select
-                value={engine}
+                value={isVideoVektor(settings) ? "video-vektor" : engine}
                 disabled={editing !== "new"}
                 onChange={(e) => {
-                  const next = e.target.value as ContentType["engine"];
-                  setEngine(next);
-                  setSettings((current) => ({
-                    ...current,
-                    articleConfig: defaultArticleConfig(next),
-                    labPromptIds: [],
-                  }));
-                  if (next === "quote") {
-                    setOutputs(["POST_IMAGE"]);
+                  if (e.target.value === "video-vektor") {
+                    setEngine("book");
+                    if (!name.trim()) setName("Video Vektor");
+                    setOutputs(["VIDEO_KALIMAT_H"]);
                     setSettings(
-                      planSettings(["POST_IMAGE"], {
+                      planSettings(["VIDEO_KALIMAT_H"], {
                         ...settings,
-                        articleConfig: defaultArticleConfig(next),
-                        labPromptIds: [],
+                        pipeline: "video-vektor",
                       }),
                     );
+                    return;
                   }
+                  const next = e.target.value as ContentType["engine"];
+                  const targets = next === "quote" ? ["POST_IMAGE"] : outputs;
+                  setEngine(next);
+                  setOutputs(targets);
+                  setSettings(
+                    planSettings(targets, {
+                      ...settings,
+                      pipeline: undefined,
+                      articleConfig: defaultArticleConfig(next),
+                      labPromptIds: [],
+                    }),
+                  );
                 }}
               >
+                <option value="video-vektor">Video Vektor · 1920×1080</option>
                 <option value="quote">Quote</option>
                 <option value="book">Konteks dan topik</option>
                 <option value="news">Artikel mandiri</option>

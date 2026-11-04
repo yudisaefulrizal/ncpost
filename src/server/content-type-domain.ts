@@ -1,6 +1,7 @@
 import {
   DEFAULT_BOOK_SETTINGS,
   isAnimation,
+  isVideoVektor,
   normalizeBookSettings,
   type BookSettings,
 } from "./book-settings";
@@ -34,6 +35,7 @@ export interface ContentType {
 export function contentStages(
   type: Pick<ContentType, "outputs"> & Partial<Pick<ContentType, "settings">>,
 ) {
+  if (isVideoVektor(type.settings)) return new Set(["VIDEO_KALIMAT_H"]);
   const stages = new Set(["ARTICLE", ...type.outputs]);
   if (stages.has("QUOTE_IMAGE")) stages.add("QUOTE");
   if (stages.has("PANEL") && type.settings?.carouselMode !== "direct")
@@ -51,6 +53,19 @@ export function contentStages(
   return stages;
 }
 export function contentAllows(type: ContentType, kind: string) {
+  if (isVideoVektor(type.settings)) {
+    if (kind === "POST_YOUTUBE")
+      return (
+        type.settings?.socialTargets?.includes("youtube") ??
+        !!type.settings?.youtubeAccountId
+      );
+    if (kind === "POST_TIKTOK")
+      return (
+        type.settings?.socialTargets?.includes("tiktok") ??
+        !!type.settings?.tiktokAccountId
+      );
+    return kind === "VIDEO_KALIMAT_H";
+  }
   const stages = contentStages(type);
   if (kind === "POST_YOUTUBE")
     return (
@@ -90,6 +105,41 @@ export function normalizeContentType(input: any) {
     throw Error("Nama jenis wajib diisi, maksimal 190 karakter");
   if (!["book", "news", "quote"].includes(input.engine))
     throw Error("Sumber artikel tidak dikenal");
+  if (isVideoVektor(input.settings)) {
+    if (
+      input.engine !== "book" ||
+      !Array.isArray(input.outputs) ||
+      input.outputs.length !== 1 ||
+      input.outputs[0] !== "VIDEO_KALIMAT_H"
+    )
+      throw Error("Video Vektor hanya mendukung video 1920×1080 dari judul");
+    const settings = normalizeBookSettings({
+      ...input.settings,
+      pipeline: "video-vektor",
+      managed: true,
+      autoProcess: false,
+      stockKinds: [],
+      sentenceKinds: [],
+      panelHorizontal: null,
+      panelVertical: null,
+      sentenceVideoKind: null,
+      sentenceVideoHKind: null,
+      sentenceVideoMode: undefined,
+      sentenceVideoHMode: undefined,
+      articleConfig: undefined,
+      labPromptIds: [],
+      audioVoiceId: null,
+      wholeTextImageKind: null,
+      youtubeMedia: "h",
+      tiktok: { ...input.settings.tiktok, media: "h" },
+    });
+    return {
+      name,
+      engine: "book" as const,
+      outputs: ["VIDEO_KALIMAT_H"],
+      settings,
+    };
+  }
   const allowed = CONTENT_OUTPUTS.filter(
     ([key]) =>
       input.engine === "book" || !["QUOTE", "QUOTE_IMAGE"].includes(key),
@@ -173,6 +223,8 @@ export function normalizeContentType(input: any) {
 export function contentTypeUpdate(input: any, existing?: ContentType) {
   if (!existing || input?.settings !== undefined)
     return normalizeContentType(input);
+  if (isVideoVektor(existing.settings))
+    return normalizeContentType({ ...input, settings: existing.settings });
   const next = normalizeContentType(input);
   const previous = existing.settings;
   if (!previous) return next;

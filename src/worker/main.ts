@@ -1,3 +1,5 @@
+import { buildVideoVektor } from "../server/video-vektor";
+import { isVideoVektor } from "../server/book-settings";
 import { publicationStatus } from "../server/publication-status";
 import { snapshotInstagram } from "../server/account-stats";
 import { managerTick } from "../server/manager";
@@ -337,7 +339,12 @@ async function runJob(job: Job) {
           ...variables,
         },
       );
-    if (job.kind === "ARTICLE" && c.article_config) {
+    if (isVideoVektor(mediaSettings)) {
+      if (job.kind !== "VIDEO_KALIMAT_H")
+        throw Error("Tahap Video Vektor tidak valid");
+      const result = await buildVideoVektor(c, job);
+      await store.complete(job.id, { sentenceVideoH: JSON.stringify(result) });
+    } else if (job.kind === "ARTICLE" && c.article_config) {
       const generated = await generateConfiguredArticle(
         store.db,
         await store.bookSettings(c.book, store.db, c.content_type_id ?? 1),

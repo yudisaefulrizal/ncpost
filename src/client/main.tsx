@@ -1,3 +1,4 @@
+import { VideoVektorProduction } from "./video-vektor";
 import { AudioStockPage } from "./audio-stock";
 import { Voices } from "./voices";
 import { RegenerateButton } from "./regenerate-button";
@@ -1957,7 +1958,13 @@ function App() {
             key={activeType.id}
             stages={CRON_TYPES.filter(([kind]) =>
               contentAllows(activeType, kind),
-            )}
+            ).map(([kind, label]) => [
+              kind,
+              activeType.settings?.pipeline === "video-vektor" &&
+              kind === "VIDEO_KALIMAT_H"
+                ? "Video Vektor · 1920×1080"
+                : label,
+            ])}
             items={bookCrons}
             onDelete={async (cron) => {
               await api("/book-crons", "DELETE", { id: cron.id });
@@ -2048,8 +2055,16 @@ function App() {
       // Produksi: halaman utama.
       const books = new Set(rows.map((r) => bookKey(r.book))).size;
       heading = page;
-      sub = `${rows.length} topik dari ${books} konteks.`;
-      content = queueCard;
+      sub =
+        activeType?.settings?.pipeline === "video-vektor"
+          ? "Produksi video 1920×1080."
+          : `${rows.length} topik dari ${books} konteks.`;
+      content =
+        activeType?.settings?.pipeline === "video-vektor" ? (
+          <VideoVektorProduction key={activeType.id} type={activeType} />
+        ) : (
+          queueCard
+        );
     }
     return { content, heading, sub };
   };
@@ -2140,15 +2155,17 @@ function App() {
                   <Icon name="link" />
                   ncpost.nuscode.id
                 </span>
-                {page === "Produksi" && nextChapter && (
-                  <button
-                    className="btn btn-pri"
-                    onClick={() => action(() => open(nextChapter))}
-                  >
-                    <Icon name="plus" />
-                    Buka topik berikutnya
-                  </button>
-                )}
+                {page === "Produksi" &&
+                  activeType?.settings?.pipeline !== "video-vektor" &&
+                  nextChapter && (
+                    <button
+                      className="btn btn-pri"
+                      onClick={() => action(() => open(nextChapter))}
+                    >
+                      <Icon name="plus" />
+                      Buka topik berikutnya
+                    </button>
+                  )}
               </div>
             </header>
           )}
@@ -2165,7 +2182,10 @@ function App() {
             </div>
           )}
           {content}
-          {!detail && page === "Produksi" && jobsCard}
+          {!detail &&
+            page === "Produksi" &&
+            activeType?.settings?.pipeline !== "video-vektor" &&
+            jobsCard}
           {officeView && (
             <div className="office-drawer-wrap">
               <button

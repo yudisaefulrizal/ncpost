@@ -1,0 +1,1139 @@
+{
+  "fps": 30,
+  "durationInFrames": 2008,
+  "scenes": [
+    {
+      "audio_text": "Sering dikatakan bahwa kucing adalah makhluk paling tidak berguna di rumah, karena ia tidur hampir sepanjang hari, menjatuhkan barang dari meja, dan menatap kita seolah-olah kitalah yang bekerja untuknya.",
+      "key_text": "Benarkah tidak berguna?",
+      "motion_description": "Adegan 1 dibuka dengan latar krem polos bergaya 2D datar. Seekor kucing oranye berbentuk sederhana tertidur melingkar di sofa, dan tanda 'Zzz' melayang naik berulang. Sebuah gelas di tepi meja didorong pelan oleh cakar kucing, lalu jatuh ke bawah. Kamera bergeser perlahan mendekati wajah kucing yang menatap lurus ke depan. Teks kunci muncul di atas kepala kucing dengan efek fade-in lembut.",
+      "index": 0,
+      "from": 0,
+      "durationInFrames": 328,
+      "audioLead": 12,
+      "audioDuration": 10.466666666666667,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 316,
+      "audioRawDuration": 11.256,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 2.206999333333333,
+          "words": [
+            {
+              "text": "Sering",
+              "start": 0.04912433333333334,
+              "end": 0.2991243333333333
+            },
+            {
+              "text": "dikatakan",
+              "start": 0.2991243333333333,
+              "end": 0.8254573333333334
+            },
+            {
+              "text": "bahwa",
+              "start": 0.8254583333333333,
+              "end": 1.0622913333333333
+            },
+            {
+              "text": "kucing",
+              "start": 1.0622913333333333,
+              "end": 1.4175413333333333
+            },
+            {
+              "text": "adalah",
+              "start": 1.4175413333333333,
+              "end": 1.6807073333333333
+            },
+            {
+              "text": "makhluk",
+              "start": 1.6807083333333332,
+              "end": 1.9701663333333335
+            },
+            {
+              "text": "paling",
+              "start": 1.9701663333333335,
+              "end": 2.206999333333333
+            }
+          ]
+        },
+        {
+          "start": 2.206999333333333,
+          "end": 4.2596663333333336,
+          "words": [
+            {
+              "text": "tidak",
+              "start": 2.206999333333333,
+              "end": 2.404374333333333
+            },
+            {
+              "text": "berguna",
+              "start": 2.404374333333333,
+              "end": 2.720165333333333
+            },
+            {
+              "text": "di",
+              "start": 2.7201663333333332,
+              "end": 2.812291333333333
+            },
+            {
+              "text": "rumah",
+              "start": 2.812291333333333,
+              "end": 3.2991243333333333
+            },
+            {
+              "text": "karena",
+              "start": 3.562291333333333,
+              "end": 3.825457333333333
+            },
+            {
+              "text": "ia",
+              "start": 3.825458333333333,
+              "end": 3.983333333333333
+            },
+            {
+              "text": "tidur",
+              "start": 3.983333333333333,
+              "end": 4.2596663333333336
+            }
+          ]
+        },
+        {
+          "start": 4.2596663333333336,
+          "end": 7.535958333333333,
+          "words": [
+            {
+              "text": "hampir",
+              "start": 4.2596663333333336,
+              "end": 4.549124333333333
+            },
+            {
+              "text": "sepanjang",
+              "start": 4.549124333333333,
+              "end": 4.970165333333334
+            },
+            {
+              "text": "hari",
+              "start": 4.970166333333333,
+              "end": 5.417541333333333
+            },
+            {
+              "text": "menjatuhkan",
+              "start": 5.706999333333334,
+              "end": 6.299124333333333
+            },
+            {
+              "text": "barang",
+              "start": 6.299124333333333,
+              "end": 6.522790333333334
+            },
+            {
+              "text": "dari",
+              "start": 6.522791333333333,
+              "end": 6.667541333333333
+            },
+            {
+              "text": "meja",
+              "start": 6.667541333333333,
+              "end": 7.2596663333333336
+            }
+          ]
+        },
+        {
+          "start": 7.535958333333333,
+          "end": 9.654374333333333,
+          "words": [
+            {
+              "text": "dan",
+              "start": 7.535958333333333,
+              "end": 7.746499333333333
+            },
+            {
+              "text": "menatap",
+              "start": 7.746499333333333,
+              "end": 8.088582333333333
+            },
+            {
+              "text": "kita",
+              "start": 8.088583333333334,
+              "end": 8.312249333333334
+            },
+            {
+              "text": "seolah-olah",
+              "start": 8.312291333333334,
+              "end": 8.772791333333334
+            },
+            {
+              "text": "kitalah",
+              "start": 8.772791333333334,
+              "end": 9.154374333333333
+            },
+            {
+              "text": "yang",
+              "start": 9.154374333333333,
+              "end": 9.299124333333333
+            },
+            {
+              "text": "bekerja",
+              "start": 9.299124333333333,
+              "end": 9.654374333333333
+            }
+          ]
+        },
+        {
+          "start": 9.654374333333333,
+          "end": 10.466666666666667,
+          "words": [
+            {
+              "text": "untuknya",
+              "start": 9.654374333333333,
+              "end": 10.299124333333333
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "audio_text": "Namun, jika kita menelusuri sejarahnya, hubungan manusia dengan kucing justru bermula dari manfaat nyata, yaitu ketika manusia purba mulai menyimpan hasil panen sekitar sepuluh ribu tahun lalu di kawasan Bulan Sabit Subur.",
+      "key_text": "±10.000 tahun lalu",
+      "motion_description": "Adegan 2 dimulai dengan transisi geser horizontal dari sofa ke lanskap gurun hangat. Garis waktu tipis muncul di bagian bawah layar dan bergerak mundur sampai angka sepuluh ribu tahun. Lumbung biji-bijian sederhana tumbuh dari tanah dengan animasi membesar, dan peta kecil Bulan Sabit Subur menyala di sudut layar. Siluet kucing muncul pelan dari balik semak. Teks kunci tampil di samping garis waktu.",
+      "index": 1,
+      "from": 328,
+      "durationInFrames": 359,
+      "audioLead": 0,
+      "audioDuration": 11.9,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 359,
+      "audioRawDuration": 12.72,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 3.641208333333333,
+          "words": [
+            {
+              "text": "Namun",
+              "start": 0.04912433333333334,
+              "end": 0.5885823333333333
+            },
+            {
+              "text": "jika",
+              "start": 0.8385833333333333,
+              "end": 1.1149163333333334
+            },
+            {
+              "text": "kita",
+              "start": 1.1149163333333334,
+              "end": 1.3254573333333333
+            },
+            {
+              "text": "menelusuri",
+              "start": 1.3254583333333334,
+              "end": 1.7859583333333333
+            },
+            {
+              "text": "sejarahnya",
+              "start": 1.7859583333333333,
+              "end": 2.6017493333333332
+            },
+            {
+              "text": "hubungan",
+              "start": 2.8517493333333332,
+              "end": 3.246499333333333
+            },
+            {
+              "text": "manusia",
+              "start": 3.246499333333333,
+              "end": 3.641207333333333
+            }
+          ]
+        },
+        {
+          "start": 3.641208333333333,
+          "end": 6.2596663333333336,
+          "words": [
+            {
+              "text": "dengan",
+              "start": 3.641208333333333,
+              "end": 3.8517493333333332
+            },
+            {
+              "text": "kucing",
+              "start": 3.8517493333333332,
+              "end": 4.128082333333333
+            },
+            {
+              "text": "justru",
+              "start": 4.1280833333333335,
+              "end": 4.456999333333334
+            },
+            {
+              "text": "bermula",
+              "start": 4.456999333333334,
+              "end": 4.864874333333334
+            },
+            {
+              "text": "dari",
+              "start": 4.864916333333333,
+              "end": 5.022791333333333
+            },
+            {
+              "text": "manfaat",
+              "start": 5.022791333333333,
+              "end": 5.404374333333333
+            },
+            {
+              "text": "nyata",
+              "start": 5.404374333333333,
+              "end": 5.943832333333334
+            }
+          ]
+        },
+        {
+          "start": 6.2596663333333336,
+          "end": 8.430708333333333,
+          "words": [
+            {
+              "text": "yaitu",
+              "start": 6.2596663333333336,
+              "end": 6.588582333333334
+            },
+            {
+              "text": "ketika",
+              "start": 6.588583333333333,
+              "end": 6.851749333333333
+            },
+            {
+              "text": "manusia",
+              "start": 6.851749333333333,
+              "end": 7.206999333333334
+            },
+            {
+              "text": "purba",
+              "start": 7.206999333333334,
+              "end": 7.562249333333334
+            },
+            {
+              "text": "mulai",
+              "start": 7.5622913333333335,
+              "end": 7.785957333333333
+            },
+            {
+              "text": "menyimpan",
+              "start": 7.785958333333333,
+              "end": 8.154374333333333
+            },
+            {
+              "text": "hasil",
+              "start": 8.154374333333333,
+              "end": 8.430707333333334
+            }
+          ]
+        },
+        {
+          "start": 8.430708333333333,
+          "end": 10.285958333333333,
+          "words": [
+            {
+              "text": "panen",
+              "start": 8.430708333333333,
+              "end": 8.772791333333334
+            },
+            {
+              "text": "sekitar",
+              "start": 8.772791333333334,
+              "end": 9.167541333333334
+            },
+            {
+              "text": "sepuluh",
+              "start": 9.167541333333334,
+              "end": 9.496499333333334
+            },
+            {
+              "text": "ribu",
+              "start": 9.496499333333334,
+              "end": 9.654374333333333
+            },
+            {
+              "text": "tahun",
+              "start": 9.654374333333333,
+              "end": 9.917540333333333
+            },
+            {
+              "text": "lalu",
+              "start": 9.917541333333334,
+              "end": 10.193874333333333
+            },
+            {
+              "text": "di",
+              "start": 10.193874333333333,
+              "end": 10.285957333333334
+            }
+          ]
+        },
+        {
+          "start": 10.285958333333333,
+          "end": 11.9,
+          "words": [
+            {
+              "text": "kawasan",
+              "start": 10.285958333333333,
+              "end": 10.693833333333334
+            },
+            {
+              "text": "Bulan",
+              "start": 10.693874333333333,
+              "end": 10.943874333333333
+            },
+            {
+              "text": "Sabit",
+              "start": 10.943874333333333,
+              "end": 11.220165333333334
+            },
+            {
+              "text": "Subur",
+              "start": 11.220166333333333,
+              "end": 11.759624333333333
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "audio_text": "Lumbung gandum menarik tikus, dan tikus menarik kucing liar yang datang dengan sukarela, sehingga kucing memburu hama tanpa pernah dilatih seperti anjing.",
+      "key_text": "Gandum → tikus → kucing",
+      "motion_description": "Masih dalam adegan 2 dengan latar lumbung yang sama. Beberapa tikus kecil keluar dari celah lumbung, lalu panah lengkung muncul dari tikus menuju kucing liar, dan dari gandum menuju tikus. Kucing melompat dan menangkap seekor tikus dengan gerakan cepat yang ekspresif. Rantai tiga ikon gandum, tikus, dan kucing tersusun horizontal sebagai teks kunci dengan panah menyala bergantian.",
+      "index": 2,
+      "from": 687,
+      "durationInFrames": 245,
+      "audioLead": 0,
+      "audioDuration": 8.1,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 245,
+      "audioRawDuration": 8.904,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 2.562291333333333,
+          "words": [
+            {
+              "text": "Lumbung",
+              "start": 0.04912433333333334,
+              "end": 0.39120733333333335
+            },
+            {
+              "text": "gandum",
+              "start": 0.3912083333333333,
+              "end": 0.6938333333333333
+            },
+            {
+              "text": "menarik",
+              "start": 0.6938743333333334,
+              "end": 0.9833323333333333
+            },
+            {
+              "text": "tikus",
+              "start": 0.9833333333333334,
+              "end": 1.5359583333333333
+            },
+            {
+              "text": "dan",
+              "start": 1.7991243333333333,
+              "end": 2.022790333333333
+            },
+            {
+              "text": "tikus",
+              "start": 2.022791333333333,
+              "end": 2.312249333333333
+            },
+            {
+              "text": "menarik",
+              "start": 2.312291333333333,
+              "end": 2.562291333333333
+            }
+          ]
+        },
+        {
+          "start": 2.562291333333333,
+          "end": 5.141208333333333,
+          "words": [
+            {
+              "text": "kucing",
+              "start": 2.562291333333333,
+              "end": 2.812291333333333
+            },
+            {
+              "text": "liar",
+              "start": 2.812291333333333,
+              "end": 3.062291333333333
+            },
+            {
+              "text": "yang",
+              "start": 3.062291333333333,
+              "end": 3.2201663333333332
+            },
+            {
+              "text": "datang",
+              "start": 3.2201663333333332,
+              "end": 3.5491243333333333
+            },
+            {
+              "text": "dengan",
+              "start": 3.5491243333333333,
+              "end": 3.7333323333333333
+            },
+            {
+              "text": "sukarela",
+              "start": 3.733333333333333,
+              "end": 4.456999333333334
+            },
+            {
+              "text": "sehingga",
+              "start": 4.746499333333333,
+              "end": 5.141207333333334
+            }
+          ]
+        },
+        {
+          "start": 5.141208333333333,
+          "end": 7.351749333333333,
+          "words": [
+            {
+              "text": "kucing",
+              "start": 5.141208333333333,
+              "end": 5.443833333333334
+            },
+            {
+              "text": "memburu",
+              "start": 5.4438743333333335,
+              "end": 5.759665333333333
+            },
+            {
+              "text": "hama",
+              "start": 5.7596663333333336,
+              "end": 6.035957333333333
+            },
+            {
+              "text": "tanpa",
+              "start": 6.035958333333333,
+              "end": 6.3122913333333335
+            },
+            {
+              "text": "pernah",
+              "start": 6.3122913333333335,
+              "end": 6.588582333333334
+            },
+            {
+              "text": "dilatih",
+              "start": 6.588583333333333,
+              "end": 7.009624333333334
+            },
+            {
+              "text": "seperti",
+              "start": 7.0096663333333336,
+              "end": 7.351749333333333
+            }
+          ]
+        },
+        {
+          "start": 7.351749333333333,
+          "end": 8.1,
+          "words": [
+            {
+              "text": "anjing",
+              "start": 7.351749333333333,
+              "end": 7.9438743333333335
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "audio_text": "Para ilmuwan menyebut proses ini sebagai domestikasi mandiri, karena kucing seolah memilih sendiri untuk mendekati manusia, dan hingga kini kemampuannya mengendalikan tikus masih dimanfaatkan di gudang, pertanian, bahkan kapal.",
+      "key_text": "Domestikasi mandiri",
+      "motion_description": "Adegan 3 dimulai dengan transisi lingkaran membesar yang mengganti latar menjadi gudang modern berwarna biru muda. Ikon gudang, kapal layar, dan ladang muncul berurutan dari kiri ke kanan, masing-masing dengan siluet kucing kecil yang berpatroli. Kamera bergeser mengikuti urutan ikon. Teks kunci muncul dengan garis bawah yang digambar animasi di bawahnya.",
+      "index": 3,
+      "from": 932,
+      "durationInFrames": 371,
+      "audioLead": 0,
+      "audioDuration": 12.3,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 371,
+      "audioRawDuration": 13.104,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 2.430708333333333,
+          "words": [
+            {
+              "text": "Para",
+              "start": 0.04912433333333334,
+              "end": 0.20699933333333337
+            },
+            {
+              "text": "ilmuwan",
+              "start": 0.20699933333333337,
+              "end": 0.5754153333333334
+            },
+            {
+              "text": "menyebut",
+              "start": 0.5754583333333333,
+              "end": 0.9043743333333334
+            },
+            {
+              "text": "proses",
+              "start": 0.9043743333333334,
+              "end": 1.2464993333333334
+            },
+            {
+              "text": "ini",
+              "start": 1.2464993333333334,
+              "end": 1.4964993333333334
+            },
+            {
+              "text": "sebagai",
+              "start": 1.4964993333333334,
+              "end": 1.8385823333333333
+            },
+            {
+              "text": "domestikasi",
+              "start": 1.8385833333333335,
+              "end": 2.430708333333333
+            }
+          ]
+        },
+        {
+          "start": 2.430708333333333,
+          "end": 5.114916333333333,
+          "words": [
+            {
+              "text": "mandiri",
+              "start": 2.430708333333333,
+              "end": 3.062291333333333
+            },
+            {
+              "text": "karena",
+              "start": 3.3517493333333332,
+              "end": 3.628082333333333
+            },
+            {
+              "text": "kucing",
+              "start": 3.628083333333333,
+              "end": 3.9569993333333335
+            },
+            {
+              "text": "seolah",
+              "start": 3.9569993333333335,
+              "end": 4.233332333333333
+            },
+            {
+              "text": "memilih",
+              "start": 4.233333333333333,
+              "end": 4.5096663333333336
+            },
+            {
+              "text": "sendiri",
+              "start": 4.5096663333333336,
+              "end": 4.904374333333333
+            },
+            {
+              "text": "untuk",
+              "start": 4.904374333333333,
+              "end": 5.114915333333333
+            }
+          ]
+        },
+        {
+          "start": 5.114916333333333,
+          "end": 8.193874333333333,
+          "words": [
+            {
+              "text": "mendekati",
+              "start": 5.114916333333333,
+              "end": 5.470166333333333
+            },
+            {
+              "text": "manusia",
+              "start": 5.470166333333333,
+              "end": 6.128041333333334
+            },
+            {
+              "text": "dan",
+              "start": 6.417541333333333,
+              "end": 6.614916333333333
+            },
+            {
+              "text": "hingga",
+              "start": 6.614916333333333,
+              "end": 6.904374333333333
+            },
+            {
+              "text": "kini",
+              "start": 6.904374333333333,
+              "end": 7.114915333333333
+            },
+            {
+              "text": "kemampuannya",
+              "start": 7.114916333333333,
+              "end": 7.641207333333334
+            },
+            {
+              "text": "mengendalikan",
+              "start": 7.641208333333333,
+              "end": 8.193833333333334
+            }
+          ]
+        },
+        {
+          "start": 8.193874333333333,
+          "end": 11.588583333333334,
+          "words": [
+            {
+              "text": "tikus",
+              "start": 8.193874333333333,
+              "end": 8.470165333333334
+            },
+            {
+              "text": "masih",
+              "start": 8.470166333333333,
+              "end": 8.746499333333334
+            },
+            {
+              "text": "dimanfaatkan",
+              "start": 8.746499333333334,
+              "end": 9.338582333333333
+            },
+            {
+              "text": "di",
+              "start": 9.338583333333334,
+              "end": 9.417541333333334
+            },
+            {
+              "text": "gudang",
+              "start": 9.417541333333334,
+              "end": 9.970166333333333
+            },
+            {
+              "text": "pertanian",
+              "start": 10.220166333333333,
+              "end": 10.956999333333334
+            },
+            {
+              "text": "bahkan",
+              "start": 11.141208333333333,
+              "end": 11.588583333333334
+            }
+          ]
+        },
+        {
+          "start": 11.588583333333334,
+          "end": 12.3,
+          "words": [
+            {
+              "text": "kapal",
+              "start": 11.588583333333334,
+              "end": 12.154374333333333
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "audio_text": "Di rumah modern, perannya bergeser dari pemburu hama menjadi teman yang kehadirannya dapat membantu banyak orang merasa lebih tenang, meskipun bukti ilmiah tentang besarnya manfaat itu masih beragam.",
+      "key_text": "Dari pemburu ke teman",
+      "motion_description": "Adegan 4 menampilkan ruang tamu hangat bergaya 2D. Siluet kucing pemburu dari adegan sebelumnya berubah bentuk menjadi kucing rumahan yang duduk di pangkuan seseorang. Gelembung kecil berbentuk hati dan gelombang lembut muncul di sekitar keduanya, lalu perlahan memudar. Panah melengkung menghubungkan ikon pemburu di kiri dengan ikon teman di kanan sebagai teks kunci.",
+      "index": 4,
+      "from": 1303,
+      "durationInFrames": 300,
+      "audioLead": 0,
+      "audioDuration": 9.933333333333334,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 300,
+      "audioRawDuration": 10.752,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 2.443874333333333,
+          "words": [
+            {
+              "text": "Di",
+              "start": 0.04912433333333334,
+              "end": 0.18070733333333333
+            },
+            {
+              "text": "rumah",
+              "start": 0.18070833333333336,
+              "end": 0.3780833333333333
+            },
+            {
+              "text": "modern",
+              "start": 0.3780833333333333,
+              "end": 0.9044163333333334
+            },
+            {
+              "text": "perannya",
+              "start": 1.1807083333333332,
+              "end": 1.5096663333333333
+            },
+            {
+              "text": "bergeser",
+              "start": 1.5096663333333333,
+              "end": 1.9833323333333335
+            },
+            {
+              "text": "dari",
+              "start": 1.9833333333333332,
+              "end": 2.141208333333333
+            },
+            {
+              "text": "pemburu",
+              "start": 2.141208333333333,
+              "end": 2.443833333333333
+            }
+          ]
+        },
+        {
+          "start": 2.443874333333333,
+          "end": 4.799124333333333,
+          "words": [
+            {
+              "text": "hama",
+              "start": 2.443874333333333,
+              "end": 2.746499333333333
+            },
+            {
+              "text": "menjadi",
+              "start": 2.746499333333333,
+              "end": 3.0622903333333333
+            },
+            {
+              "text": "teman",
+              "start": 3.062291333333333,
+              "end": 3.364916333333333
+            },
+            {
+              "text": "yang",
+              "start": 3.364916333333333,
+              "end": 3.4833323333333333
+            },
+            {
+              "text": "kehadirannya",
+              "start": 3.483333333333333,
+              "end": 4.101749333333333
+            },
+            {
+              "text": "dapat",
+              "start": 4.101749333333333,
+              "end": 4.391207333333334
+            },
+            {
+              "text": "membantu",
+              "start": 4.391208333333333,
+              "end": 4.799083333333334
+            }
+          ]
+        },
+        {
+          "start": 4.799124333333333,
+          "end": 7.220166333333333,
+          "words": [
+            {
+              "text": "banyak",
+              "start": 4.799124333333333,
+              "end": 5.101749333333333
+            },
+            {
+              "text": "orang",
+              "start": 5.101749333333333,
+              "end": 5.299124333333333
+            },
+            {
+              "text": "merasa",
+              "start": 5.299124333333333,
+              "end": 5.549124333333333
+            },
+            {
+              "text": "lebih",
+              "start": 5.549124333333333,
+              "end": 5.733332333333333
+            },
+            {
+              "text": "tenang",
+              "start": 5.733333333333333,
+              "end": 6.206999333333334
+            },
+            {
+              "text": "meskipun",
+              "start": 6.496499333333333,
+              "end": 6.970165333333334
+            },
+            {
+              "text": "bukti",
+              "start": 6.970166333333333,
+              "end": 7.220166333333333
+            }
+          ]
+        },
+        {
+          "start": 7.220166333333333,
+          "end": 9.933333333333334,
+          "words": [
+            {
+              "text": "ilmiah",
+              "start": 7.220166333333333,
+              "end": 7.628041333333334
+            },
+            {
+              "text": "tentang",
+              "start": 7.6280833333333335,
+              "end": 7.891208333333333
+            },
+            {
+              "text": "besarnya",
+              "start": 7.891208333333333,
+              "end": 8.272791333333334
+            },
+            {
+              "text": "manfaat",
+              "start": 8.272791333333334,
+              "end": 8.654374333333333
+            },
+            {
+              "text": "itu",
+              "start": 8.654374333333333,
+              "end": 8.891207333333334
+            },
+            {
+              "text": "masih",
+              "start": 8.891208333333333,
+              "end": 9.154374333333333
+            },
+            {
+              "text": "beragam",
+              "start": 9.154374333333333,
+              "end": 9.785957333333334
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "audio_text": "Karena itu, kucing sebenarnya bukan makhluk paling tidak berguna, melainkan pengingat bahwa nilai sesuatu tidak selalu diukur dari seberapa keras ia bekerja, sebab ada makhluk yang kehadirannya saja sudah cukup membuat hidup terasa lebih hangat.",
+      "key_text": "Nilai bukan hanya kerja",
+      "motion_description": "Adegan 5 kembali ke sofa dari adegan pertama dengan palet warna yang kini lebih hangat. Kucing oranye tidur dengan tenang, dan lampu ruangan menyala lembut dari redup menjadi terang. Tanda 'Zzz' berubah menjadi bintang-bintang kecil yang naik perlahan. Kamera menjauh perlahan sampai seluruh ruangan terlihat. Teks kunci muncul di tengah layar lalu memudar bersama bintang-bintang.",
+      "index": 5,
+      "from": 1603,
+      "durationInFrames": 405,
+      "audioLead": 0,
+      "audioDuration": 12.3,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 371,
+      "audioRawDuration": 13.104,
+      "captions": [
+        {
+          "start": 0.04912433333333334,
+          "end": 2.5491243333333333,
+          "words": [
+            {
+              "text": "Karena",
+              "start": 0.04912433333333334,
+              "end": 0.27279033333333336
+            },
+            {
+              "text": "itu",
+              "start": 0.27279133333333333,
+              "end": 0.7727913333333334
+            },
+            {
+              "text": "kucing",
+              "start": 1.0227913333333334,
+              "end": 1.3254163333333333
+            },
+            {
+              "text": "sebenarnya",
+              "start": 1.3254583333333334,
+              "end": 1.7991243333333333
+            },
+            {
+              "text": "bukan",
+              "start": 1.7991243333333333,
+              "end": 2.035957333333333
+            },
+            {
+              "text": "makhluk",
+              "start": 2.0359583333333333,
+              "end": 2.312291333333333
+            },
+            {
+              "text": "paling",
+              "start": 2.312291333333333,
+              "end": 2.5491243333333333
+            }
+          ]
+        },
+        {
+          "start": 2.5491243333333333,
+          "end": 5.364916333333333,
+          "words": [
+            {
+              "text": "tidak",
+              "start": 2.5491243333333333,
+              "end": 2.7333323333333333
+            },
+            {
+              "text": "berguna",
+              "start": 2.733333333333333,
+              "end": 3.2991243333333333
+            },
+            {
+              "text": "melainkan",
+              "start": 3.5885833333333332,
+              "end": 4.009624333333334
+            },
+            {
+              "text": "pengingat",
+              "start": 4.0096663333333336,
+              "end": 4.404374333333333
+            },
+            {
+              "text": "bahwa",
+              "start": 4.404374333333333,
+              "end": 4.680707333333333
+            },
+            {
+              "text": "nilai",
+              "start": 4.6807083333333335,
+              "end": 4.917541333333333
+            },
+            {
+              "text": "sesuatu",
+              "start": 4.917541333333333,
+              "end": 5.364916333333333
+            }
+          ]
+        },
+        {
+          "start": 5.364916333333333,
+          "end": 7.246499333333333,
+          "words": [
+            {
+              "text": "tidak",
+              "start": 5.364916333333333,
+              "end": 5.601749333333333
+            },
+            {
+              "text": "selalu",
+              "start": 5.601749333333333,
+              "end": 5.904374333333333
+            },
+            {
+              "text": "diukur",
+              "start": 5.904374333333333,
+              "end": 6.285957333333333
+            },
+            {
+              "text": "dari",
+              "start": 6.285958333333333,
+              "end": 6.443833333333334
+            },
+            {
+              "text": "seberapa",
+              "start": 6.4438743333333335,
+              "end": 6.812290333333333
+            },
+            {
+              "text": "keras",
+              "start": 6.8122913333333335,
+              "end": 7.101749333333333
+            },
+            {
+              "text": "ia",
+              "start": 7.101749333333333,
+              "end": 7.246499333333333
+            }
+          ]
+        },
+        {
+          "start": 7.246499333333333,
+          "end": 10.009666333333334,
+          "words": [
+            {
+              "text": "bekerja",
+              "start": 7.246499333333333,
+              "end": 7.864915333333333
+            },
+            {
+              "text": "sebab",
+              "start": 8.141208333333333,
+              "end": 8.470166333333333
+            },
+            {
+              "text": "ada",
+              "start": 8.470166333333333,
+              "end": 8.628041333333334
+            },
+            {
+              "text": "makhluk",
+              "start": 8.628083333333334,
+              "end": 8.983333333333334
+            },
+            {
+              "text": "yang",
+              "start": 8.983333333333334,
+              "end": 9.101749333333334
+            },
+            {
+              "text": "kehadirannya",
+              "start": 9.101749333333334,
+              "end": 9.601749333333334
+            },
+            {
+              "text": "saja",
+              "start": 9.601749333333334,
+              "end": 10.009624333333333
+            }
+          ]
+        },
+        {
+          "start": 10.009666333333334,
+          "end": 12.3,
+          "words": [
+            {
+              "text": "sudah",
+              "start": 10.009666333333334,
+              "end": 10.246499333333334
+            },
+            {
+              "text": "cukup",
+              "start": 10.246499333333334,
+              "end": 10.535957333333334
+            },
+            {
+              "text": "membuat",
+              "start": 10.535958333333333,
+              "end": 10.825416333333333
+            },
+            {
+              "text": "hidup",
+              "start": 10.825458333333334,
+              "end": 11.141208333333333
+            },
+            {
+              "text": "terasa",
+              "start": 11.141208333333333,
+              "end": 11.470166333333333
+            },
+            {
+              "text": "lebih",
+              "start": 11.470166333333333,
+              "end": 11.654374333333333
+            },
+            {
+              "text": "hangat",
+              "start": 11.654374333333333,
+              "end": 12.154374333333333
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

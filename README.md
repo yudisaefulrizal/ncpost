@@ -404,3 +404,25 @@ Jalankan `npm run migrate` untuk membuat tabel `voices`, lalu restart web dan wo
 ## Stok Audio
 
 Menu Stok Audio menampilkan audio bersama dengan filter teks, penyedia, dan suara. Download tersedia per audio, untuk audio terpilih, atau seluruh hasil filter sebagai ZIP. Audio download dikonversi ke WAV, PCM 16-bit, mono, 44,1 kHz menggunakan ffmpeg tanpa mengubah stok asli. Nama file download memakai teks narasi saja; ZIP berisi file audio langsung tanpa subfolder atau kode tambahan. Nama yang sama hanya dimasukkan satu kali. Audio dengan teks lebih dari 230 karakter dilewati pada download satuan maupun ZIP, tanpa mengubah stok asli. Server perlu program `zip` (Ubuntu/Debian: `sudo apt install zip`). Arsip sementara dihapus setelah unduhan selesai. Tidak diperlukan migrasi tambahan untuk halaman ini.
+
+## Video Vektor (1920×1080)
+
+Jenis konten **Video Vektor** ditambahkan oleh `npm run migrate`. Tambahan jenis lain dapat dibuat lewat **Tambah jenis → Video Vektor**. Masukkan judul di halaman Produksi, lalu tekan **Buat video** atau atur aksi **Video Vektor** di Jadwal. Pekerjaan memakai tabel `chapters`/`jobs`, scheduler, antrean global, pembatalan, progres kantor dan worker ncpost yang sama. **Lanjutkan** memakai naskah/sesi/kode/audio yang tersimpan; **Buat ulang** secara eksplisit membuat ulang produksi. Hasil video juga muncul di **Stok Konten Video** dan memakai jalur publikasi video horizontal ncpost.
+
+Mesin produksinya adalah salinan proyek `video-vektor` di `engines/video-vektor/`, lengkap dengan paket/lockfile, sumber film kucing sebagai acuan, skill naskah, font, audio helper, dan renderer. Berkas pipeline ini dipertahankan tanpa perubahan. `SNAPSHOT.json` mencatat checksum snapshot. Produksi tetap satu sesi Codex CLI yang menulis naskah dan kode Remotion/Three.js, audio asli Edge TTS/musik/subtitle, satu render utuh dan enam berkas final. Tidak memakai alur artikel/editor, audio per kalimat, gaya gambar/Animasi 2D, template, CTA atau filter video ncpost. Rasio tetap **1920×1080**; ncpost memeriksa rasio dan menyalin berkas tanpa transcode. Pemanggilan melalui worker mengikuti `CODEX_EXECUTABLE`/`CODEX_MODEL` ncpost dan environment privat, tanpa meneruskan kredensial database/API. Sesi pembuat kode memakai runner asli Video Vektor karena membutuhkan akses tulis kode dan sesi yang dapat dilanjutkan.
+
+Persiapan pertama (jalankan sebagai user aplikasi/worker):
+
+```bash
+npm ci
+npm run setup:video-vektor
+npm run migrate
+npm run build
+# Restart service web/worker sesuai pemasangan server.
+```
+
+Server memerlukan Node.js 22+, Python 3 beserta venv, FFmpeg/ffprobe, Google Chrome di `/usr/bin/google-chrome`, dan Codex CLI yang sudah login sebagai user worker. `setup:video-vektor` memasang dependensi Remotion dari lockfile serta Python dari requirements proyek dan dapat diulang; tidak memasang paket OS atau melakukan login. Saat deploy berikutnya: `git pull`, `npm ci`, `npm run setup:video-vektor`, `npm run migrate`, build dan restart. Snapshot mesin disertakan di repositori ncpost, sehingga tidak perlu pull repositori video-vektor terpisah. Deployment otomatis harus menyertakan langkah setup tersebut.
+
+`VIDEO_VEKTOR_ROOT` dapat menunjuk checkout proyek asli yang sudah disiapkan sebagai alternatif snapshot. Jika tidak diisi, worker memakai snapshot bawaan. Pengaturan suara/rate dan renderer tetap mengikuti proyek asli (`TTS_VOICE=id-ID-ArdiNeural`, `TTS_RATE=-5%`, `REMOTION_GL=angle` secara default). Jenis konten tidak menyediakan perubahan gaya atau ukuran.
+
+Produksi diserialkan lintas worker dan menghormati kunci pipeline asli. Tidak ada timeout tetap tambahan. Proyek memakai ID `ncpost-t<jenis>-c<konten>-r<revisi>` agar judul sama tidak bentrok. Cache/sesi/log/hasil asli berada di folder mesin dan dipertahankan untuk melanjutkan; salinan enam hasil final disimpan dalam folder hasil konten ncpost per job. Menghapus judul di ncpost menghapus hasil konten ncpost; cache/sesi mesin tetap tersedia untuk pemeriksaan dan pembersihan lewat perintah asli mesin. Unduhan video, narasi, musik, audio final, naskah dan subtitle memakai sesi/login ncpost.

@@ -617,7 +617,12 @@ app.post("/api/chapters", async (req, res) => {
       .json({ id: await store.create(type.name, "Quote") });
   }
   const input = req.body ?? {};
-  const book = input.konteks !== undefined ? input.konteks : input.book;
+  const book =
+    type?.settings?.pipeline === "video-vektor"
+      ? type.name
+      : input.konteks !== undefined
+        ? input.konteks
+        : input.book;
   const title = input.topik !== undefined ? input.topik : input.title;
   if (typeof book !== "string" || typeof title !== "string")
     throw Error("Konteks dan topik wajib diisi");
@@ -640,6 +645,27 @@ app.put("/api/chapters/:id/part", async (req, res) => {
 app.post("/api/books/renumber", async (req, res) => {
   if (typeof req.body?.book !== "string") throw Error("Konteks wajib diisi");
   res.json(await store.renumberBook(req.body.book));
+});
+app.get("/api/chapters/:id/video-vektor/:file", async (req, res) => {
+  const c = await store.chapter(Number(req.params.id));
+  const name = String(req.params.file);
+  const allowed = [
+    "video.mp4",
+    "narasi.wav",
+    "musik.wav",
+    "audio-final.wav",
+    "naskah.json",
+    "subtitle.srt",
+  ];
+  if (!c?.sentence_video_h || !allowed.includes(name))
+    return void res.sendStatus(404);
+  const manifest = JSON.parse(c.sentence_video_h);
+  if (manifest.mode !== "video-vektor" || !manifest.artifacts?.[name])
+    return void res.sendStatus(404);
+  res.download(
+    safeFile(outputRoot(), path.join(ROOT, manifest.artifacts[name])),
+    name,
+  );
 });
 app.get("/api/chapters/:id/caption", async (req, res) => {
   const c = await store.chapter(Number(req.params.id));

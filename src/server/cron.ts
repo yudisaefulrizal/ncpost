@@ -3,6 +3,7 @@ import type { Chapter } from "./store";
 import { validateContentText } from "./domain";
 import {
   isAnimation,
+  isVideoVektor,
   panelSources,
   sentenceJob,
   type BookSettings,
@@ -86,6 +87,8 @@ export function cronJobs(
   c: Chapter,
   s: BookSettings,
 ): string[] {
+  if (isVideoVektor(s))
+    return kind === "VIDEO_KALIMAT_H" && !c.sentence_video_h ? [kind] : [];
   const ready =
     c.article_status === "siap" &&
     validateContentText(c.article, c.content_engine, c.article_config).ok;
