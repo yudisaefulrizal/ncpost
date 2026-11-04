@@ -68,7 +68,7 @@ const executable = await prepareBrowser({ root, run });
 await verifyCpuWebGl({ root, executable });
 if (!existsSync(`/run/user/${process.getuid?.()}/bus`)) {
   console.warn(
-    "Batas RAM Video Vektor belum siap: layanan pengguna systemd belum aktif. Jalankan sekali sebagai admin: sudo bash deploy/enable-video-vektor-limits.sh <user-worker>. Produksi akan menunggu konfigurasi ini.",
+    "Batas RAM Video Vektor belum siap: layanan pengguna systemd belum aktif. Jalankan sekali sebagai admin: sudo bash deploy/enable-video-vektor-limits.sh <user-worker>. Produksi tidak dijalankan sebelum aktivasi ini.",
   );
 }
 // A cancelled or failed setup never claims the engine is ready.

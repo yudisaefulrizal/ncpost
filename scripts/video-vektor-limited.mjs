@@ -30,6 +30,31 @@ if (
 ) {
   try {
     const dir = memoryBoundary();
+    // Transient services otherwise inherit the user manager's environment.
+    // Keep the same private allowlist as the ncpost adapter.
+    const allowed = new Set([
+      "PATH",
+      "HOME",
+      "LANG",
+      "LC_ALL",
+      "TMPDIR",
+      "SSL_CERT_FILE",
+      "SSL_CERT_DIR",
+      "XDG_RUNTIME_DIR",
+      "DBUS_SESSION_BUS_ADDRESS",
+      "CODEX_BIN",
+      "CODEX_MODEL",
+      "VIDEO_VEKTOR_ROOT",
+      "TTS_VOICE",
+      "TTS_RATE",
+      "REMOTION_GL",
+      "NODE_OPTIONS",
+      "OPENBLAS_NUM_THREADS",
+      "OMP_NUM_THREADS",
+      "MKL_NUM_THREADS",
+    ]);
+    for (const key of Object.keys(process.env))
+      if (!allowed.has(key)) delete process.env[key];
     const script = process.argv[2];
     if (!script) throw Error("Script produksi Video Vektor belum diberikan.");
     console.error(

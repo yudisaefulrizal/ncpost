@@ -433,7 +433,7 @@ Produksi diserialkan lintas worker dan menghormati kunci pipeline asli. Tidak ad
 
 Profil ncpost untuk server Linux 2 core tanpa GPU memakai `swangle` (SwiftShader di CPU), satu tab render, encoding setelah render frame, dan cache OffthreadVideo 64 MiB. Gaya, adegan, subtitle, codec H.264/CRF 18, fps dan resolusi 1920×1080 dipertahankan. Profil ini hanya berada di salinan mesin dalam ncpost; repositori Video Vektor asli tidak diubah.
 
-Setiap persiapan/produksi worker masuk scope cgroup v2 terpisah: `MemoryHigh=1700000000`, `MemoryMax=2000000000` (2 GB desimal), `MemorySwapMax=0`. Seluruh turunan Node, Codex, Chromium, Python dan FFmpeg ikut dihitung, termasuk yang membuat process group sendiri. Heap Node dibatasi 768 MiB sebagai pengaturan tambahan. Kunci native ncpost tetap membatasi satu produksi Video Vektor pada satu waktu. Batas ini khusus kelompok proses Video Vektor; web ncpost, database dan aplikasi lain tidak masuk scope tersebut. Jika anggaran tidak cukup, kernel dapat menghentikan produksi; sumber proyek tetap tersimpan untuk dilanjutkan. Tidak ada penurunan resolusi otomatis atau pengubahan isi animasi.
+Setiap persiapan/produksi worker masuk layanan sementara dengan cgroup v2 terpisah: `MemoryHigh=1700000000`, `MemoryMax=2000000000` (2 GB desimal), `MemorySwapMax=0`. Seluruh turunan Node, Codex, Chromium, Python dan FFmpeg ikut dihitung, termasuk yang membuat process group sendiri. Heap Node dibatasi 768 MiB sebagai pengaturan tambahan. Kunci native ncpost tetap membatasi satu produksi Video Vektor pada satu waktu. Batas ini khusus kelompok proses Video Vektor; web ncpost, database dan aplikasi lain tidak masuk cgroup tersebut. Jika anggaran tidak cukup, kernel dapat menghentikan produksi; sumber proyek tetap tersimpan untuk dilanjutkan. Tidak ada penurunan resolusi otomatis atau pengubahan isi animasi.
 
 PM2 tidak menyediakan batas RAM gabungan seluruh subprocess. User worker memerlukan layanan pengguna systemd yang aktif dan delegasi controller memori cgroup v2. Untuk deployment PM2 yang memakai user `www`, jalankan **sekali sebagai root di server**:
 
@@ -442,7 +442,7 @@ cd /www/wwwroot/ncpost
 sudo bash deploy/enable-video-vektor-limits.sh www
 ```
 
-Script mengaktifkan linger/layanan systemd milik user worker dan memverifikasi pembatas memori; tidak mengubah konfigurasi PM2. Produksi menolak berjalan jika kernel tidak menunjukkan batas maksimal 2 GB dan swap 0, sehingga tidak diam-diam memakai RAM tanpa batas ketika layanan ini belum siap. Pesan kegagalan mengarahkan ke bagian ini. Untuk user worker lain, ganti `www` dengan user tersebut.
+Layanan sementara dijalankan oleh pengelola systemd user, sehingga kompatibel dengan PM2 yang berasal dari layanan sistem. Script mengaktifkan linger/layanan systemd milik user worker dan memverifikasi pembatas memori; tidak mengubah konfigurasi PM2. Produksi menolak berjalan jika kernel tidak menunjukkan batas maksimal 2 GB dan swap 0, sehingga tidak diam-diam memakai RAM tanpa batas ketika layanan ini belum siap. Pesan kegagalan mengarahkan ke bagian ini. Untuk user worker lain, ganti `www` dengan user tersebut.
 
 Setelah setup dependensi, jalankan sebagai user worker, dari direktori ncpost:
 
@@ -450,4 +450,4 @@ Setelah setup dependensi, jalankan sebagai user worker, dari direktori ncpost:
 npm run check:video-vektor
 ```
 
-Pemeriksaan merender dua frame acuan asli pada 1920×1080 melalui jalur cgroup/CPU yang sama dengan worker, tanpa Codex, tanpa mengantrekan produksi dan tanpa mengubah hasil pengguna. Berkas sementara dibersihkan. Log mencatat batas dan puncak memori cgroup (jika kernel menyediakan `memory.peak`). Pemeriksaan ini membuktikan backend WebGL dan jalur batas memori; video panjang/adegan berbeda tetap dapat melampaui anggaran 2 GB. Tombol berhenti menghentikan seluruh scope, dengan SIGKILL sebagai tindak lanjut bila perlu.
+Pemeriksaan merender dua frame acuan asli pada 1920×1080 melalui jalur cgroup/CPU yang sama dengan worker, tanpa Codex, tanpa mengantrekan produksi dan tanpa mengubah hasil pengguna. Berkas sementara dibersihkan. Log mencatat batas dan puncak memori cgroup (jika kernel menyediakan `memory.peak`). Pemeriksaan ini membuktikan backend WebGL dan jalur batas memori; video panjang/adegan berbeda tetap dapat melampaui anggaran 2 GB. Tombol berhenti menghentikan seluruh cgroup, dengan SIGKILL sebagai tindak lanjut bila perlu.

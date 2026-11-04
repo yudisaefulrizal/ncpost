@@ -10,7 +10,9 @@ describe("ncpost Video Vektor resource boundary", () => {
     expect(plan.command).toBe("systemd-run");
     expect(plan.args).toEqual(
       expect.arrayContaining([
-        "--scope",
+        "--pipe",
+        "--wait",
+        "--service-type=exec",
         "--user",
         "--property=MemoryMax=2000000000",
         "--property=MemoryHigh=1700000000",

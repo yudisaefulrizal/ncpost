@@ -150,19 +150,38 @@ export async function probeVector(file: string, signal?: AbortSignal) {
   };
 }
 // All production descendants share this kernel-enforced memory budget.
-export function vectorScope(scriptArgs: string[], env: NodeJS.ProcessEnv) {
+export function vectorScope(
+  scriptArgs: string[],
+  env: NodeJS.ProcessEnv,
+  cwd = vectorRoot(),
+) {
   if (process.platform !== "linux")
     throw Error(
       "Produksi Video Vektor ncpost dengan batas RAM 2 GB memerlukan Linux.",
     );
-  const unit = `ncpost-vector-${randomUUID()}.scope`;
+  const unit = `ncpost-vector-${randomUUID()}.service`;
   const runtime = `/run/user/${process.getuid!()}`;
+  const serviceEnv = {
+    ...env,
+    XDG_RUNTIME_DIR: runtime,
+    DBUS_SESSION_BUS_ADDRESS: `unix:path=${runtime}/bus`,
+    REMOTION_GL: "swangle",
+    NODE_OPTIONS: "--max-old-space-size=768",
+    OPENBLAS_NUM_THREADS: "1",
+    OMP_NUM_THREADS: "1",
+    MKL_NUM_THREADS: "1",
+  };
   return {
     unit,
     command: "systemd-run",
     args: [
       "--user",
-      "--scope",
+      "--pipe",
+      "--wait",
+      "--service-type=exec",
+      `--working-directory=${cwd}`,
+      "--property=KillMode=control-group",
+      "--property=TimeoutStopSec=5s",
       "--quiet",
       "--collect",
       `--unit=${unit}`,
@@ -170,20 +189,16 @@ export function vectorScope(scriptArgs: string[], env: NodeJS.ProcessEnv) {
       "--property=MemoryHigh=1700000000",
       "--property=MemoryMax=2000000000",
       "--property=MemorySwapMax=0",
+      ...Object.entries(serviceEnv)
+        .filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        )
+        .map(([key, value]) => `--setenv=${key}=${value}`),
       process.execPath,
       path.join(ROOT, "scripts/video-vektor-limited.mjs"),
       ...scriptArgs,
     ],
-    env: {
-      ...env,
-      XDG_RUNTIME_DIR: runtime,
-      DBUS_SESSION_BUS_ADDRESS: `unix:path=${runtime}/bus`,
-      REMOTION_GL: "swangle",
-      NODE_OPTIONS: "--max-old-space-size=768",
-      OPENBLAS_NUM_THREADS: "1",
-      OMP_NUM_THREADS: "1",
-      MKL_NUM_THREADS: "1",
-    },
+    env: serviceEnv,
   };
 }
 
@@ -194,19 +209,23 @@ export function runPipeline(
 ) {
   return new Promise<void>((resolve, reject) => {
     signal?.throwIfAborted();
-    const scope = vectorScope(request.args, {
-      ...privateEnv(),
-      CODEX_BIN: process.env.CODEX_EXECUTABLE || "codex",
-      VIDEO_VEKTOR_ROOT: root,
-      ...(process.env.CODEX_MODEL
-        ? { CODEX_MODEL: process.env.CODEX_MODEL }
-        : {}),
-      ...Object.fromEntries(
-        ["TTS_VOICE", "TTS_RATE"]
-          .filter((k) => process.env[k])
-          .map((k) => [k, process.env[k]!]),
-      ),
-    });
+    const scope = vectorScope(
+      request.args,
+      {
+        ...privateEnv(),
+        CODEX_BIN: process.env.CODEX_EXECUTABLE || "codex",
+        VIDEO_VEKTOR_ROOT: root,
+        ...(process.env.CODEX_MODEL
+          ? { CODEX_MODEL: process.env.CODEX_MODEL }
+          : {}),
+        ...Object.fromEntries(
+          ["TTS_VOICE", "TTS_RATE"]
+            .filter((k) => process.env[k])
+            .map((k) => [k, process.env[k]!]),
+        ),
+      },
+      root,
+    );
     const startedAt = Date.now();
     mkdirSync(request.cache, { recursive: true });
     const resourceLog = path.join(request.cache, "resources.log");
@@ -237,7 +256,11 @@ export function runPipeline(
       resourceLines = lines.pop()!.slice(-8000);
       for (const line of lines)
         if (line.startsWith("Video Vektor: ")) {
-          try { appendFileSync(resourceLog, line + "\n"); } catch { /* Resource telemetry must not crash the worker. */ }
+          try {
+            appendFileSync(resourceLog, line + "\n");
+          } catch {
+            /* Resource telemetry must not crash the worker. */
+          }
         }
     };
     child.stdout?.on("data", capture);

@@ -20,7 +20,7 @@ systemctl start "user@${VECTOR_WORKER_UID}.service"
 runuser -u "$VECTOR_WORKER_USER" -- env \
   "XDG_RUNTIME_DIR=/run/user/${VECTOR_WORKER_UID}" \
   "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${VECTOR_WORKER_UID}/bus" \
-  systemd-run --user --scope --quiet --collect \
+  systemd-run --user --pipe --wait --service-type=exec --quiet --collect \
     --property=MemoryHigh=1700000000 \
     --property=MemoryMax=2000000000 \
     --property=MemorySwapMax=0 \

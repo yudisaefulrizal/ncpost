@@ -352,7 +352,7 @@ fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
       await delay(20);
     }
     expect(runningChild).toBe(false);
-  });
+  }, 12000);
 });
 
 it("keeps the bundled production sources identical to the recorded snapshot", () => {

@@ -1,3 +1,4 @@
+import { createServer } from "node:net";
 import { readFileSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import {
@@ -11,6 +12,16 @@ const cache = path.join(root, ".cache/video-pipeline/validation");
 mkdirSync(cache, { recursive: true });
 const dir = mkdtempSync(path.join(cache, "check-"));
 try {
+  // Validation can run alongside the standalone project's renderer on 8078.
+  const port = await new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const chosen = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => (error ? reject(error) : resolve(chosen)));
+    });
+  });
   // Same cgroup, GL backend, config, and invocation as a native worker job.
   const output = path.join(dir, "check.mp4");
   await runPipeline(
@@ -24,6 +35,7 @@ try {
         "src/index.ts",
         "CeritaKucingVisual",
         output,
+        `--port=${port}`,
         "--frames=90-91",
         "--muted",
         "--gl=swangle",
