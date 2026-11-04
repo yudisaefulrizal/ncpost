@@ -225,7 +225,10 @@ const out=path.join(process.cwd(),'hasil',id); fs.mkdirSync(out,{recursive:true}
 for(const name of ${JSON.stringify(VECTOR_FILES)}) fs.writeFileSync(path.join(out,name),name);
 fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
     );
-    const result = await buildVideoVektor(chapter, job, { root });
+    const result = await buildVideoVektor(chapter, job, {
+      root,
+      prepare: async () => {},
+    });
     expect(result).toMatchObject({
       mode: "video-vektor",
       width: 1920,
@@ -240,6 +243,19 @@ fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
       existsSync(path.join(root, ".cache/video-pipeline/ncpost.lock")),
     ).toBe(false);
   }, 15000);
+  it("prepares the active engine before rendering and releases the lock if setup fails", async () => {
+    const root = temp();
+    mkdirSync(path.join(root, "scripts"));
+    writeFileSync(path.join(root, "scripts/video.mjs"), "");
+    let rendered = false;
+    await expect(buildVideoVektor(chapter, job, {
+      root,
+      prepare: async () => { throw Error("installer failed"); },
+      run: async () => { rendered = true; },
+    })).rejects.toThrow("installer failed");
+    expect(rendered).toBe(false);
+    expect(existsSync(path.join(root, ".cache/video-pipeline/ncpost.lock"))).toBe(false);
+  });
   it("rejects other dimensions without resizing", async () => {
     const root = temp(),
       file = path.join(root, "vertical.mp4");
@@ -276,6 +292,7 @@ fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
     const running = buildVideoVektor(chapter, job, {
       root,
       signal: controller.signal,
+      prepare: async () => {},
     });
     const failure = expect(running).rejects.toThrow("test cancellation");
     for (let n = 0; n < 100 && !existsSync(ready); n++) await delay(20);

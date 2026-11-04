@@ -230,6 +230,51 @@ function runPipeline(
     if (signal?.aborted) abort();
   });
 }
+/** Prepare the active checkout too: deployments may build in a temporary release. */
+export function prepareVideoVektor(root: string, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    signal?.throwIfAborted();
+    live("Menyiapkan mesin Video Vektor…");
+    const child = spawn(
+      process.execPath,
+      [path.join(ROOT, "scripts/setup-video-vektor.mjs")],
+      {
+        cwd: ROOT,
+        shell: false,
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: { ...privateEnv(), VIDEO_VEKTOR_ROOT: root },
+      },
+    );
+    let tail = "";
+    const capture = (chunk: Buffer) => {
+      tail = (tail + chunk.toString()).slice(-4000);
+    };
+    child.stdout?.on("data", capture);
+    child.stderr?.on("data", capture);
+    const abort = () => {
+      try {
+        if (child.pid) process.kill(-child.pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const clean = () => signal?.removeEventListener("abort", abort);
+    signal?.addEventListener("abort", abort, { once: true });
+    child.once("error", (error) => {
+      clean();
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clean();
+      if (signal?.aborted) reject(signal.reason);
+      else if (code !== 0)
+        reject(Error(`Persiapan Video Vektor gagal. ${tail.trim()}`));
+      else resolve();
+    });
+    if (signal?.aborted) abort();
+  });
+}
 /** Runs the bundled, unchanged pipeline; publishes byte-for-byte copies into ncpost. */
 export async function buildVideoVektor(
   c: Chapter,
@@ -239,18 +284,13 @@ export async function buildVideoVektor(
     signal?: AbortSignal;
     run?: typeof runPipeline;
     probe?: typeof probeVector;
+    prepare?: typeof prepareVideoVektor;
   } = {},
 ) {
   const root = options.root ?? vectorRoot(),
     signal = options.signal ?? generationSignal();
-  for (const file of [
-    "scripts/video.mjs",
-    "node_modules/remotion/package.json",
-  ])
-    if (!existsSync(path.join(root, file)))
-      throw Error(
-        "Video Vektor belum disiapkan. Jalankan npm run setup:video-vektor di server.",
-      );
+  if (!existsSync(path.join(root, "scripts/video.mjs")))
+    throw Error("Sumber mesin Video Vektor tidak ditemukan.");
   const request = vectorRequest(c, j, root),
     release = await vectorLock(root, signal);
   try {
@@ -265,6 +305,8 @@ export async function buildVideoVektor(
       live("Menunggu pipeline Video Vektor yang sedang berjalan…");
       await delay(500, undefined, { signal });
     }
+    await (options.prepare ?? prepareVideoVektor)(root, signal);
+    signal?.throwIfAborted();
     live("Video Vektor: menyiapkan naskah dan animasi…");
     await (options.run ?? runPipeline)(request, root, signal);
     signal?.throwIfAborted();
