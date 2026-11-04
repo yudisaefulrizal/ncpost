@@ -1,0 +1,11 @@
+<!doctype html><html lang="id" data-theme="dark"><head><meta charset="UTF-8"><title>Video Vektor production fixture</title></head><body><div id="root"></div><script type="module">
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { VideoVektorProduction } from "/src/client/video-vektor.tsx";
+import { videoVektorType } from "/src/server/video-vektor-type.ts";
+import "/src/client/style.css";
+const type={id:10,...videoVektorType()};
+const query=new URLSearchParams(location.search);
+type.settings={...type.settings,socialTargets:query.has("none")?[]:query.has("youtubeOnly")?["youtube"]:["youtube","tiktok"],youtubeAccountId:query.has("missingAccount")?null:"a".repeat(24),tiktokAccountId:"b".repeat(24)};
+createRoot(document.getElementById("root")).render(React.createElement(VideoVektorProduction,{type}));
+</script></body></html>

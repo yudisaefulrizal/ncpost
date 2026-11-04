@@ -53,9 +53,15 @@ async function mediaLibrary(store: Store) {
       const m = JSON.parse(c[field]!);
       if (typeof m.file !== "string") continue;
       videos.push({
-        caption: socialCaption(c.article, c.content_engine),
+        caption:
+          m.mode === "video-vektor"
+            ? c.title
+            : socialCaption(c.article, c.content_engine),
         topic: c.title,
-        tags: socialTags(c.article, c.content_engine),
+        tags:
+          m.mode === "video-vektor"
+            ? c.title
+            : socialTags(c.article, c.content_engine),
         key: `book:${c.id}:${orientation}`,
         title: `${c.book} · ${c.title} · ${orientation.toUpperCase()}`,
         files: [resolveMedia(m.file, chapterDir(c))],
@@ -130,6 +136,12 @@ async function mediaLibrary(store: Store) {
 }
 export async function publishZernio(store: Store, input: any) {
   const repostOf = input?.repostOf;
+  const retryOf = input?.retryOf;
+  if (
+    retryOf !== undefined &&
+    (!Number.isSafeInteger(retryOf) || retryOf < 1 || repostOf !== undefined)
+  )
+    throw Error("ID coba lagi tidak valid");
   if (
     repostOf !== undefined &&
     (!Number.isSafeInteger(repostOf) || repostOf < 1)
@@ -272,6 +284,16 @@ export async function publishZernio(store: Store, input: any) {
         "Post ulang hanya tersedia untuk publikasi terakhir yang sudah terbit",
       );
   }
+  if (retryOf !== undefined) {
+    const [history]: any = await store.db.query(
+      "SELECT id,status FROM zernio_publications WHERE source_key LIKE ? AND account_id=? AND platform=? ORDER BY id DESC LIMIT 1",
+      [`${sourceType}:${sourceId}:%`, account.id, account.platform],
+    );
+    if (history[0]?.id !== retryOf || history[0]?.status !== "failed")
+      throw Error(
+        "Coba lagi hanya tersedia untuk publikasi terakhir yang dipastikan gagal",
+      );
+  }
   const fingerprint = createHash("sha256")
     .update(
       JSON.stringify([
@@ -279,6 +301,7 @@ export async function publishZernio(store: Store, input: any) {
         video.version,
         account.id,
         ...(repostOf !== undefined ? [repostOf] : []),
+        ...(retryOf !== undefined ? ["retry", retryOf] : []),
       ]),
     )
     .digest("hex");

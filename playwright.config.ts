@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/e2e",
+  testIgnore: "**/video-vektor-production.spec.ts",
   use: { screenshot: "off", baseURL: "http://127.0.0.1:8072" },
   workers: 1,
   webServer: {

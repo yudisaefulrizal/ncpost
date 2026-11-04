@@ -1,3 +1,5 @@
+import { ZernioCell } from "./publication-cell";
+import { socialTargets } from "../server/book-settings";
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import { Modal } from "./modal";
@@ -7,6 +9,37 @@ import type { Chapter, Job } from "../server/store";
 export function VideoVektorProduction({ type }: { type: ContentType }) {
   const [rows, setRows] = useState<Chapter[]>([]),
     [jobs, setJobs] = useState<Job[]>([]);
+  const platforms = socialTargets(type.settings).filter(
+    (p): p is "youtube" | "tiktok" => p === "youtube" || p === "tiktok",
+  );
+  const [accounts, setAccounts] = useState<
+    { id: string; username: string; platform: string }[]
+  >([]);
+  useEffect(() => {
+    let current = true;
+    setAccounts([]);
+    if (platforms.length)
+      void api("/zernio/accounts", "GET", undefined, type.id)
+        .then((data) => {
+          if (current) setAccounts(data.accounts || []);
+        })
+        .catch(() => {
+          /* Cells still report saved-account validation from the native API. */
+        });
+    return () => {
+      current = false;
+    };
+  }, [
+    type.id,
+    type.settings?.youtubeAccountId,
+    type.settings?.tiktokAccountId,
+    platforms.join(","),
+  ]);
+  const accountFor = (platform: "youtube" | "tiktok") => {
+    const id = type.settings?.[`${platform}AccountId`] || null;
+    return accounts.find((a) => a.id === id && a.platform === platform)
+      ?.username;
+  };
   const [title, setTitle] = useState(""),
     [error, setError] = useState("");
   const [busy, setBusy] = useState(false),
@@ -67,7 +100,12 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
       replace,
     });
   const latest = (row: Chapter) =>
-    jobs.find((j) => j.chapter_id === row.id && j.kind === "VIDEO_KALIMAT_H");
+    jobs.find(
+      (j) =>
+        j.chapter_id === row.id &&
+        j.kind === "VIDEO_KALIMAT_H" &&
+        j.revision === row.revision,
+    );
   return (
     <section className="card pad stack">
       <h2>Video Vektor</h2>
@@ -75,6 +113,23 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
         1920×1080 · Naskah → narasi → animasi → video final. Jadwal produksi
         dapat diatur di menu Jadwal.
       </p>
+      {platforms.length ? (
+        <p className="muted">
+          Tujuan publikasi:{" "}
+          {platforms
+            .map(
+              (p) =>
+                `${p === "youtube" ? "YouTube" : "TikTok"}${accountFor(p) ? ` · @${accountFor(p)}` : type.settings?.[`${p}AccountId`] ? " · akun tersimpan" : " · pilih akun di Pengaturan Konten"}`,
+            )
+            .join("; ")}
+          . Posting tersedia setelah video selesai.
+        </p>
+      ) : (
+        <p className="muted">
+          Pilih sosmed dan akun tujuan di Pengaturan Konten untuk menampilkan
+          publikasi.
+        </p>
+      )}
       <form
         className="toolbar"
         onSubmit={(e) => {
@@ -111,18 +166,27 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
         <table>
           <thead>
             <tr>
-              <th>Judul</th>
-              <th>Status</th>
-              <th>Aksi</th>
+              <th scope="col">Judul</th>
+              <th scope="col">Status</th>
+              {platforms.map((p) => (
+                <th scope="col" key={p}>
+                  {p === "youtube" ? "YouTube" : "TikTok"}
+                </th>
+              ))}
+              <th scope="col">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => {
               const job = latest(row),
                 active = !!job && ["queued", "running"].includes(job.state);
-              const result = row.sentence_video_h
-                ? JSON.parse(row.sentence_video_h)
-                : null;
+              let result: any = null;
+              try {
+                result = row.sentence_video_h
+                  ? JSON.parse(row.sentence_video_h)
+                  : null;
+              } catch {}
+              const available = !!result?.file && !result.deleted;
               const label: Record<string, string> = {
                 queued: "Menunggu",
                 running: "Berjalan",
@@ -134,9 +198,33 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
                 <tr key={row.id}>
                   <td>{row.title}</td>
                   <td>
-                    {job ? label[job.state] || job.state : "Belum diproduksi"}
+                    {job
+                      ? label[job.state] || job.state
+                      : result?.deleted
+                        ? "Berkas dibersihkan"
+                        : available
+                          ? "Selesai"
+                          : "Belum diproduksi"}
                     {job?.error && <p className="warn">{job.error}</p>}
                   </td>
+                  {platforms.map((platform) => (
+                    <td
+                      key={`${platform}:${type.settings?.[`${platform}AccountId`] || ""}`}
+                    >
+                      <ZernioCell
+                        source={`book:${row.id}`}
+                        title={row.title}
+                        platform={platform}
+                        accountId={
+                          type.settings?.[`${platform}AccountId`] || null
+                        }
+                        ready={available && !active}
+                        blocked={busy || active}
+                        detailed
+                        scope={type.id}
+                      />
+                    </td>
+                  ))}
                   <td>
                     <div className="toolbar">
                       {active ? (
@@ -168,29 +256,29 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
                             : "Buat video"}
                         </button>
                       )}
+                      {available && (
+                        <button
+                          className="btn btn-sec"
+                          onClick={() => setWatching(row)}
+                        >
+                          Tonton & unduh
+                        </button>
+                      )}
                       {result && (
-                        <>
-                          <button
-                            className="btn btn-sec"
-                            onClick={() => setWatching(row)}
-                          >
-                            Tonton & unduh
-                          </button>
-                          <button
-                            className="btn btn-sec"
-                            disabled={busy || active}
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  `Buat ulang naskah dan video “${row.title}”?`,
-                                )
+                        <button
+                          className="btn btn-sec"
+                          disabled={busy || active}
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Buat ulang naskah dan video “${row.title}”?`,
                               )
-                                void run(() => enqueue(row, true));
-                            }}
-                          >
-                            Buat ulang
-                          </button>
-                        </>
+                            )
+                              void run(() => enqueue(row, true));
+                          }}
+                        >
+                          Buat ulang
+                        </button>
                       )}
                       <button
                         className="btn btn-sec"
@@ -215,7 +303,9 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
             })}
             {!rows.length && (
               <tr>
-                <td colSpan={3}>Tambahkan judul video untuk mulai.</td>
+                <td colSpan={3 + platforms.length}>
+                  Tambahkan judul video untuk mulai.
+                </td>
               </tr>
             )}
           </tbody>

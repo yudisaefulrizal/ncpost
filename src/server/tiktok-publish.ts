@@ -1,5 +1,9 @@
 import { socialCaption } from "./social-caption";
-import { socialTargets, type BookSettings } from "./book-settings";
+import {
+  isVideoVektor,
+  socialTargets,
+  type BookSettings,
+} from "./book-settings";
 import { normalizeTikTokSettings } from "./tiktok-settings";
 export function tiktokPublishInput(
   source: string,
@@ -14,7 +18,9 @@ export function tiktokPublishInput(
     throw Error("Aktifkan target dan pilih akun TikTok di Pengaturan Konten");
   const options = normalizeTikTokSettings(settings.tiktok);
   if (!options.privacy) throw Error("Atur privasi TikTok di Pengaturan Konten");
-  const content = socialCaption(article, engine);
+  const content = isVideoVektor(settings)
+    ? title.trim().slice(0, 2200)
+    : socialCaption(article, engine);
   if (!content) throw Error("Tag atau paragraf pertama artikel belum tersedia");
   return {
     mediaKey: `${source}:${options.media}`,

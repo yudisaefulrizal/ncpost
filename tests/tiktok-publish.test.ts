@@ -70,3 +70,26 @@ it("validates and persists saved TikTok publication settings", () => {
 it("TikTok menggunakan privasi publik sebagai bawaan", () => {
   expect(normalizeTikTokSettings(null).privacy).toBe("PUBLIC_TO_EVERYONE");
 });
+
+it("Video Vektor uses the title and horizontal video without requiring an article", () => {
+  const saved = normalizeBookSettings({
+    ...DEFAULT_BOOK_SETTINGS,
+    pipeline: "video-vektor",
+    tiktokAccountId: "a".repeat(24),
+    socialTargets: ["tiktok"],
+    tiktok: { media: "h", privacy: "SELF_ONLY" },
+  });
+  expect(
+    tiktokPublishInput("book:2172", "", "Judul Video Vektor", saved),
+  ).toMatchObject({
+    content: "Judul Video Vektor",
+    mediaKey: "book:2172:h",
+    privacy: "SELF_ONLY",
+  });
+  expect(() =>
+    tiktokPublishInput("book:2172", "", "Judul biasa", {
+      ...saved,
+      pipeline: undefined,
+    }),
+  ).toThrow("artikel");
+});

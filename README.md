@@ -451,3 +451,14 @@ npm run check:video-vektor
 ```
 
 Pemeriksaan merender dua frame acuan asli pada 1920×1080 melalui jalur cgroup/CPU yang sama dengan worker, tanpa Codex, tanpa mengantrekan produksi dan tanpa mengubah hasil pengguna. Berkas sementara dibersihkan. Log mencatat batas dan puncak memori cgroup (jika kernel menyediakan `memory.peak`). Pemeriksaan ini membuktikan backend WebGL dan jalur batas memori; video panjang/adegan berbeda tetap dapat melampaui anggaran 2 GB. Tombol berhenti menghentikan seluruh cgroup, dengan SIGKILL sebagai tindak lanjut bila perlu.
+
+
+Halaman Produksi Video Vektor menampilkan kolom YouTube/TikTok hanya untuk sosmed aktif di Pengaturan Konten. Akun tujuan, status upload, hasil posting, dan percobaan ulang memakai riwayat serta endpoint publikasi ncpost yang sama. Video harus selesai dan berkasnya masih tersedia; selesai render tidak memicu posting otomatis. Caption/deskripsi Video Vektor memakai judul karena jenis ini tidak menghasilkan artikel. Percobaan ulang eksplisit (`retryOf`) hanya diterima untuk riwayat terakhir berstatus `failed`, dengan fingerprint unik per percobaan; status pengiriman yang belum pasti tidak dikirim ulang otomatis.
+
+Pengujian browser khusus halaman ini memakai API mock (tanpa database, worker, atau pengiriman ke sosmed):
+
+```bash
+npx playwright test --config playwright.video-vektor.config.ts
+# Bila memakai Chrome sistem:
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/google-chrome npx playwright test --config playwright.video-vektor.config.ts
+```

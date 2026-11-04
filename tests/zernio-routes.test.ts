@@ -152,7 +152,9 @@ it("persists published on a network failure without retrying the publication", a
   vi.mocked(zernioRequest).mockRejectedValue(Error("timeout"));
   const { handler, request, response } = setup(query);
   await handler(request, response);
-  expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ status: "published" }));
+  expect(response.json).toHaveBeenCalledWith(
+    expect.objectContaining({ status: "published" }),
+  );
   expect(zernioRequest).toHaveBeenCalledTimes(1);
   expect(query).toHaveBeenCalledWith(
     expect.stringContaining("status='published'"),
@@ -375,3 +377,196 @@ it("can load a content's last publication beyond the recent history limit", asyn
     expect.objectContaining({ id: 4, status: "published" }),
   ]);
 });
+
+it.each(["published", "unknown", "publishing", "pending", "cancelled"])(
+  "rejects retry when the latest publication is %s",
+  async (status) => {
+    const query = queryMock();
+    const base = query.getMockImplementation()!;
+    query.mockImplementation(async (sql: string) =>
+      sql.startsWith("SELECT id,status FROM zernio_publications")
+        ? [[{ id: 6, status }]]
+        : base(sql),
+    );
+    const { handler, request, response } = setup(query);
+    (request.body as any).retryOf = 6;
+    await expect(handler(request, response)).rejects.toThrow(
+      "dipastikan gagal",
+    );
+    expect(zernioRequest).not.toHaveBeenCalled();
+  },
+);
+it("explicit retry preserves the failed record and uses a unique idempotent attempt", async () => {
+  const query = queryMock(),
+    base = query.getMockImplementation()!;
+  query.mockImplementation(async (sql: string) =>
+    sql.startsWith("SELECT id,status FROM zernio_publications")
+      ? [[{ id: 6, status: "failed" }]]
+      : base(sql),
+  );
+  vi.mocked(zernioRequest).mockResolvedValue({
+    post: { _id: postId, status: "publishing", platforms: [] },
+  });
+  const { handler, request, response } = setup(query);
+  (request.body as any).retryOf = 6;
+  await handler(request, response);
+  const { createHash } = await import("node:crypto");
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify([
+        "news:1:v",
+        "1:2026-10-08:output/.test/zernio-route/video-v.mp4",
+        accountId,
+        "retry",
+        6,
+      ]),
+    )
+    .digest("hex");
+  expect(zernioRequest).toHaveBeenCalledWith(
+    "/posts",
+    expect.objectContaining({ headers: { "x-request-id": fingerprint } }),
+    fetch,
+    "second",
+  );
+  expect(
+    query.mock.calls.some((call) =>
+      call[0].startsWith("DELETE FROM zernio_publications"),
+    ),
+  ).toBe(false);
+});
+it("rejects retry for an older failed record after a new attempt exists", async () => {
+  const query = queryMock(),
+    base = query.getMockImplementation()!;
+  query.mockImplementation(async (sql: string) =>
+    sql.startsWith("SELECT id,status FROM zernio_publications")
+      ? [[{ id: 7, status: "failed" }]]
+      : base(sql),
+  );
+  const { handler, request, response } = setup(query);
+  (request.body as any).retryOf = 6;
+  await expect(handler(request, response)).rejects.toThrow(
+    "publikasi terakhir",
+  );
+  expect(zernioRequest).not.toHaveBeenCalled();
+});
+it("duplicate retry submissions never call the provider", async () => {
+  const query = queryMock(true),
+    base = query.getMockImplementation()!;
+  query.mockImplementation(async (sql: string) =>
+    sql.startsWith("SELECT id,status FROM zernio_publications")
+      ? [[{ id: 6, status: "failed" }]]
+      : base(sql),
+  );
+  const { handler, request, response } = setup(query);
+  (request.body as any).retryOf = 6;
+  await expect(handler(request, response)).rejects.toThrow("sudah dikirim");
+  expect(zernioRequest).not.toHaveBeenCalled();
+});
+it.each([0, -1, "6", null, 1.5])(
+  "rejects malformed retry id %s",
+  async (retryOf) => {
+    const { handler, request, response } = setup(queryMock());
+    (request.body as any).retryOf = retryOf;
+    await expect(handler(request, response)).rejects.toThrow("ID coba lagi");
+    expect(zernioRequest).not.toHaveBeenCalled();
+  },
+);
+it.each(["youtube", "tiktok"])(
+  "publishes title-only Video Vektor horizontally through the native %s flow",
+  async (platform) => {
+    const { normalizeBookSettings } = await import(
+      "../src/server/book-settings"
+    );
+    const { publishZernio } = await import("../src/server/zernio-routes");
+    const file = "output/.test/zernio-route/video-h.mp4";
+    writeFileSync(path.join(process.cwd(), file), "horizontal-vector-video");
+    const settings = normalizeBookSettings({
+      pipeline: "video-vektor",
+      socialTargets: [platform],
+      youtubeAccountId: accountId,
+      tiktokAccountId: accountId,
+      tiktok: { media: "h", privacy: "SELF_ONLY" },
+    });
+    const chapter = {
+      id: 2172,
+      content_type_id: 10,
+      title: "Judul Video Vektor",
+      book: "Video Vektor",
+      article: "",
+      revision: 0,
+      sentence_video_h: JSON.stringify({
+        file,
+        mode: "video-vektor",
+        renderedAt: "today",
+      }),
+    };
+    const query = vi.fn(async (sql: string) =>
+      sql.startsWith("SELECT n.id")
+        ? [[]]
+        : sql.startsWith("INSERT")
+          ? [{ insertId: 42 }]
+          : [{}],
+    );
+    const store: any = {
+      db: { query },
+      list: async () => [chapter],
+      chapter: async () => chapter,
+      bookSettings: async () => settings,
+    };
+    vi.mocked(zernioAccounts).mockResolvedValue({
+      state: "connected",
+      reason: "",
+      accounts: [
+        {
+          id: accountId,
+          platform: platform as "youtube" | "tiktok",
+          username: "vector",
+          connectionId: platform === "tiktok" ? "legacy" : "second",
+        },
+      ],
+    });
+    vi.stubEnv("ZERNIO_API_KEY", "test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            creator: { canPostMore: true },
+            privacyLevels: [{ value: "SELF_ONLY" }],
+          }),
+        ),
+      ),
+    );
+    vi.mocked(zernioRequest).mockImplementation(async (route: string) =>
+      route.includes("creator-info")
+        ? {
+            creator: { canPostMore: true },
+            privacyLevels: [{ value: "SELF_ONLY" }],
+          }
+        : { post: { _id: postId, status: "publishing", platforms: [] } },
+    );
+    await publishZernio(store, {
+      source: "book:2172",
+      quickYouTube: platform === "youtube",
+      quickTikTok: platform === "tiktok",
+    });
+    const sent = vi
+      .mocked(zernioRequest)
+      .mock.calls.find((call) => call[0] === "/posts")!;
+    const body = JSON.parse(sent[1]!.body as string);
+    expect(body.content).toBe("Judul Video Vektor");
+    expect(body.mediaItems).toEqual([
+      { type: "video", url: expect.stringMatching(/^https:/) },
+    ]);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO zernio_publications"),
+      [
+        expect.any(String),
+        "book:2172:h",
+        expect.any(String),
+        platform,
+        accountId,
+      ],
+    );
+  },
+);
