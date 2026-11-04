@@ -27,6 +27,6 @@ export async function renderPicture({entry,composition,output,timeline,publicDir
    if(match&&Date.now()-lastUpdate>=1000){lastUpdate=Date.now();onProgress(Number(match[1]));}
   }
  }}:undefined;
- await command(process.execPath,[path.join(ROOT,'node_modules/@remotion/cli/remotion-cli.js'),'render',entry,composition,output,...(publicDir?[`--public-dir=${publicDir}`]:[]),`--gl=${process.env.REMOTION_GL??'angle'}`,'--muted',`--log=${onProgress?'info':'error'}`],{env,signal,log});
+ await command(process.execPath,[path.join(ROOT,'node_modules/@remotion/cli/remotion-cli.js'),'render',entry,composition,output,...(publicDir?[`--public-dir=${publicDir}`]:[]),`--gl=${process.env.REMOTION_GL??'swangle'}`,'--muted',`--log=${onProgress?'info':'error'}`],{env,signal,log});
  verifyPicture(output,timeline);onProgress?.(timeline.durationInFrames);
 }

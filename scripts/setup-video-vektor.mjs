@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { preparePython } from "./video-vektor-pip.mjs";
-import { prepareBrowser } from "./video-vektor-browser.mjs";
+import { prepareBrowser, verifyCpuWebGl } from "./video-vektor-browser.mjs";
 import {
   existsSync,
   readFileSync,
@@ -64,7 +64,13 @@ await run(path.join(root, ".venv/bin/python"), [
   "import edge_tts, numpy",
 ]);
 for (const exe of ["ffmpeg", "ffprobe"]) await run(exe, ["-version"]);
-await prepareBrowser({ root, run });
+const executable = await prepareBrowser({ root, run });
+await verifyCpuWebGl({ root, executable });
+if (!existsSync(`/run/user/${process.getuid?.()}/bus`)) {
+  console.warn(
+    "Batas RAM Video Vektor belum siap: layanan pengguna systemd belum aktif. Jalankan sekali sebagai admin: sudo bash deploy/enable-video-vektor-limits.sh <user-worker>. Produksi akan menunggu konfigurasi ini.",
+  );
+}
 // A cancelled or failed setup never claims the engine is ready.
 const temporary = `${marker}.${randomUUID()}.tmp`;
 try {

@@ -4,6 +4,7 @@ import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import {
+  appendFileSync,
   copyFileSync,
   existsSync,
   lstatSync,
@@ -148,42 +149,106 @@ export async function probeVector(file: string, signal?: AbortSignal) {
     frames: Number(stream.nb_frames) || Math.round(duration * fps),
   };
 }
-function runPipeline(
+// All production descendants share this kernel-enforced memory budget.
+export function vectorScope(scriptArgs: string[], env: NodeJS.ProcessEnv) {
+  if (process.platform !== "linux")
+    throw Error(
+      "Produksi Video Vektor ncpost dengan batas RAM 2 GB memerlukan Linux.",
+    );
+  const unit = `ncpost-vector-${randomUUID()}.scope`;
+  const runtime = `/run/user/${process.getuid!()}`;
+  return {
+    unit,
+    command: "systemd-run",
+    args: [
+      "--user",
+      "--scope",
+      "--quiet",
+      "--collect",
+      `--unit=${unit}`,
+      "--property=MemoryAccounting=yes",
+      "--property=MemoryHigh=1700000000",
+      "--property=MemoryMax=2000000000",
+      "--property=MemorySwapMax=0",
+      process.execPath,
+      path.join(ROOT, "scripts/video-vektor-limited.mjs"),
+      ...scriptArgs,
+    ],
+    env: {
+      ...env,
+      XDG_RUNTIME_DIR: runtime,
+      DBUS_SESSION_BUS_ADDRESS: `unix:path=${runtime}/bus`,
+      REMOTION_GL: "swangle",
+      NODE_OPTIONS: "--max-old-space-size=768",
+      OPENBLAS_NUM_THREADS: "1",
+      OMP_NUM_THREADS: "1",
+      MKL_NUM_THREADS: "1",
+    },
+  };
+}
+
+export function runPipeline(
   request: ReturnType<typeof vectorRequest>,
   root: string,
   signal?: AbortSignal,
 ) {
   return new Promise<void>((resolve, reject) => {
     signal?.throwIfAborted();
-    const child = spawn(process.execPath, request.args, {
+    const scope = vectorScope(request.args, {
+      ...privateEnv(),
+      CODEX_BIN: process.env.CODEX_EXECUTABLE || "codex",
+      VIDEO_VEKTOR_ROOT: root,
+      ...(process.env.CODEX_MODEL
+        ? { CODEX_MODEL: process.env.CODEX_MODEL }
+        : {}),
+      ...Object.fromEntries(
+        ["TTS_VOICE", "TTS_RATE"]
+          .filter((k) => process.env[k])
+          .map((k) => [k, process.env[k]!]),
+      ),
+    });
+    const startedAt = Date.now();
+    mkdirSync(request.cache, { recursive: true });
+    const resourceLog = path.join(request.cache, "resources.log");
+    writeFileSync(resourceLog, `Scope ${scope.unit}\n`);
+    const child = spawn(scope.command, scope.args, {
       cwd: root,
       shell: false,
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
-      // Use ncpost's executable/model and private environment; no DB/API secrets.
-      env: {
-        ...privateEnv(),
-        CODEX_BIN: process.env.CODEX_EXECUTABLE || "codex",
-        ...(process.env.CODEX_MODEL
-          ? { CODEX_MODEL: process.env.CODEX_MODEL }
-          : {}),
-        ...Object.fromEntries(
-          ["TTS_VOICE", "TTS_RATE", "REMOTION_GL"]
-            .filter((k) => process.env[k])
-            .map((k) => [k, process.env[k]!]),
-        ),
-      },
+      env: scope.env,
     });
+    const killScope = (sig: "SIGTERM" | "SIGKILL") =>
+      new Promise<void>((done) => {
+        // cgroups include descendants that create their own process groups.
+        execFile(
+          "systemctl",
+          ["--user", "kill", `--signal=${sig}`, "--kill-who=all", scope.unit],
+          { env: scope.env, timeout: 5000 },
+          () => done(),
+        );
+      });
+    let resourceLines = "";
     let tail = "",
       force: NodeJS.Timeout | undefined;
     const capture = (b: Buffer) => {
       tail = (tail + b.toString()).slice(-8000);
+      const lines = (resourceLines + b.toString()).split(/[\r\n]/);
+      resourceLines = lines.pop()!.slice(-8000);
+      for (const line of lines)
+        if (line.startsWith("Video Vektor: ")) {
+          try { appendFileSync(resourceLog, line + "\n"); } catch { /* Resource telemetry must not crash the worker. */ }
+        }
     };
     child.stdout?.on("data", capture);
     child.stderr?.on("data", capture);
     const progress = setInterval(() => {
       const state = read(path.join(request.cache, "status.json"));
-      if (state?.pid !== child.pid) return;
+      if (
+        state?.projectId !== request.id ||
+        Date.parse(state.startedAt) < startedAt
+      )
+        return;
       const rendered = state.render;
       live(
         [
@@ -198,8 +263,10 @@ function runPipeline(
     }, 1000);
     const abort = () => {
       // Let the original runner stop its Codex/audio/render descendants and clean up.
+      killScope("SIGTERM");
       child.kill("SIGTERM");
       force = setTimeout(() => {
+        killScope("SIGKILL");
         try {
           if (child.pid) process.kill(-child.pid, "SIGKILL");
         } catch {}
@@ -216,13 +283,15 @@ function runPipeline(
       clean();
       reject(e);
     });
-    child.once("close", (code) => {
+    child.once("close", async (code) => {
       clean();
+      // Wait until cleanup has been sent before releasing the production lock.
+      await killScope("SIGKILL");
       if (signal?.aborted) reject(signal.reason);
       else if (code !== 0)
         reject(
           Error(
-            `Produksi Video Vektor gagal. ${tail.trim()}\nLog: ${path.join(request.cache, "production.log")}`,
+            `Produksi Video Vektor gagal. Batas RAM produksi 2 GB; cek pesan cgroup/OOM jika proses dibunuh. ${tail.trim()}\nJika layanan pengguna systemd belum aktif, lihat README bagian batas RAM Video Vektor.\nLog: ${path.join(request.cache, "production.log")}`,
           ),
         );
       else resolve();
@@ -231,49 +300,19 @@ function runPipeline(
   });
 }
 /** Prepare the active checkout too: deployments may build in a temporary release. */
-export function prepareVideoVektor(root: string, signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    signal?.throwIfAborted();
-    live("Menyiapkan mesin Video Vektor…");
-    const child = spawn(
-      process.execPath,
-      [path.join(ROOT, "scripts/setup-video-vektor.mjs")],
-      {
-        cwd: ROOT,
-        shell: false,
-        detached: true,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...privateEnv(), VIDEO_VEKTOR_ROOT: root },
-      },
-    );
-    let tail = "";
-    const capture = (chunk: Buffer) => {
-      tail = (tail + chunk.toString()).slice(-4000);
-    };
-    child.stdout?.on("data", capture);
-    child.stderr?.on("data", capture);
-    const abort = () => {
-      try {
-        if (child.pid) process.kill(-child.pid, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
-    };
-    const clean = () => signal?.removeEventListener("abort", abort);
-    signal?.addEventListener("abort", abort, { once: true });
-    child.once("error", (error) => {
-      clean();
-      reject(error);
-    });
-    child.once("close", (code) => {
-      clean();
-      if (signal?.aborted) reject(signal.reason);
-      else if (code !== 0)
-        reject(Error(`Persiapan Video Vektor gagal. ${tail.trim()}`));
-      else resolve();
-    });
-    if (signal?.aborted) abort();
-  });
+export async function prepareVideoVektor(root: string, signal?: AbortSignal) {
+  live("Menyiapkan mesin Video Vektor (batas RAM 2 GB)…");
+  // Use the same boundary for installers and their subprocesses, too.
+  await runPipeline(
+    {
+      id: "setup",
+      args: [path.join(ROOT, "scripts/setup-video-vektor.mjs")],
+      output: root,
+      cache: path.join(root, ".cache/video-pipeline/setup"),
+    },
+    root,
+    signal,
+  );
 }
 /** Runs the bundled, unchanged pipeline; publishes byte-for-byte copies into ncpost. */
 export async function buildVideoVektor(

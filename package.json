@@ -16,7 +16,8 @@
     "db:setup": "tsx scripts/db-setup.ts",
     "reset:media": "tsx scripts/reset-media.ts",
     "setup:video-vektor": "node scripts/setup-video-vektor.mjs",
-    "prebuild": "npm run setup:video-vektor"
+    "prebuild": "npm run setup:video-vektor",
+    "check:video-vektor": "tsx scripts/check-video-vektor.ts"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",

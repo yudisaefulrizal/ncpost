@@ -32,6 +32,7 @@ import {
   vectorLock,
   VECTOR_FILES,
   probeVector,
+  runPipeline,
 } from "../src/server/video-vektor";
 import { chapterDir } from "../src/server/output-paths";
 import type { Chapter, Job } from "../src/server/store";
@@ -248,13 +249,21 @@ fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
     mkdirSync(path.join(root, "scripts"));
     writeFileSync(path.join(root, "scripts/video.mjs"), "");
     let rendered = false;
-    await expect(buildVideoVektor(chapter, job, {
-      root,
-      prepare: async () => { throw Error("installer failed"); },
-      run: async () => { rendered = true; },
-    })).rejects.toThrow("installer failed");
+    await expect(
+      buildVideoVektor(chapter, job, {
+        root,
+        prepare: async () => {
+          throw Error("installer failed");
+        },
+        run: async () => {
+          rendered = true;
+        },
+      }),
+    ).rejects.toThrow("installer failed");
     expect(rendered).toBe(false);
-    expect(existsSync(path.join(root, ".cache/video-pipeline/ncpost.lock"))).toBe(false);
+    expect(
+      existsSync(path.join(root, ".cache/video-pipeline/ncpost.lock")),
+    ).toBe(false);
   });
   it("rejects other dimensions without resizing", async () => {
     const root = temp(),
@@ -304,6 +313,45 @@ fs.copyFileSync(${JSON.stringify(fixture)},path.join(out,'video.mp4'));`,
     expect(
       existsSync(path.join(root, ".cache/video-pipeline/ncpost.lock")),
     ).toBe(false);
+  });
+  it("cleans detached descendants that ignore TERM before returning cancellation", async () => {
+    const root = temp(),
+      ready = path.join(root, "detached-pid");
+    const descendant = path.join(root, "descendant.mjs"),
+      parent = path.join(root, "parent.mjs");
+    writeFileSync(
+      descendant,
+      `import fs from 'node:fs';process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`,
+    );
+    writeFileSync(
+      parent,
+      `import{spawn}from'node:child_process';spawn(process.execPath,[${JSON.stringify(descendant)}],{detached:true,stdio:'ignore'});setInterval(()=>{},1000);`,
+    );
+    const controller = new AbortController();
+    const running = runPipeline(
+      { id: "stop-test", args: [parent], output: root, cache: root },
+      root,
+      controller.signal,
+    );
+    const failure = expect(running).rejects.toThrow("stop descendants");
+    for (let n = 0; n < 150 && !existsSync(ready); n++) await delay(20);
+    expect(existsSync(ready)).toBe(true);
+    const pid = Number(readFileSync(ready, "utf8"));
+    controller.abort(Error("stop descendants"));
+    await failure;
+    // A killed orphan can briefly be a zombie until init reaps it.
+    let runningChild = true;
+    for (let n = 0; n < 50; n++) {
+      try {
+        const result = await exec("ps", ["-o", "stat=", "-p", String(pid)]);
+        runningChild = !/^[ZX]/.test(result.stdout.trim());
+      } catch {
+        runningChild = false;
+      }
+      if (!runningChild) break;
+      await delay(20);
+    }
+    expect(runningChild).toBe(false);
   });
 });
 

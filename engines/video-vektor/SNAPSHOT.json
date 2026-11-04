@@ -13,7 +13,7 @@
     "public/fonts/LICENSE.txt": "1e6ccc54aa0b0aa4188cda121174f17cf1c28bac9734749bbe1128bb6dd89a97",
     "public/fonts/Lato-Heavy.ttf": "4ce7ec20cd9c391b271b4149ad8cf5a71301d98965403f14fc5530d017146dbb",
     "public/fonts/Lato-Regular.ttf": "6f6940be0835c3ddec9199e5fc42be4cbc61ebcfd58c623fdf719366253f1780",
-    "remotion.config.ts": "b06636cceb740c28fee1d3e3dc70af882810b889d1e53635390bb8300715ee57",
+    "remotion.config.ts": "4ab021157c306ed53f30dee44503f1a4b97e9b0c3aef75c019f409ba64a0dad9",
     "requirements.txt": "f4e0703c474e036a0d8b9cf8fea68637420ea8a13bf7b22d42fca031c057e117",
     "scripts/artifacts.mjs": "ad516f17ca55b7c00d2de9694978101e8a64858fc41c771d975e50e9a4cb2a28",
     "scripts/assemble.mjs": "0ac95c0c19848649715dfa0923181087689c4e77cbc9bbb3a9d2faccdf6df2bc",
@@ -22,7 +22,7 @@
     "scripts/clean.mjs": "21d43abe5b650eca7af90e983ff7601bccd5ea89680cbffd59d0acb5851283fd",
     "scripts/export-audio.mjs": "415c5716bd824e87cf60c326b22a4de16ea546137bb8b1e144b38c0dda00369f",
     "scripts/lib/codex-session.mjs": "37fc621368a188cbdf06b1222609b5a8288fe738df9e102769bb730a3cc98735",
-    "scripts/lib/media.mjs": "bff733731b5a588d5377cac0c8007e6e9240115280dd69d086179af63629f594",
+    "scripts/lib/media.mjs": "fba166829e92e24210377484649a5c4f19c3a224dfc421d42971d39e0b1a8c4a",
     "scripts/lib/pipeline.mjs": "98b3d8739bdea6b744a6e444f24f495335cdaf203e30a15e95d3a30fd53ee37b",
     "scripts/lib/process-output.mjs": "43024648a82234c47ac659c0f6b516bd0152db9b8c85eb606a257c31968be416",
     "scripts/lib/process-tree.mjs": "e8d2a414655a0ec84638ddee3fc1a9d9a79f028d42fb7fb9ed87ee6161f9a97f",
@@ -67,7 +67,11 @@
   "integrationOverrides": {
     "remotion.config.ts": {
       "upstreamSha256": "2f7e37359d8faf5f691ce0fcca6f2301ebf623d147c6caaa1c1de3898c3df62c",
-      "reason": "Use the original system Chrome when installed, otherwise the Chrome Headless Shell managed by the pinned Remotion version. No visual/render settings change."
+      "reason": "ncpost CPU-only profile: swangle, one render tab, sequential encoding, 64 MiB video cache; retain codec/CRF, scenes, fps and 1920x1080. Retain system/managed Chrome fallback."
+    },
+    "scripts/lib/media.mjs": {
+      "upstreamSha256": "bff733731b5a588d5377cac0c8007e6e9240115280dd69d086179af63629f594",
+      "reason": "Use swangle as the default renderer in the ncpost engine; original animation and render command otherwise retained."
     }
   }
 }

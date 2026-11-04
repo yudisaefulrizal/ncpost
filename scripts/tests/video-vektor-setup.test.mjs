@@ -103,3 +103,30 @@ test("browser setup failures restore the caller working directory", async () => 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("CPU WebGL setup uses swangle and closes Chrome even when WebGL fails", async () => {
+  const { verifyCpuWebGl } = await import("../video-vektor-browser.mjs");
+  for (const renders of [true, false]) {
+    let closed = false;
+    const operation = verifyCpuWebGl({
+      root: "/unused",
+      executable: "/managed-chrome",
+      renderer: {
+        openBrowser: async (kind, options) => {
+          assert.equal(kind, "chrome");
+          assert.equal(options.browserExecutable, "/managed-chrome");
+          assert.equal(options.chromiumOptions.gl, "swangle");
+          return {
+            newPage: async () => ({ evaluate: async () => renders }),
+            close: async () => {
+              closed = true;
+            },
+          };
+        },
+      },
+    });
+    if (renders) await operation;
+    else await assert.rejects(operation, /WebGL2 CPU/);
+    assert.equal(closed, true);
+  }
+});
