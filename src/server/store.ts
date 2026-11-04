@@ -34,6 +34,7 @@ import {
   normalizeBookSettings,
   panelSources,
   isAnimation,
+  isVideoVektor,
   type BookSettings,
 } from "./book-settings";
 import path from "node:path";
@@ -940,7 +941,11 @@ export class Store {
     }
     if (kind === "TTS_KALIMAT" && c.article_status !== "siap")
       throw Error("Audio kalimat butuh artikel lolos editor");
-    if (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") {
+    // Video Vektor produces its own script, audio and visuals in one pipeline.
+    if (
+      (kind === "VIDEO_KALIMAT" || kind === "VIDEO_KALIMAT_H") &&
+      !isVideoVektor(type.settings)
+    ) {
       const settings = await this.bookSettings(
         c.book,
         connection,
