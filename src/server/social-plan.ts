@@ -2,6 +2,7 @@
 // apa yang masih menghalangi. Dipakai Pengaturan Konten dan Pusat Sosmed.
 import {
   INSTAGRAM_FORMATS,
+  isVideoVektor,
   socialTargets,
   type BookSettings,
   type InstagramFormat,
@@ -51,8 +52,9 @@ export function youtubeMediaFor(
   settings: Pick<
     BookSettings,
     "youtubeMedia" | "sentenceVideoKind" | "sentenceVideoHKind"
-  >,
+  > & { pipeline?: string },
 ): "v" | "h" {
+  if (isVideoVektor(settings)) return "h";
   if (settings.youtubeMedia === "h" && settings.sentenceVideoHKind) return "h";
   if (settings.youtubeMedia === "v" && settings.sentenceVideoKind) return "v";
   if (settings.sentenceVideoKind) return "v";
@@ -87,7 +89,9 @@ export function socialPlan(
     const accountId =
       (settings?.[`${platform}AccountId`] as string | null) ?? null;
     if (platform === "instagram") {
-      if (engine === "quote")
+      if (isVideoVektor(settings))
+        problems.push("Publikasi Instagram belum tersedia untuk Video Vektor");
+      else if (engine === "quote")
         problems.push("Jenis Quote tidak memposting ke Instagram");
       else
         for (const format of instagramFormats(settings)) {
@@ -101,7 +105,11 @@ export function socialPlan(
       if (!instagramFormats(settings).length)
         problems.push("Belum ada format yang dipilih");
     } else if (platform === "tiktok") {
-      const tiktok = normalizeTikTokSettings(settings?.tiktok);
+      const tiktok = normalizeTikTokSettings(
+        isVideoVektor(settings)
+          ? { ...settings?.tiktok, media: "h" }
+          : settings?.tiktok,
+      );
       const need = NEEDS_OUTPUT[tiktok.media];
       if (has(need)) posts.push(TIKTOK_MEDIA_LABEL[tiktok.media]);
       else

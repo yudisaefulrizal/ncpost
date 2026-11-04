@@ -2,6 +2,7 @@
 import React from "react";
 import {
   INSTAGRAM_FORMATS,
+  isVideoVektor,
   socialTargets,
   type BookSettings,
   type InstagramFormat,
@@ -42,6 +43,7 @@ export function SocialPlanFields({
   zernioState: string;
   onChange: (patch: Patch) => void;
 }) {
+  const vector = isVideoVektor(settings);
   const plan = socialPlan(outputs, settings, engine);
   const active = socialTargets(settings);
   const toggle = (platform: SocialTarget, on: boolean) =>
@@ -81,11 +83,18 @@ export function SocialPlanFields({
                 <input
                   type="checkbox"
                   checked={row.active}
+                  disabled={vector && row.platform === "instagram"}
                   onChange={(e) => toggle(row.platform, e.target.checked)}
                 />
                 <b>{row.label}</b>
               </label>
-              {!row.active && <small className="muted">Nonaktif</small>}
+              {!row.active && (
+                <small className="muted">
+                  {vector && row.platform === "instagram"
+                    ? "Belum tersedia untuk Video Vektor"
+                    : "Nonaktif"}
+                </small>
+              )}
             </div>
             {row.active && (
               <div className="social-plan-body">
@@ -119,6 +128,11 @@ export function SocialPlanFields({
                 </label>
                 <div className="field">
                   <span>Konten yang diposting</span>
+                  {vector &&
+                    (row.platform === "youtube" ||
+                      row.platform === "tiktok") && (
+                      <p>Video horizontal · 1920×1080 (16:9)</p>
+                    )}
                   {row.platform === "instagram" && (
                     <div className="social-plan-choices">
                       {INSTAGRAM_FORMATS.map((format: InstagramFormat) => (
@@ -146,7 +160,7 @@ export function SocialPlanFields({
                       ))}
                     </div>
                   )}
-                  {row.platform === "tiktok" && (
+                  {row.platform === "tiktok" && !vector && (
                     <div
                       className="social-plan-choices"
                       role="radiogroup"
@@ -176,7 +190,7 @@ export function SocialPlanFields({
                       ))}
                     </div>
                   )}
-                  {row.platform === "youtube" && (
+                  {row.platform === "youtube" && !vector && (
                     <div
                       className="social-plan-choices"
                       role="radiogroup"

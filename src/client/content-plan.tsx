@@ -175,8 +175,8 @@ export function ContentPlanFields({
   if (isVideoVektor(settings))
     return (
       <p className="muted">
-        Video Vektor · 1920×1080. Naskah, narasi, musik, subtitle, dan animasi
-        mengikuti pipeline Video Vektor.
+        Video horizontal · 1920×1080 (16:9). Naskah, narasi, musik, subtitle,
+        dan animasi mengikuti pipeline Video Vektor.
       </p>
     );
   const imageVideo = (output: string) =>
@@ -369,7 +369,9 @@ export function ContentPlanCard({
           </section>
         )}
         <section className="content-settings-section output-settings">
-          <h2>Output & gambar</h2>
+          <h2>
+            {isVideoVektor(settings) ? "Format video" : "Output & gambar"}
+          </h2>
           <ContentPlanFields
             outputs={outputs}
             quote={type.engine === "quote"}

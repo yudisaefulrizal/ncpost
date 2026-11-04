@@ -61,6 +61,7 @@ export type InstagramFormat = (typeof INSTAGRAM_FORMATS)[number];
 export function socialTargets(
   settings:
     | {
+        pipeline?: string;
         socialTargets?: SocialTarget[];
         instagramAccountId?: string | null;
         youtubeAccountId?: string | null;
@@ -72,6 +73,9 @@ export function socialTargets(
   return (
     settings?.socialTargets ??
     SOCIAL_TARGETS.filter((platform) => !!settings?.[`${platform}AccountId`])
+  ).filter(
+    (platform) =>
+      settings?.pipeline !== "video-vektor" || platform !== "instagram",
   );
 }
 export function socialColumns(targets: SocialTarget[]) {
@@ -309,11 +313,21 @@ export function normalizeBookSettings(input: any): BookSettings {
     ...(input?.sentenceVideoHMode !== undefined
       ? { sentenceVideoHMode: input.sentenceVideoHMode }
       : {}),
-    ...(input?.tiktok !== undefined
-      ? { tiktok: normalizeTikTokSettings(input.tiktok) }
+    ...(input?.tiktok !== undefined || isVideoVektor(input)
+      ? {
+          tiktok: normalizeTikTokSettings(
+            isVideoVektor(input)
+              ? { ...input?.tiktok, media: "h" }
+              : input.tiktok,
+          ),
+        }
       : {}),
     ...(input?.socialTargets !== undefined
-      ? { socialTargets: [...new Set<SocialTarget>(input.socialTargets)] }
+      ? {
+          socialTargets: [...new Set<SocialTarget>(input.socialTargets)].filter(
+            (platform) => !isVideoVektor(input) || platform !== "instagram",
+          ),
+        }
       : {}),
     ...(input?.instagramFormats !== undefined
       ? {
@@ -322,7 +336,11 @@ export function normalizeBookSettings(input: any): BookSettings {
           ),
         }
       : {}),
-    ...(input?.youtubeMedia ? { youtubeMedia: input.youtubeMedia } : {}),
+    ...(isVideoVektor(input)
+      ? { youtubeMedia: "h" as const }
+      : input?.youtubeMedia
+        ? { youtubeMedia: input.youtubeMedia }
+        : {}),
     ...(input?.singleImageMode !== undefined
       ? { singleImageMode: input.singleImageMode }
       : {}),
