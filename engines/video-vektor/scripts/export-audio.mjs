@@ -16,7 +16,7 @@ export async function exportAudio({timeline,video,stage,runtime,signal}){
  const inputs=[],filters=[];
  for(const [i,s] of timeline.scenes.entries()){
   inputs.push('-i',path.join(publicDir,`audio/scene-${s.index+1}.mp3`));
-  filters.push(`[${i}:a]atrim=start=${s.audioTrimStart/fps}:end=${s.audioTrimEnd/fps},asetpts=PTS-STARTPTS,aresample=48000,adelay=${Math.round((s.from+s.audioLead)/fps*48000)}S:all=1[v${i}]`);
+  filters.push(`[${i}:a]atrim=start=${s.audioTrimStart/fps}:end=${s.audioTrimEnd/fps},asetpts=PTS-STARTPTS,aresample=48000,adelay=${Math.round((s.from+s.audioLead)/fps*48000)}S:all=1,asetpts=N/SR/TB[v${i}]`);
  }
  filters.push(`${timeline.scenes.map((_,i)=>`[v${i}]`).join('')}amix=inputs=${timeline.scenes.length}:normalize=0:duration=longest,apad,atrim=duration=${duration}[voice]`);
  await run([...inputs,'-filter_complex',filters.join(';'),'-map','[voice]',...wave,path.join(stage,'narasi.wav')]);

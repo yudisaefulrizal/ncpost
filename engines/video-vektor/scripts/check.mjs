@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync,existsSync} from 'node:fs';
 const source=JSON.parse(readFileSync('naskah.json','utf8'));
-const timeline=JSON.parse(readFileSync('src/timeline.json','utf8'));
+const timeline=JSON.parse(readFileSync('styles/vektor-kucing/contoh/timeline.json','utf8'));
 assert.equal(source.length,timeline.scenes.length,'Every paragraph must have a scene');
 let frame=0;
 for(const [i,scene] of timeline.scenes.entries()){

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import {existsSync,mkdirSync,readdirSync,renameSync} from 'node:fs';
 import {acquireLock,command,readJson,removeGenerated,runtimeDirectory,tempEnvironment} from './lib/pipeline.mjs';
-import {projectEnvironment,projectPaths} from './lib/project.mjs';
+import {ensureProject,projectEnvironment,projectPaths} from './lib/project.mjs';
 import {verifyOutput} from './lib/media.mjs';
 import {reviewProject} from './lib/project-review.mjs';
 
@@ -11,6 +11,7 @@ const release=acquireLock(p),controller=new AbortController(),stop=()=>controlle
 let runtime;
 process.on('SIGINT',stop);process.on('SIGTERM',stop);
 try{
+ ensureProject(p);
  const authored=existsSync(path.join(p.source,'index.ts'));
  if(!authored&&!existsSync(p.props))throw new Error('Proyek belum mempunyai rencana animasi. Jalankan npm run video atau npm run render -- --project terlebih dahulu.');
  const props=authored?{timeline:readJson(p.timeline)}:readJson(p.props);runtime=runtimeDirectory(p);const stage=path.join(runtime,'stage');mkdirSync(stage);mkdirSync(p.reports,{recursive:true});

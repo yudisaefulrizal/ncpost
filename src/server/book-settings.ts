@@ -108,8 +108,14 @@ export type VideoMode = "template" | "direct" | "anim2d";
 export const isVideoVektor = (
   settings: { pipeline?: string } | null | undefined,
 ) => settings?.pipeline === "video-vektor";
+export const VEKTOR_AGENTS = ["codex", "claude"] as const;
+export type VektorAgent = (typeof VEKTOR_AGENTS)[number];
+export const VEKTOR_STYLE_ID = /^[a-z0-9][a-z0-9-]{0,47}$/;
 export interface BookSettings {
   pipeline?: "video-vektor";
+  // Hanya Video Vektor: agen pembuat naskah/kode dan nama folder gaya visual.
+  vektorAgent?: VektorAgent;
+  vektorStyle?: string;
   audioVoiceId?: number | null;
   youtube?: YouTubeSettings;
   articleConfig?: ArticleConfig;
@@ -302,8 +308,26 @@ export function normalizeBookSettings(input: any): BookSettings {
     (!Number.isSafeInteger(input.audioVoiceId) || input.audioVoiceId < 1)
   )
     throw Error("Pilihan suara tidak valid");
+  if (
+    isVideoVektor(input) &&
+    input?.vektorAgent !== undefined &&
+    !VEKTOR_AGENTS.includes(input.vektorAgent)
+  )
+    throw Error("Agen Video Vektor harus codex atau claude");
+  if (
+    isVideoVektor(input) &&
+    input?.vektorStyle !== undefined &&
+    !(typeof input.vektorStyle === "string" && VEKTOR_STYLE_ID.test(input.vektorStyle))
+  )
+    throw Error("Nama gaya Video Vektor tidak valid");
   return {
     ...(input?.pipeline !== undefined ? { pipeline: input.pipeline } : {}),
+    ...(isVideoVektor(input) && input?.vektorAgent !== undefined
+      ? { vektorAgent: input.vektorAgent }
+      : {}),
+    ...(isVideoVektor(input) && input?.vektorStyle !== undefined
+      ? { vektorStyle: input.vektorStyle }
+      : {}),
     ...(input?.audioVoiceId !== undefined
       ? { audioVoiceId: input.audioVoiceId }
       : {}),

@@ -3,9 +3,79 @@ import { socialTargets } from "../server/book-settings";
 import React, { useEffect, useState } from "react";
 import { api } from "./api";
 import { Modal } from "./modal";
+import type { BookSettings } from "../server/book-settings";
 import type { ContentType } from "../server/content-type-domain";
 import type { Chapter, Job } from "../server/store";
 
+const AGENT_LABEL: Record<string, string> = {
+  codex: "Codex",
+  claude: "Claude Code",
+};
+/** Pilihan agen pembuat dan gaya visual; dipakai semua video jenis ini, termasuk yang dijadwalkan. */
+export function VideoVektorFields({
+  settings,
+  onChange,
+}: {
+  settings: BookSettings;
+  onChange: (patch: Partial<BookSettings>) => void;
+}) {
+  const [options, setOptions] = useState<{
+    styles: { id: string; name: string; description: string }[];
+    agents: string[];
+  } | null>(null);
+  const [failed, setFailed] = useState("");
+  useEffect(() => {
+    let current = true;
+    void api("/video-vektor/styles")
+      .then((data) => current && setOptions(data))
+      .catch((e) => current && setFailed((e as Error).message));
+    return () => {
+      current = false;
+    };
+  }, []);
+  const style = options?.styles.find((s) => s.id === settings.vektorStyle);
+  return (
+    <>
+      <label className="field">
+        Agen pembuat video
+        <select
+          value={settings.vektorAgent || ""}
+          onChange={(e) =>
+            onChange({
+              vektorAgent: (e.target.value || undefined) as
+                | BookSettings["vektorAgent"],
+            })
+          }
+        >
+          <option value="">Bawaan server (VIDEO_VEKTOR_AGENT)</option>
+          {(options?.agents ?? ["codex", "claude"]).map((a) => (
+            <option key={a} value={a}>
+              {AGENT_LABEL[a] || a}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field">
+        Gaya visual
+        <select
+          value={settings.vektorStyle || ""}
+          onChange={(e) =>
+            onChange({ vektorStyle: e.target.value || undefined })
+          }
+        >
+          <option value="">Bawaan mesin</option>
+          {(options?.styles ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {style?.description && <span className="muted">{style.description}</span>}
+        {failed && <span className="warn">{failed}</span>}
+      </label>
+    </>
+  );
+}
 export function VideoVektorProduction({ type }: { type: ContentType }) {
   const [rows, setRows] = useState<Chapter[]>([]),
     [jobs, setJobs] = useState<Job[]>([]);
@@ -110,8 +180,10 @@ export function VideoVektorProduction({ type }: { type: ContentType }) {
     <section className="card pad stack">
       <h2>Video Vektor</h2>
       <p className="muted">
-        1920×1080 · Naskah → narasi → animasi → video final. Jadwal produksi
-        dapat diatur di menu Jadwal.
+        1920×1080 · Naskah → narasi → animasi → video final. Agen:{" "}
+        {AGENT_LABEL[type.settings?.vektorAgent || ""] || "bawaan server"} ·
+        Gaya: {type.settings?.vektorStyle || "bawaan mesin"}. Ubah di
+        Pengaturan Konten. Jadwal produksi dapat diatur di menu Jadwal.
       </p>
       {platforms.length ? (
         <p className="muted">

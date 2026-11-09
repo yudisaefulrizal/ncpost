@@ -32,7 +32,7 @@ try {
       args: [
         path.join(root, "node_modules/@remotion/cli/remotion-cli.js"),
         "render",
-        "src/index.ts",
+        "styles/vektor-kucing/contoh/index.ts",
         "CeritaKucingVisual",
         output,
         `--port=${port}`,

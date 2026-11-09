@@ -129,3 +129,22 @@ it("keeps the existing format choices for ordinary content types", () => {
   expect(html).toContain("Shorts (video vertikal)");
   expect(html).toContain("Foto carousel");
 });
+
+it("keeps the Video Vektor agent and style choice and rejects invalid ones", () => {
+  const ok = normalizeBookSettings({
+    ...videoVektorType().settings,
+    vektorAgent: "claude",
+    vektorStyle: "clay-3d-pastel",
+  });
+  expect(ok.vektorAgent).toBe("claude");
+  expect(ok.vektorStyle).toBe("clay-3d-pastel");
+  expect(() =>
+    normalizeBookSettings({ ...videoVektorType().settings, vektorAgent: "cline" }),
+  ).toThrow(/Agen Video Vektor/);
+  expect(() =>
+    normalizeBookSettings({
+      ...videoVektorType().settings,
+      vektorStyle: "../etc",
+    }),
+  ).toThrow(/gaya/i);
+});

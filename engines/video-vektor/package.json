@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/studio-server.mjs",
     "start": "node scripts/studio-server.mjs",
-    "studio": "remotion studio src/index.ts",
+    "studio": "remotion studio styles/vektor-kucing/contoh/index.ts",
     "typecheck": "tsc --noEmit",
     "audio": "node scripts/artifacts.mjs audio",
     "score": "node scripts/artifacts.mjs score",

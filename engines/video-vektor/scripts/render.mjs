@@ -2,7 +2,7 @@ import {copyFileSync,existsSync,mkdirSync,readdirSync,renameSync} from 'node:fs'
 import path from 'node:path';
 import {assemble} from './assemble.mjs';
 import {exportAudio} from './export-audio.mjs';
-import {ROOT,FINAL_FILES,acquireLock,checksum,cleanup,command,inputFingerprints,paths,publish,pythonFor,readJson,removeGenerated,runtimeDirectory,tempEnvironment,writeJson} from './lib/pipeline.mjs';
+import {ROOT,CAT_SOURCE,FINAL_FILES,acquireLock,checksum,cleanup,command,inputFingerprints,paths,publish,pythonFor,readJson,removeGenerated,runtimeDirectory,tempEnvironment,writeJson} from './lib/pipeline.mjs';
 import {renderPicture,verifyPicture,verifyOutput} from './lib/media.mjs';
 
 const p=paths(),args=new Set(process.argv.slice(2));
@@ -20,7 +20,7 @@ try{
  await command(pythonFor('numpy'),['scripts/score.py'],{signal:controller.signal,env:tempEnvironment(runtime,stage)});
  await nodeScript('node_modules/typescript/bin/tsc',['--noEmit']);
  await nodeScript('scripts/check.mjs');
- const timeline=readJson(path.join(ROOT,'src/timeline.json'));
+ const timeline=readJson(path.join(ROOT,CAT_SOURCE,'timeline.json'));
  const {visual,audio,build}=inputFingerprints(timeline);
  checkpoint=path.join(p.checkpoints,visual);const picture=path.join(checkpoint,'visual.mp4');mkdirSync(checkpoint,{recursive:true});
  writeJson(path.join(checkpoint,'manifest.json'),{visual,build,frames:timeline.durationInFrames});
@@ -43,7 +43,7 @@ try{
     if(args.has('--assemble-only'))throw new Error('Complete picture unavailable; run npm run render first.');
     partial=path.join(checkpoint,'visual.partial.mp4');
     console.log('[2/6] Render the complete picture in one Remotion process.');
-    await renderPicture({entry:'src/index.ts',composition:'CeritaKucingVisual',output:partial,timeline,signal:controller.signal,env:tempEnvironment(runtime,stage)});
+    await renderPicture({entry:path.join(CAT_SOURCE,'index.ts'),composition:'CeritaKucingVisual',output:partial,timeline,signal:controller.signal,env:tempEnvironment(runtime,stage)});
     controller.signal.throwIfAborted();renameSync(partial,picture);
    }
    inputVideo=picture;

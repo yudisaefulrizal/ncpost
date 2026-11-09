@@ -11,6 +11,7 @@ import {
   mkdirSync,
   openSync,
   closeSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -18,6 +19,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { ROOT, privateEnv } from "./config";
+import { VEKTOR_AGENTS, VEKTOR_STYLE_ID, type VektorAgent } from "./book-settings";
 import { generationSignal } from "./generation-cancel";
 import { live } from "./live";
 import { chapterDir } from "./output-paths";
@@ -31,9 +33,55 @@ export const VECTOR_FILES = [
   "naskah.json",
   "subtitle.srt",
 ] as const;
+export const VECTOR_AGENTS = VEKTOR_AGENTS;
+export type VectorAgent = VektorAgent;
+/** Agen pembuat naskah/kode: pengaturan jenis konten, lalu VIDEO_VEKTOR_AGENT, lalu codex. */
+export function vectorAgent(value?: string | null): VectorAgent {
+  const agent = (value || process.env.VIDEO_VEKTOR_AGENT || "codex")
+    .trim()
+    .toLowerCase();
+  if (!(VECTOR_AGENTS as readonly string[]).includes(agent))
+    throw Error(
+      `Agen Video Vektor tidak valid: ${agent}. Pilih ${VECTOR_AGENTS.join(" atau ")}.`,
+    );
+  return agent as VectorAgent;
+}
+/** Gaya visual yang lengkap di folder styles/ mesin (nama folder = nama gaya). */
+export function vectorStyles(root = vectorRoot()) {
+  const dir = path.join(root, "styles");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && VEKTOR_STYLE_ID.test(e.name))
+    .filter(
+      (e) =>
+        existsSync(path.join(dir, e.name, "style.md")) &&
+        ["index.ts", "Film.tsx"].every((f) =>
+          existsSync(path.join(dir, e.name, "contoh", f)),
+        ),
+    )
+    .map((e) => {
+      const text = readFileSync(path.join(dir, e.name, "style.md"), "utf8");
+      const description =
+        /^---\r?\n[\s\S]*?^deskripsi:\s*(.*)$/m.exec(text)?.[1]?.trim() ?? "";
+      return { id: e.name, name: e.name, description };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+export function vectorStyle(value: string | null | undefined, root: string) {
+  const id = (value || process.env.VIDEO_VEKTOR_STYLE || "").trim();
+  if (!id) return undefined;
+  if (!vectorStyles(root).some((style) => style.id === id))
+    throw Error(`Gaya Video Vektor tidak ditemukan atau belum lengkap: ${id}`);
+  return id;
+}
 export const vectorRoot = () =>
   path.resolve(ROOT, process.env.VIDEO_VEKTOR_ROOT || "engines/video-vektor");
-export function vectorRequest(c: Chapter, j: Job, root = vectorRoot()) {
+export function vectorRequest(
+  c: Chapter,
+  j: Job,
+  root = vectorRoot(),
+  choice: { agent?: string | null; style?: string | null } = {},
+) {
   const id = `ncpost-t${c.content_type_id ?? 1}-c${c.id}-r${j.revision}`;
   if (!/^ncpost-t\d+-c\d+-r\d+$/.test(id) || id.length > 72)
     throw Error("ID Video Vektor tidak valid");
@@ -45,7 +93,11 @@ export function vectorRequest(c: Chapter, j: Job, root = vectorRoot()) {
     id,
     "--timeout",
     "0",
+    "--agent",
+    vectorAgent(choice.agent),
   ];
+  const style = vectorStyle(choice.style, root);
+  if (style) args.push("--style", style);
   // Failed/cancelled attempts resume; only an explicit regenerate rebuilds the script.
   if (j.force_new) args.push("--regenerate", "--replan", "--force");
   return {
@@ -214,9 +266,13 @@ export function runPipeline(
       {
         ...privateEnv(),
         CODEX_BIN: process.env.CODEX_EXECUTABLE || "codex",
+        CLAUDE_BIN: process.env.CLAUDE_EXECUTABLE || "claude",
         VIDEO_VEKTOR_ROOT: root,
         ...(process.env.CODEX_MODEL
           ? { CODEX_MODEL: process.env.CODEX_MODEL }
+          : {}),
+        ...(process.env.CLAUDE_MODEL
+          ? { CLAUDE_MODEL: process.env.CLAUDE_MODEL }
           : {}),
         ...Object.fromEntries(
           ["TTS_VOICE", "TTS_RATE"]
@@ -347,13 +403,17 @@ export async function buildVideoVektor(
     run?: typeof runPipeline;
     probe?: typeof probeVector;
     prepare?: typeof prepareVideoVektor;
+    settings?: { vektorAgent?: string; vektorStyle?: string } | null;
   } = {},
 ) {
   const root = options.root ?? vectorRoot(),
     signal = options.signal ?? generationSignal();
   if (!existsSync(path.join(root, "scripts/video.mjs")))
     throw Error("Sumber mesin Video Vektor tidak ditemukan.");
-  const request = vectorRequest(c, j, root),
+  const request = vectorRequest(c, j, root, {
+      agent: options.settings?.vektorAgent,
+      style: options.settings?.vektorStyle,
+    }),
     release = await vectorLock(root, signal);
   try {
     // Respect productions started from the original Studio/terminal, too.

@@ -11,5 +11,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "remotion.config.ts"]
+  "include": ["src", "styles", "remotion.config.ts"]
 }

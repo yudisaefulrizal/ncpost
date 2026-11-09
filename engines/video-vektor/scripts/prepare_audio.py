@@ -33,7 +33,7 @@ def atomic_text(path, text):
 async def main():
     project_dir = Path(os.environ.get('PIPELINE_PROJECT_DIR', str(ROOT)))
     public_dir = Path(os.environ.get('PIPELINE_PUBLIC_DIR', str(ROOT/'public')))
-    work_dir = Path(os.environ.get('PIPELINE_WORK_DIR', str(ROOT/'src')))
+    work_dir = Path(os.environ.get('PIPELINE_WORK_DIR', str(ROOT/'styles/vektor-kucing/contoh')))
     audio_dir = public_dir/'audio'
     audio_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)

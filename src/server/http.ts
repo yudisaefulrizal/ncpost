@@ -51,6 +51,8 @@ import { NewsStore } from "./news-store";
 import { NewsLabStore } from "./news-lab";
 import { selectInstagramAccount } from "./instagram-account";
 import express from "express";
+import { vectorStyles } from "./video-vektor";
+import { VEKTOR_AGENTS } from "./book-settings";
 import { WebSocketServer } from "ws";
 import { readLive, watchLive } from "./live";
 import path from "node:path";
@@ -645,6 +647,9 @@ app.put("/api/chapters/:id/part", async (req, res) => {
 app.post("/api/books/renumber", async (req, res) => {
   if (typeof req.body?.book !== "string") throw Error("Konteks wajib diisi");
   res.json(await store.renumberBook(req.body.book));
+});
+app.get("/api/video-vektor/styles", (_req, res) => {
+  res.json({ styles: vectorStyles(), agents: [...VEKTOR_AGENTS] });
 });
 app.get("/api/chapters/:id/video-vektor/:file", async (req, res) => {
   const c = await store.chapter(Number(req.params.id));

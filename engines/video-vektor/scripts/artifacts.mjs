@@ -1,6 +1,6 @@
 import {existsSync,mkdirSync,readdirSync,renameSync} from 'node:fs';
 import path from 'node:path';
-import {ROOT,acquireLock,command,paths,pythonFor,readJson,removeGenerated,runtimeDirectory,tempEnvironment} from './lib/pipeline.mjs';
+import {ROOT,CAT_SOURCE,acquireLock,command,paths,pythonFor,readJson,removeGenerated,runtimeDirectory,tempEnvironment} from './lib/pipeline.mjs';
 import {verifyOutput} from './lib/media.mjs';
 
 if(process.argv.includes('--project')){
@@ -21,9 +21,9 @@ try{
  }else if(mode==='storyboard'||mode==='review')await command(process.execPath,['node_modules/tsx/dist/cli.mjs',`scripts/${mode}.ts`],{env,signal:controller.signal});
  else{
   const output=path.join(stage,mode==='still'?'poster.png':'cerita-kucing-preview.mp4');
-  const args=mode==='still'?['still','src/index.ts','CeritaKucingVisual',output,'--frame=157']:['render','src/index.ts','CeritaKucing',output,'--scale=0.5'];
+  const args=mode==='still'?['still',path.join(CAT_SOURCE,'index.ts'),'CeritaKucingVisual',output,'--frame=157']:['render',path.join(CAT_SOURCE,'index.ts'),'CeritaKucing',output,'--scale=0.5'];
   await command(process.execPath,['node_modules/@remotion/cli/remotion-cli.js',...args,'--log=error'],{env,signal:controller.signal});
-  if(mode==='preview')verifyOutput(output,readJson(path.join(ROOT,'src/timeline.json')),{width:960,height:540});
+  if(mode==='preview')verifyOutput(output,readJson(path.join(ROOT,CAT_SOURCE,'timeline.json')),{width:960,height:540});
  }
  for(const name of readdirSync(stage))renameSync(path.join(stage,name),path.join(p.reports,name));
  console.log(`${mode} completed. Temporary files removed.`);

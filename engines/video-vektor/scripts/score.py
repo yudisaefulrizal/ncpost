@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1]
-WORK=Path(os.environ.get('PIPELINE_WORK_DIR',str(ROOT/'src')))
+WORK=Path(os.environ.get('PIPELINE_WORK_DIR',str(ROOT/'styles/vektor-kucing/contoh')))
 PUBLIC=Path(os.environ.get('PIPELINE_PUBLIC_DIR',str(ROOT/'public')))
 manifest=json.loads((WORK/'timeline.json').read_text())
 SR=44100

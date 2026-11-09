@@ -3,7 +3,7 @@ import {AbsoluteFill,Audio,Sequence,interpolate,staticFile,useCurrentFrame} from
 import type {Asset,ProjectProps,Scene,Shot} from './types';
 import {sample} from './motion';
 import {SolidLayer} from './SolidLayer';
-import '../style.css';
+import '../../styles/vektor-kucing/contoh/style.css';
 
 const VectorLayer:React.FC<{shot:Shot;assets:Asset[];progress:number;layer:'back'|'front'}>=({shot,assets,progress,layer})=>{
  const camera=sample(shot.camera,progress);

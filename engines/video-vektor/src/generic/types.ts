@@ -1,4 +1,4 @@
-export type ScriptUnit={audio_text:string;key_text:string|null;motion_description:string};
+export type ScriptUnit={audio_text:string;key_text?:string|null;motion_description:string};
 export type Word={text:string;start:number;end:number};
 export type Scene=ScriptUnit&{index:number;from:number;durationInFrames:number;audioLead:number;audioDuration:number;audioTrimStart:number;audioTrimEnd:number;captions:{start:number;end:number;words:Word[]}[]};
 export type Timeline={fps:number;durationInFrames:number;scenes:Scene[]};

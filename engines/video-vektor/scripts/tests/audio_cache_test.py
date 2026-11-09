@@ -21,11 +21,11 @@ class AudioCacheTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='video-audio-test-')
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for folder in ['src', 'public/audio', 'stage', 'work']:
+        for folder in ['styles/vektor-kucing/contoh', 'public/audio', 'stage', 'work']:
             (self.root/folder).mkdir(parents=True)
         self.source = json.loads((PROJECT/'naskah.json').read_text())[:2]
         (self.root/'naskah.json').write_text(json.dumps(self.source))
-        (self.root/'src/timeline.json').write_text(json.dumps({'scenes': self.source}))
+        (self.root/'styles/vektor-kucing/contoh/timeline.json').write_text(json.dumps({'scenes': self.source}))
         for i in range(1, 3):
             # Build offline fixtures so a fresh clone needs no generated audio cache.
             words = [{'text': text, 'start': .1 + k * .08, 'end': .16 + k * .08}

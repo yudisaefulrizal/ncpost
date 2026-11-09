@@ -30,6 +30,8 @@ import {
   buildVideoVektor,
   vectorRequest,
   vectorLock,
+  vectorAgent,
+  vectorStyles,
   VECTOR_FILES,
   probeVector,
   runPipeline,
@@ -171,6 +173,8 @@ describe("Video Vektor pipeline adapter", () => {
       first.id,
       "--timeout",
       "0",
+      "--agent",
+      "codex",
     ]);
     expect(vectorRequest(chapter, { ...job, id: 72 }, "/engine").id).toBe(
       first.id,
@@ -180,6 +184,52 @@ describe("Video Vektor pipeline adapter", () => {
         -3,
       ),
     ).toEqual(["--regenerate", "--replan", "--force"]);
+  });
+  it("selects Claude Code or Codex through VIDEO_VEKTOR_AGENT and rejects anything else", () => {
+    const saved = process.env.VIDEO_VEKTOR_AGENT;
+    try {
+      process.env.VIDEO_VEKTOR_AGENT = "claude";
+      expect(vectorRequest(chapter, job, "/engine").args.slice(-2)).toEqual([
+        "--agent",
+        "claude",
+      ]);
+      expect(vectorAgent(" Codex ")).toBe("codex");
+      expect(vectorAgent("")).toBe("claude");
+      expect(vectorAgent("codex")).toBe("codex");
+      delete process.env.VIDEO_VEKTOR_AGENT;
+      expect(vectorAgent(null)).toBe("codex");
+      expect(() => vectorAgent("cline")).toThrow(/Agen Video Vektor/);
+    } finally {
+      if (saved === undefined) delete process.env.VIDEO_VEKTOR_AGENT;
+      else process.env.VIDEO_VEKTOR_AGENT = saved;
+    }
+  });
+  it("lists complete styles from the engine and passes the chosen agent and style per content type", () => {
+    const root = path.resolve("engines/video-vektor");
+    const styles = vectorStyles(root);
+    expect(styles.map((x) => x.id)).toEqual(
+      expect.arrayContaining(["vektor-kucing", "clay-3d-pastel"]),
+    );
+    expect(styles.some((x) => x.id.startsWith("_"))).toBe(false);
+    expect(styles.find((x) => x.id === "clay-3d-pastel")?.description).toMatch(
+      /tanah liat/,
+    );
+    const args = vectorRequest(chapter, job, root, {
+      agent: "claude",
+      style: "clay-3d-pastel",
+    }).args;
+    expect(args.slice(-4)).toEqual([
+      "--agent",
+      "claude",
+      "--style",
+      "clay-3d-pastel",
+    ]);
+    expect(
+      vectorRequest(chapter, job, root, { agent: "codex" }).args,
+    ).not.toContain("--style");
+    expect(() =>
+      vectorRequest(chapter, job, root, { style: "tidak-ada" }),
+    ).toThrow(/Gaya Video Vektor/);
   });
   it("serializes productions and lets cancelled waiters exit without releasing another job's lock", async () => {
     const root = temp(),

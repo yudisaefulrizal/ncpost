@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#007d6b">
+  <meta name="theme-color" content="#121816">
   <title>Video Vektor — Studio video</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23007d6b'/%3E%3Cpath d='M12 8l13 8-13 8z' fill='white'/%3E%3C/svg%3E">
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem("theme")||"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
@@ -15,6 +16,7 @@
       <a class="brand" href="#studio" aria-label="Video Vektor, halaman studio"><span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M8 4.5c-2-1.2-4 .2-4 2.5v18c0 2.3 2 3.7 4 2.5l17-9c2-1 2-4 0-5z" fill="currentColor"/><path d="m12 10 10 6-10 6z" fill="white"/></svg></span><span>Video Vektor</span></a>
       <nav aria-label="Navigasi utama"><a href="#studio" data-tab="studio" class="nav-link active">Studio</a><a href="#jadwal" data-tab="jadwal" class="nav-link">Jadwal <span id="queue-count" class="nav-count" hidden></span></a><a href="#hasil" data-tab="hasil" class="nav-link">Hasil</a></nav>
       <span id="connection" class="connection connecting"><span class="status-dot"></span><span>Menghubungkan</span></span>
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Ganti tema terang/gelap" title="Ganti tema"><svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
     </header>
     <main>
       <div class="page-heading"><div><span class="eyebrow">RUANG PRODUKSI ANDA</span><h1 id="page-title">Studio video<span>.</span></h1><p id="page-description">Satu judul, satu proyek, satu hasil final.</p></div><span class="timezone-label"><span id="clock-icon"></span> Waktu Indonesia Barat</span></div>
@@ -29,12 +31,14 @@
             <div id="schedule-fields" class="schedule-fields" hidden><label><span class="sr-only">Tanggal mulai</span><input id="schedule-date" type="date" aria-label="Tanggal mulai"></label><label><span class="sr-only">Jam mulai</span><input id="schedule-time" type="time" value="09:00" aria-label="Jam mulai"></label><span class="timezone-pill">WIB</span></div>
             <p id="timing-help" class="timing-help">Video akan diproses segera, atau menunggu giliran jika ada proses lain.</p>
             <div class="timeout-field"><label for="timeout-minutes">Timeout (menit)</label><input id="timeout-minutes" name="timeout" type="number" min="0" step="any" value="0" required aria-describedby="timeout-hint"><p id="timeout-hint">0 = tanpa batas. Bisa diubah saat proses berjalan.</p></div>
+            <div class="agent-field"><label for="agent">Agen AI</label><select id="agent" name="agent" aria-describedby="agent-hint"><option value="codex">Codex</option><option value="claude">Claude</option><option value="cline">Cline</option></select><p id="agent-hint">Memakai login CLI masing-masing, tanpa API key.</p></div>
+            <div class="agent-field"><label for="style">Gaya visual</label><select id="style" name="style" aria-describedby="style-hint"></select><p id="style-hint">Gaya baru ditambahkan sebagai folder di styles/.</p></div>
             <p id="form-error" class="form-error" role="alert" hidden></p>
             <button id="submit-button" class="button button-primary submit-button" type="submit"><span id="submit-label">Buat video</span><span data-icon="arrow-right"></span></button>
           </form>
           <div class="storage-note"><span data-icon="folder"></span><p>Naskah, video, dan audio disimpan<br> dalam satu folder proyek.</p></div>
         </section>
-        <section class="panel progress-panel" aria-labelledby="progress-heading"><div id="progress-content" aria-live="polite"><div class="panel-heading"><h2 id="progress-heading">Aktivitas pipeline</h2></div><p class="muted">Memuat status produksi…</p></div><div id="job-controls" hidden></div><section id="session-log" class="session-log" aria-label="Aktivitas sesi Codex" hidden><h3>Aktivitas sesi Codex</h3><ol id="session-log-items"></ol></section></section>
+        <section class="panel progress-panel" aria-labelledby="progress-heading"><div id="progress-content" aria-live="polite"><div class="panel-heading"><h2 id="progress-heading">Aktivitas pipeline</h2></div><p class="muted">Memuat status produksi…</p></div><div id="job-controls" hidden></div><section id="session-log" class="session-log" aria-labelledby="session-log-heading" hidden><h3 id="session-log-heading">Aktivitas sesi agen AI</h3><ol id="session-log-items"></ol></section></section>
       </section>
       <section id="queue-section" class="panel queue-panel" aria-labelledby="queue-heading"><div class="queue-header"><div><h2 id="queue-heading">Antrean & hasil</h2><p id="queue-description" class="muted">Semua cerita Anda, di satu tempat.</p></div><span id="item-count" class="soft-label"></span></div><div class="table-scroll"><table><thead><tr><th scope="col">Judul</th><th scope="col">Mulai</th><th scope="col">Status</th><th scope="col" class="actions-heading">Aksi</th></tr></thead><tbody id="queue-body"><tr><td colspan="4" class="empty-table">Memuat proyek…</td></tr></tbody></table></div></section>
       <footer class="app-footer"><span><span class="tiny-dot"></span> Dibuat untuk cerita yang terus bergerak.</span><span>Remotion + Three.js</span></footer>

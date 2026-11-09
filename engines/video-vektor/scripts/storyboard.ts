@@ -1,6 +1,6 @@
 import {bundle} from '@remotion/bundler';
 import {openBrowser,selectComposition,renderStill} from '@remotion/renderer';
-import {shots} from '../src/edit';
+import {shots} from '../styles/vektor-kucing/contoh/edit';
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import path from 'node:path';
@@ -10,7 +10,7 @@ async function main(){
 const outputDir=process.env.PIPELINE_STAGE??paths().reports;
 const boards=path.join(process.env.TMPDIR??'out','boards');
 mkdirSync(boards,{recursive:true});
-const serveUrl=await bundle({entryPoint:path.resolve('src/index.ts')});
+const serveUrl=await bundle({entryPoint:path.resolve('styles/vektor-kucing/contoh/index.ts')});
 const browser=await openBrowser('chrome',{browserExecutable:'/usr/bin/google-chrome',chromiumOptions:{gl:'swangle'}});
 try{
  const composition=await selectComposition({serveUrl,id:'CeritaKucing',puppeteerInstance:browser});

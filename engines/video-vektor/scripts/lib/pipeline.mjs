@@ -40,13 +40,15 @@ export function fingerprint(files,root=ROOT){
  for(const file of files)visit(path.join(root,file));
  return hash.digest('hex');
 }
+// Code of the approved cat film; it is also the example for the default style.
+export const CAT_SOURCE='styles/vektor-kucing/contoh';
 export function legacyFingerprint(root=ROOT){
  const hash=createHash('sha256');
  function visit(dir){for(const e of readdirSync(path.join(root,dir),{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name))){const file=`${dir}/${e.name}`;if(e.isDirectory())visit(file);else hash.update(file).update(readFileSync(path.join(root,file)));}}
- visit('src');hash.update(readFileSync(path.join(root,'remotion.config.ts')));return hash.digest('hex');
+ visit(CAT_SOURCE);hash.update(readFileSync(path.join(root,'remotion.config.ts')));return hash.digest('hex');
 }
 export function inputFingerprints(timeline,root=ROOT){
- const visualInputs=['src','remotion.config.ts','package-lock.json','public/fonts'];
+ const visualInputs=[CAT_SOURCE,'remotion.config.ts','package-lock.json','public/fonts'];
  return {
   visual:fingerprint(visualInputs,root),
   audio:fingerprint([...timeline.scenes.map(s=>`public/audio/scene-${s.index+1}.mp3`),'public/audio/score.wav','scripts/assemble.mjs'],root),

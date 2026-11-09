@@ -145,7 +145,7 @@ test('failure summaries preserve the exit reason and final progress within the d
 
 test('review changes reuse complete media, audio changes reuse picture, visual changes invalidate picture',t=>{
  const p=fixture(t),timeline={scenes:[{index:0}]};
- for(const name of ['src/Film.tsx','remotion.config.ts','package-lock.json','public/fonts/font.ttf','public/audio/scene-1.mp3','public/audio/score.wav','scripts/assemble.mjs','scripts/export-audio.mjs','scripts/review.ts','scripts/check-output.mjs','scripts/lib/media.mjs'])put(path.join(p.root,name));
+ for(const name of ['styles/vektor-kucing/contoh/Film.tsx','remotion.config.ts','package-lock.json','public/fonts/font.ttf','public/audio/scene-1.mp3','public/audio/score.wav','scripts/assemble.mjs','scripts/export-audio.mjs','scripts/review.ts','scripts/check-output.mjs','scripts/lib/media.mjs'])put(path.join(p.root,name));
  const first=inputFingerprints(timeline,p.root);
  put(path.join(p.root,'scripts/review.ts'),'new review');
  const review=inputFingerprints(timeline,p.root);
@@ -153,6 +153,6 @@ test('review changes reuse complete media, audio changes reuse picture, visual c
  put(path.join(p.root,'public/audio/scene-1.mp3'),'new narration');
  const audio=inputFingerprints(timeline,p.root);
  assert.equal(audio.visual,review.visual);assert.notEqual(audio.audio,review.audio);
- put(path.join(p.root,'src/Film.tsx'),'new picture');
+ put(path.join(p.root,'styles/vektor-kucing/contoh/Film.tsx'),'new picture');
  assert.notEqual(inputFingerprints(timeline,p.root).visual,audio.visual);
 });

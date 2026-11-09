@@ -1,4 +1,5 @@
 import { isVideoVektor } from "../server/book-settings";
+import { VideoVektorFields } from "./video-vektor";
 import { ArticleConfigFields, defaultArticleConfig } from "./article-config";
 import { LabPromptSettings } from "./lab-prompt-settings";
 import { ContentPlanFields, finalTargets, planSettings } from "./content-plan";
@@ -274,6 +275,14 @@ export function ContentTypes({
                 <option value="news">Artikel mandiri</option>
               </select>
             </label>
+            {isVideoVektor(settings) && (
+              <VideoVektorFields
+                settings={settings}
+                onChange={(patch) =>
+                  setSettings((current) => ({ ...current, ...patch }))
+                }
+              />
+            )}
             {settings.articleConfig && (
               <ArticleConfigFields
                 value={settings.articleConfig}

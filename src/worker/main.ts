@@ -342,7 +342,9 @@ async function runJob(job: Job) {
     if (isVideoVektor(mediaSettings)) {
       if (job.kind !== "VIDEO_KALIMAT_H")
         throw Error("Tahap Video Vektor tidak valid");
-      const result = await buildVideoVektor(c, job);
+      const result = await buildVideoVektor(c, job, {
+        settings: mediaSettings,
+      });
       await store.complete(job.id, { sentenceVideoH: JSON.stringify(result) });
     } else if (job.kind === "ARTICLE" && c.article_config) {
       const generated = await generateConfiguredArticle(

@@ -2,8 +2,8 @@ import {execFileSync,spawnSync} from 'node:child_process';
 import {writeFileSync,mkdirSync} from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import {shots} from '../src/edit';
-import timeline from '../src/timeline.json';
+import {shots} from '../styles/vektor-kucing/contoh/edit';
+import timeline from '../styles/vektor-kucing/contoh/timeline.json';
 import {verifyOutput} from './lib/media.mjs';
 import {paths} from './lib/pipeline.mjs';
 

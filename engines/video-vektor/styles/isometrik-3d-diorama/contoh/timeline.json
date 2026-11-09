@@ -1,0 +1,19 @@
+{
+  "fps": 30,
+  "durationInFrames": 150,
+  "scenes": [
+    {
+      "audio_text": "Kalimat narasi contoh.",
+      "motion_description": "Deskripsi visual contoh.",
+      "index": 0,
+      "from": 0,
+      "durationInFrames": 150,
+      "audioLead": 12,
+      "audioDuration": 4,
+      "audioTrimStart": 2,
+      "audioTrimEnd": 122,
+      "audioRawDuration": 4.3,
+      "captions": []
+    }
+  ]
+}
