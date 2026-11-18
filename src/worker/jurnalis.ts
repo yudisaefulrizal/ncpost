@@ -19,7 +19,8 @@ import {
   LAB_NEWS_FORMAT,
   validateUnifiedArticle,
 } from "../server/content-contract";
-import { cliArgs, parseEvents, runCli } from "../server/providers";
+import { cliArgs, parseEvents } from "../server/providers";
+import { runModelCli } from "../server/model-cli";
 import { citesLink } from "./configured-article";
 import { live } from "../server/live";
 import {
@@ -69,8 +70,7 @@ export const runJurnalisModel: JurnalisModel = async (call) => {
     writeFileSync(schemaPath, JSON.stringify(call.schema, null, 2), {
       mode: 0o600,
     });
-  const raw = await runCli(
-    process.env.CODEX_EXECUTABLE || "codex",
+  const raw = await runModelCli(
     jurnalisCliArgs(call, schemaPath),
     call.prompt,
     call.work,

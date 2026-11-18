@@ -1072,6 +1072,15 @@ function App() {
       s: { tone: "ok" as Tone, label: "Aktif" },
     },
     {
+      name: "agy · teks dan gambar",
+      note: settings?.agy?.status ?? "Memeriksa…",
+      s: settings
+        ? settings.agy.status.includes("login Google ditemukan")
+          ? status("siap")
+          : { tone: "block" as Tone, label: "Periksa" }
+        : status("queued"),
+    },
+    {
       name: "ElevenLabs",
       note: settings?.tts?.reason ?? "Memeriksa…",
       s: ttsLive
@@ -1924,6 +1933,42 @@ function App() {
         <div className="split">
           <section className="card pad grow">
             <h2 className="h3">Penyedia</h2>
+            <fieldset className="stack">
+              <legend>CLI untuk teks dan gambar</legend>
+              <div role="radiogroup" aria-label="CLI teks dan gambar">
+                {(
+                  [
+                    ["codex", "Codex CLI"],
+                    ["agy", "agy"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label className="check-row" key={value}>
+                    <input
+                      type="radio"
+                      name="ai-provider"
+                      checked={settings?.aiProvider === value}
+                      disabled={!settings}
+                      onChange={() =>
+                        action(async () => {
+                          await api("/ai-provider", "PUT", {
+                            aiProvider: value,
+                          });
+                          setSettings((current: any) => ({
+                            ...current,
+                            aiProvider: value,
+                          }));
+                        })
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <small className="muted">
+                Berlaku untuk semua pembuatan artikel, riset, dan gambar yang
+                dimulai setelah dipilih.
+              </small>
+            </fieldset>
             <ProviderList rows={providerRows} />
           </section>
           <section className="card pad side">

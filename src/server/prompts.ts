@@ -96,6 +96,19 @@ export function stockPrompt(kind: string, heading: string, paragraph: string) {
       : heading;
   return fillPrompt(file, { teks });
 }
+// Pembungkus mekanis untuk gambar agy: rasio tujuan dan jalur gambar acuan.
+export const agyImagePrompt = (
+  prompt: string,
+  rasio: string,
+  acuan: string[] = [],
+) =>
+  fillPrompt("gambar/pembungkus-agy.md", {
+    prompt,
+    rasio,
+    acuan: acuan.length
+      ? ` Use these image files as visual reference: ${acuan.join(", ")}.`
+      : "",
+  });
 // Pembungkus mekanis untuk tool image_generation Codex.
 export const codexImagePrompt = (prompt: string) =>
   fillPrompt("gambar/pembungkus-codex.md", { prompt });

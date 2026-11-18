@@ -12,7 +12,7 @@ import {
   startAudioZip,
 } from "./audio-zip-job";
 import os from "node:os";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import {
   listVoices,
   saveVoice,
@@ -24,6 +24,12 @@ import { listImageTimings } from "./image-timing";
 import { enqueueStockRegeneration } from "./stock-regenerate";
 import { deleteImageStock } from "./stock-delete";
 import { configureMediaStock, resolveMedia } from "./media-stock";
+import {
+  configureAiProvider,
+  getAiProvider,
+  setAiProvider,
+} from "./ai-provider";
+import { AGY_EXECUTABLE } from "./agy";
 import { listUpcomingCrons } from "./cron-upcoming";
 import { shiftAllCrons } from "./cron-shift";
 import { loadCronGuide, saveCronGuide } from "./cron-guide-store";
@@ -1054,6 +1060,11 @@ app.get("/api/stock/:id/image", async (req, res) => {
     safeFile(path.join(outputRoot(), "stock"), path.join(ROOT, a.file)),
   );
 });
+app.put("/api/ai-provider", async (req, res) => {
+  res.json({
+    aiProvider: await setAiProvider(req.body?.aiProvider, store.db),
+  });
+});
 app.get("/api/settings", async (_, res) => {
   let login = "Belum diperiksa";
   try {
@@ -1071,9 +1082,22 @@ app.get("/api/settings", async (_, res) => {
   } catch {
     login = "CLI/login tidak tersedia";
   }
+  let agy = "CLI agy tidak tersedia";
+  try {
+    const version = (
+      await runCli(AGY_EXECUTABLE(), ["--version"], "", ROOT, 10000, true)
+    ).trim();
+    agy = existsSync(
+      path.join(process.env.HOME || "", ".gemini/oauth_creds.json"),
+    )
+      ? `agy ${version} · login Google ditemukan`
+      : `agy ${version} · belum login (jalankan agy di terminal)`;
+  } catch {}
   res.json({
     origin: "http://127.0.0.1:8072",
     publicOrigin: "https://ncpost.nuscode.id",
+    aiProvider: await getAiProvider(store.db),
+    agy: { status: agy },
     codex: {
       login,
       text: "Live text NCPOST_TEXT_OK diverifikasi parent",
@@ -1147,6 +1171,7 @@ app.use(
 const server = app.listen(8072, "127.0.0.1", async () => {
   store = new Store();
   configureMediaStock(store.db);
+  configureAiProvider(store.db);
   await clearAudioZips();
   if (process.env.NODE_ENV !== "production") {
     const { createServer } = await import("vite");

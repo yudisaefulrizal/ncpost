@@ -6,6 +6,7 @@ import {
 import { spawn } from "node:child_process";
 import { privateEnv } from "./config";
 import { codexLiveText, live } from "./live";
+import { getAiProvider } from "./ai-provider";
 export function runCli(
   executable: string,
   args: string[],
@@ -104,6 +105,22 @@ export const cliArgs = [
   "code_mode_host",
 ];
 export async function codex(prompt: string, cwd: string) {
+  if ((await getAiProvider()) === "agy") {
+    const { runModelCli } = await import("./model-cli");
+    return parseEvents(
+      await runModelCli(
+        [
+          ...cliArgs,
+          ...(process.env.CODEX_MODEL
+            ? ["--model", process.env.CODEX_MODEL]
+            : []),
+          "-",
+        ],
+        prompt,
+        cwd,
+      ),
+    );
+  }
   const exe = process.env.CODEX_EXECUTABLE || "codex";
   const help = await runCli(exe, ["exec", "--help"], "", cwd, 10000);
   for (const flag of [

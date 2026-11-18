@@ -109,6 +109,22 @@ export async function collectCodexImage(
       `Hasil gambar ambigu: ${candidates.length} PNG baru, jawaban akhir tidak menunjuk satu file valid (thread ${thread})`,
     );
   const source = candidates.length === 1 ? candidates[0] : referenced[0];
+  return finishImage(source, thread, opts);
+}
+
+type Orientation =
+  | "horizontal"
+  | "vertikal"
+  | "bebas"
+  | "posting"
+  | "video-v"
+  | "video-h";
+// Validasi PNG/JPEG sumber, cek orientasi, normalkan ukuran, simpan JPEG.
+export async function finishImage(
+  source: string,
+  thread: string,
+  opts: { output: string; orientation: Orientation; formats?: string[] },
+) {
   const meta = await sharp(source)
     .metadata()
     .catch(() => {
@@ -116,8 +132,14 @@ export async function collectCodexImage(
         `Hasil gambar rusak atau tidak dapat dibaca (thread ${thread})`,
       );
     });
-  if (meta.format !== "png" || !meta.width || !meta.height)
-    throw Error(`Hasil gambar bukan PNG valid (thread ${thread})`);
+  if (
+    !(opts.formats ?? ["png"]).includes(meta.format || "") ||
+    !meta.width ||
+    !meta.height
+  )
+    throw Error(
+      `Hasil gambar bukan ${(opts.formats ?? ["png"]).join("/").toUpperCase()} valid (thread ${thread})`,
+    );
   // Orientasi bebas (gambar quote): ukuran asli Codex dipertahankan.
   const free = opts.orientation === "bebas";
   const posting = opts.orientation === "posting";
@@ -154,6 +176,45 @@ export async function collectCodexImage(
   return { width, height, thread, output: opts.output };
 }
 
+// Rasio tujuan dikirim ke agy karena agy menghormati rasio dari prompt (bawaannya 1:1).
+const AGY_RATIO: Record<Orientation, string> = {
+  horizontal: "16:9 landscape",
+  "video-h": "16:9 landscape",
+  vertikal: "9:16 portrait",
+  "video-v": "9:16 portrait",
+  posting: "4:5 portrait",
+  bebas: "1:1 square",
+};
+export async function collectAgyImage(
+  raw: string,
+  opts: {
+    home: string;
+    output: string;
+    startedAt: number;
+    orientation: Orientation;
+  },
+) {
+  const { agyResult, agyImageCandidates } = await import("./agy");
+  const result = agyResult(raw);
+  const thread = result.conversation_id;
+  const { found, stale, empty } = await agyImageCandidates(raw, opts);
+  if (!found.length)
+    throw Error(
+      `Hasil gambar tidak tersedia: 0 gambar baru, ${stale} lama, ${empty} kosong (agy ${thread})`,
+    );
+  const text = String(result.response ?? "");
+  const referenced = found.filter((file) => text.includes(file));
+  if (found.length > 1 && referenced.length !== 1)
+    throw Error(
+      `Hasil gambar ambigu: ${found.length} gambar baru, jawaban akhir tidak menunjuk satu file valid (agy ${thread})`,
+    );
+  return finishImage(found.length === 1 ? found[0] : referenced[0], thread, {
+    output: opts.output,
+    orientation: opts.orientation,
+    formats: ["png", "jpeg"],
+  });
+}
+
 async function generateCodexImageUnlocked(
   prompt: string,
   cwd: string,
@@ -168,8 +229,35 @@ async function generateCodexImageUnlocked(
   referenceImages: string[] = [],
 ) {
   const { runCli } = await import("./providers");
-  const { codexImagePrompt } = await import("./prompts");
+  const { codexImagePrompt, agyImagePrompt } = await import("./prompts");
+  const { getAiProvider } = await import("./ai-provider");
   const startedAt = Date.now();
+  if (!process.env.HOME) throw Error("HOME CLI tidak tersedia");
+  if ((await getAiProvider()) === "agy") {
+    const { AGY_EXECUTABLE, agyArgs, agyInput } = await import("./agy");
+    const raw = await runCli(
+      AGY_EXECUTABLE(),
+      agyArgs({}),
+      agyInput(agyImagePrompt(prompt, AGY_RATIO[orientation], referenceImages)),
+      cwd,
+      300000,
+    );
+    const agyResult = await collectAgyImage(raw, {
+      home: process.env.HOME,
+      output,
+      startedAt,
+      orientation,
+    });
+    await recordImageTiming(Date.now() - startedAt, orientation).catch(
+      (error) => {
+        console.error(
+          "Pencatatan durasi gambar gagal:",
+          (error as Error).message,
+        );
+      },
+    );
+    return agyResult;
+  }
   const events = await runCli(
     process.env.CODEX_EXECUTABLE || "codex",
     [
@@ -184,7 +272,6 @@ async function generateCodexImageUnlocked(
     cwd,
     180000,
   );
-  if (!process.env.HOME) throw Error("HOME CLI tidak tersedia");
   const result = await collectCodexImage(events, {
     home: process.env.HOME,
     output,

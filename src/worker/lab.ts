@@ -5,7 +5,7 @@ import { validateUnifiedArticle } from "../server/content-contract";
 import { quoteText, quoteInstruction } from "../server/quote-text";
 import { labImageFile, labAttachments } from "../server/lab-images";
 import { newsCliArgs, parseNewsResearch } from "./news";
-import { runCli } from "../server/providers";
+import { runModelCli } from "../server/model-cli";
 import path from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { LabStore, labFinalPrompt, type LabRun } from "../server/lab";
@@ -64,13 +64,7 @@ export async function runLabJob(
           )
         : job.reference_key === "news"
           ? parseNewsResearch(
-              await runCli(
-                process.env.CODEX_EXECUTABLE || "codex",
-                newsCliArgs(),
-                prompt,
-                work,
-                900000,
-              ),
+              await runModelCli(newsCliArgs(), prompt, work, 900000),
             ).result.article
           : await providers.codex(prompt, work);
       if (config?.article) {

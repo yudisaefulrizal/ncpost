@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { cliArgs, parseEvents, runCli } from "../server/providers";
+import { cliArgs, parseEvents } from "../server/providers";
+import { runModelCli } from "../server/model-cli";
 import {
   configuredArticlePrompt,
   normalizeArticleConfig,
@@ -44,8 +45,7 @@ export async function runConfiguredModel(
   source: ArticleConfig["source"],
   work: string,
 ) {
-  const raw = await runCli(
-    process.env.CODEX_EXECUTABLE || "codex",
+  const raw = await runModelCli(
     configuredCliArgs(source),
     prompt,
     work,

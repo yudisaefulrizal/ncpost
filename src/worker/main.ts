@@ -11,6 +11,7 @@ import {
 import { workerConcurrency } from "../server/domain";
 import { cancellableGeneration } from "../server/generation-cancel";
 import { existsSync } from "node:fs";
+import { configureAiProvider } from "../server/ai-provider";
 import {
   configureMediaStock,
   sharedMedia,
@@ -116,6 +117,7 @@ import { panelTokens, tokenize } from "../server/stock-match";
 initConfig();
 const store = new Store();
 configureMediaStock(store.db);
+configureAiProvider(store.db);
 const newsStore = new NewsStore(store.db);
 const labStore = new LabStore(store.db);
 const newsMediaStore = new NewsMediaStore(store.db);
