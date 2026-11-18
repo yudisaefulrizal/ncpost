@@ -1087,11 +1087,13 @@ app.get("/api/settings", async (_, res) => {
     const version = (
       await runCli(AGY_EXECUTABLE(), ["--version"], "", ROOT, 10000, true)
     ).trim();
-    agy = existsSync(
-      path.join(process.env.HOME || "", ".gemini/oauth_creds.json"),
-    )
-      ? `agy ${version} · login Google ditemukan`
-      : `agy ${version} · belum login (jalankan agy di terminal)`;
+    // `agy models` hanya berhasil bila sudah login; lokasi kredensial bisa berbeda per mesin.
+    try {
+      await runCli(AGY_EXECUTABLE(), ["models"], "", ROOT, 20000, true);
+      agy = `agy ${version} · login terverifikasi`;
+    } catch {
+      agy = `agy ${version} · belum login (jalankan agy di terminal)`;
+    }
   } catch {}
   res.json({
     origin: "http://127.0.0.1:8072",

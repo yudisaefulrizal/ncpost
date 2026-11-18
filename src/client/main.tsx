@@ -1075,7 +1075,7 @@ function App() {
       name: "agy · teks dan gambar",
       note: settings?.agy?.status ?? "Memeriksa…",
       s: settings
-        ? settings.agy.status.includes("login Google ditemukan")
+        ? settings.agy.status.includes("login terverifikasi")
           ? status("siap")
           : { tone: "block" as Tone, label: "Periksa" }
         : status("queued"),
